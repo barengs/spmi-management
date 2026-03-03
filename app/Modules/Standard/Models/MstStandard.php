@@ -17,7 +17,21 @@ class MstStandard extends Model
         'periode_tahun',
         'is_active',
         'referensi_regulasi',
+        'status',
+        'submitted_by',
+        'approved_by',
+        'reject_reason',
     ];
+
+    public function submitter()
+    {
+        return $this->belongsTo(\App\Modules\Core\Models\User::class, 'submitted_by');
+    }
+
+    public function approver()
+    {
+        return $this->belongsTo(\App\Modules\Core\Models\User::class, 'approved_by');
+    }
 
     protected function casts(): array
     {

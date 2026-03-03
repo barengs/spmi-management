@@ -59,6 +59,13 @@ class MetricTargetController extends Controller
         }
 
         $metric = MstMetric::findOrFail($metric_id);
+        if (in_array($metric->standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tidak dapat mengubah target metrik dari Standar Mutu yang sedang Diajukan atau sudah Diterbitkan.'
+            ], 403);
+        }
+
         $inputTargets = collect($request->targets);
 
         // Delete any targets that are NOT in the incoming request payload

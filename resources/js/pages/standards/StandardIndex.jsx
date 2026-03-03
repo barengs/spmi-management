@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
+import StandardCloneModal from './StandardCloneModal';
 import {
     createColumnHelper,
     flexRender,
@@ -19,8 +21,13 @@ export default function StandardIndex() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [globalFilter, setGlobalFilter] = useState('');
 
+    const user = useSelector(state => state.auth.user);
+    const isPimpinan = user?.roles?.some(r => r.name === 'Pimpinan');
+
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
+    const [cloneTarget, setCloneTarget] = useState(null);
     const [editingStandard, setEditingStandard] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
@@ -107,6 +114,52 @@ export default function StandardIndex() {
         }
     };
 
+    const handleSubmitForApproval = async (id) => {
+        if (window.confirm('Ajukan Standar Mutu ini ke Pimpinan untuk direview? Selama masa review, standar akan dikunci sementara.')) {
+            try {
+                await api.patch(`/standards/${id}/submit`);
+                toast.success('Standar Mutu berhasil DIAJUKAN.');
+                fetchStandards();
+            } catch (err) {
+                toast.error(err.response?.data?.message || 'Gagal mengajukan standar.');
+            }
+        }
+    };
+
+    const handleApprove = async (id) => {
+        if (window.confirm('Setujui Standar Mutu ini? Aksi ini akan mengunci dokumen secara PERMANEN (Terbit).')) {
+            try {
+                await api.patch(`/standards/${id}/approve`);
+                toast.success('Standar Mutu disetujui dan Diterbitkan (Locked).');
+                fetchStandards();
+            } catch (err) {
+                toast.error(err.response?.data?.message || 'Gagal menyetujui standar.');
+            }
+        }
+    };
+
+    const handleReject = async (id) => {
+        const reason = window.prompt('Alasan menolak Standar Mutu ini? (Wajib diisi)');
+        if (reason !== null) {
+            if (reason.trim() === '') {
+                toast.warning('Alasan penolakan harus diisi!');
+                return;
+            }
+            try {
+                await api.patch(`/standards/${id}/reject`, { reason });
+                toast.success('Standar Mutu berhasil ditolak untuk Direvisi.');
+                fetchStandards();
+            } catch (err) {
+                toast.error(err.response?.data?.message || 'Gagal menolak standar.');
+            }
+        }
+    };
+
+    const handleOpenCloneModal = (standard) => {
+        setCloneTarget(standard);
+        setIsCloneModalOpen(true);
+    };
+
     // TanStack Table Setup
     const columnHelper = createColumnHelper();
 
@@ -137,8 +190,48 @@ export default function StandardIndex() {
             header: 'Periode',
             cell: info => <span className="text-gray-600 dark:text-gray-300">{info.getValue() || '-'}</span>
         }),
-        columnHelper.accessor('is_active', {
+        columnHelper.accessor('status', {
             header: 'Status',
+            cell: info => {
+                const status = info.getValue() || 'DRAFT';
+                if (status === 'TERBIT') {
+                    return (
+                        <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold leading-5 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 shadow-sm border border-emerald-200 dark:border-emerald-800">
+                            🛡 Terbit
+                        </span>
+                    );
+                }
+                if (status === 'WAITING_APPROVAL') {
+                    return (
+                        <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold leading-5 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 shadow-sm border border-blue-200 dark:border-blue-800 animate-pulse">
+                            ⏳ Menunggu Review
+                        </span>
+                    );
+                }
+                if (status === 'REVISI') {
+                    return (
+                        <div className="flex flex-col gap-1 items-start">
+                            <span className="inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold leading-5 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300 shadow-sm border border-rose-200 dark:border-rose-800">
+                                ↺ Revisi
+                            </span>
+                            {info.row.original.reject_reason && (
+                                <span className="text-[10px] text-rose-600 dark:text-rose-400 italic max-w-xs truncate" title={info.row.original.reject_reason}>
+                                    Catatan: {info.row.original.reject_reason}
+                                </span>
+                            )}
+                        </div>
+                    );
+                }
+                // DRAFT
+                return (
+                    <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold leading-5 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 shadow-sm border border-amber-200 dark:border-amber-800">
+                        📝 Draft
+                    </span>
+                );
+            }
+        }),
+        columnHelper.accessor('is_active', {
+            header: 'Visibilitas',
             cell: info => {
                 const isActive = info.getValue();
                 return isActive ? (
@@ -151,22 +244,67 @@ export default function StandardIndex() {
         columnHelper.display({
             id: 'actions',
             header: 'Aksi',
-            cell: info => (
-                <div className="flex space-x-3 justify-end text-sm font-medium">
-                    <Link
-                        to={`/standards/${info.row.original.id}/builder`}
-                        className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                    >
-                        Hierarki Butir
-                    </Link>
-                    <button onClick={() => handleOpenModal(info.row.original)} className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
-                        Edit
-                    </button>
-                    <button onClick={() => handleDelete(info.row.original.id)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
-                        Hapus
-                    </button>
-                </div>
-            )
+            cell: info => {
+                const item = info.row.original;
+                const isLockedForAdmin = item.status === 'WAITING_APPROVAL' || item.status === 'TERBIT';
+
+                return (
+                    <div className="flex space-x-3 justify-end text-sm font-medium items-center flex-wrap gap-y-2">
+                        {/* Selalu tersedia: Builder dan Salin */}
+                        {(!isPimpinan || item.status !== 'DRAFT') && (
+                            <Link
+                                to={`/standards/${item.id}/builder`}
+                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                            >
+                                Struktur
+                            </Link>
+                        )}
+                        {!isPimpinan && (
+                            <button onClick={() => handleOpenCloneModal(item)} className="text-teal-600 hover:text-teal-900 dark:text-teal-400 dark:hover:text-teal-300" title="Salin ke periode baru">
+                                Salin
+                            </button>
+                        )}
+
+                        {/* LPM-Admin Actions */}
+                        {!isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI') && (
+                            <button onClick={() => handleSubmitForApproval(item.id)} className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 font-bold bg-blue-50 dark:bg-blue-900/40 px-2 py-1 rounded" title="Ajukan Review ke Pimpinan">
+                                Ajukan
+                            </button>
+                        )}
+
+                        {!isPimpinan && (
+                            <>
+                                <button
+                                    onClick={() => handleOpenModal(item)}
+                                    disabled={isLockedForAdmin}
+                                    className={`transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300'}`}
+                                >
+                                    Edit
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(item.id)}
+                                    disabled={isLockedForAdmin}
+                                    className={`transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300'}`}
+                                >
+                                    Hapus
+                                </button>
+                            </>
+                        )}
+
+                        {/* Pimpinan Actions */}
+                        {isPimpinan && item.status === 'WAITING_APPROVAL' && (
+                            <div className="flex items-center space-x-2 border-l border-gray-300 dark:border-gray-600 pl-2 ml-2">
+                                <button onClick={() => handleApprove(item.id)} className="text-emerald-700 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-900/60 dark:hover:bg-emerald-800 px-2 py-1 rounded text-xs font-bold transition-colors">
+                                    Setujui
+                                </button>
+                                <button onClick={() => handleReject(item.id)} className="text-rose-700 hover:text-rose-900 bg-rose-100 hover:bg-rose-200 dark:text-rose-300 dark:bg-rose-900/60 dark:hover:bg-rose-800 px-2 py-1 rounded text-xs font-bold transition-colors">
+                                    Tolak
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
         })
     ], [standards]);
 
@@ -443,6 +581,13 @@ export default function StandardIndex() {
                     </div>
                 </div>
             )}
+
+            <StandardCloneModal
+                isOpen={isCloneModalOpen}
+                onClose={() => setIsCloneModalOpen(false)}
+                originalStandard={cloneTarget}
+                onSuccess={fetchStandards}
+            />
         </div>
     );
 }

@@ -61,7 +61,7 @@ const NodeTargetViewer = ({ metricId }) => {
     );
 };
 
-const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget, onViewNode }) => {
+const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget, onViewNode, isTerbit }) => {
     const [isExpanded, setIsExpanded] = useState(true);
 
     const getIcon = () => {
@@ -110,38 +110,40 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
                     </div>
                 </div>
 
-                <div className="ml-4 flex flex-wrap justify-end gap-2 shrink-0 items-center">
-                    {(node.type === 'Header' || node.type === 'Statement') && (
+                {!isTerbit && (
+                    <div className="ml-4 flex flex-wrap justify-end gap-2 shrink-0 items-center">
+                        {(node.type === 'Header' || node.type === 'Statement') && (
+                            <button
+                                onClick={() => onAddChild(node)}
+                                className="p-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/50"
+                                title="Tambah Sub-Butir"
+                            >
+                                +Tambah
+                            </button>
+                        )}
+                        {node.type === 'Indicator' && (
+                            <button
+                                onClick={() => onConfigTarget(node)}
+                                className="p-1 px-2 font-medium text-xs text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800"
+                                title="Konfigurasi Target Per Jenjang"
+                            >
+                                🎯 Target Indikator
+                            </button>
+                        )}
                         <button
-                            onClick={() => onAddChild(node)}
-                            className="p-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/50"
-                            title="Tambah Sub-Butir"
+                            onClick={() => onEdit(node)}
+                            className="p-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded dark:text-indigo-400 dark:hover:text-indigo-300 dark:hover:bg-indigo-900/50"
                         >
-                            +Tambah
+                            Edit
                         </button>
-                    )}
-                    {node.type === 'Indicator' && (
                         <button
-                            onClick={() => onConfigTarget(node)}
-                            className="p-1 px-2 font-medium text-xs text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800"
-                            title="Konfigurasi Target Per Jenjang"
+                            onClick={() => onDelete(node)}
+                            className="p-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/50"
                         >
-                            🎯 Target Indikator
+                            Hapus
                         </button>
-                    )}
-                    <button
-                        onClick={() => onEdit(node)}
-                        className="p-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded dark:text-indigo-400 dark:hover:text-indigo-300 dark:hover:bg-indigo-900/50"
-                    >
-                        Edit
-                    </button>
-                    <button
-                        onClick={() => onDelete(node)}
-                        className="p-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/50"
-                    >
-                        Hapus
-                    </button>
-                </div>
+                    </div>
+                )}
             </div>
 
             {isExpanded && node.children_recursive && node.children_recursive.length > 0 && (
@@ -156,6 +158,7 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
                             onDelete={onDelete}
                             onConfigTarget={onConfigTarget}
                             onViewNode={onViewNode}
+                            isTerbit={isTerbit}
                         />
                     ))}
                 </div>
@@ -306,14 +309,21 @@ export default function StandardBuilder() {
                     </h1>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         Periode: {standard?.periode_tahun} | Kategori: {standard?.category}
+                        {['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                                🛡 Mode Baca (Terkunci)
+                            </span>
+                        )}
                     </p>
                 </div>
-                <button
-                    onClick={handleAddRoot}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                >
-                    + Tambah Akar Baru
-                </button>
+                {!['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
+                    <button
+                        onClick={handleAddRoot}
+                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                    >
+                        + Tambah Akar Baru
+                    </button>
+                )}
             </div>
 
             <div className={`flex gap-6 items-start transition-all duration-300`}>
@@ -342,6 +352,7 @@ export default function StandardBuilder() {
                                         onDelete={handleDelete}
                                         onConfigTarget={handleConfigTarget}
                                         onViewNode={setSelectedIndicatorView}
+                                        isTerbit={['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
                                     />
                                 ))}
                             </div>
@@ -458,6 +469,7 @@ export default function StandardBuilder() {
                 metric={selectedIndicator}
                 isOpen={isTargetConfigOpen}
                 onClose={() => setIsTargetConfigOpen(false)}
+                isTerbit={['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
             />
         </div>
     );

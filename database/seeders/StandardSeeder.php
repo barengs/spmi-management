@@ -19,6 +19,7 @@ class StandardSeeder extends Seeder
                 'category' => 'SN-Dikti',
                 'periode_tahun' => date('Y'),
                 'is_active' => true,
+                'status' => 'TERBIT',
                 'referensi_regulasi' => 'Permendikbudristek No 53 Tahun 2023',
                 'tree' => [
                     [

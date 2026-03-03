@@ -63,6 +63,12 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}',                 [\App\Modules\Standard\Controllers\StandardController::class, 'update']);
             Route::delete('/{id}',              [\App\Modules\Standard\Controllers\StandardController::class, 'destroy']);
             
+            // Sprint 5: Cloning & Publish (Multi-level Authorization)
+            Route::post('/{id}/clone',          [\App\Modules\Standard\Controllers\StandardCloneController::class, 'clone']);
+            Route::patch('/{id}/submit',        [\App\Modules\Standard\Controllers\StandardController::class, 'submit']);
+            Route::patch('/{id}/approve',       [\App\Modules\Standard\Controllers\StandardController::class, 'approve']);
+            Route::patch('/{id}/reject',        [\App\Modules\Standard\Controllers\StandardController::class, 'reject']);
+            
             // Hirarki Metrik/Indikator di dalam suatu standar
             Route::get('/{standard_id}/metrics/tree', [\App\Modules\Standard\Controllers\MetricController::class, 'tree']);
         });

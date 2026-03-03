@@ -76,6 +76,13 @@ class StandardController extends Controller
     {
         $standard = MstStandard::findOrFail($id);
 
+        if (in_array($standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tidak dapat mengubah standar yang sedang Diajukan atau sudah Diterbitkan.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'name'               => 'sometimes|required|string|max:255',
             'category'           => 'sometimes|required|in:SN-Dikti,Institusi',
@@ -99,12 +106,99 @@ class StandardController extends Controller
     public function destroy($id): JsonResponse
     {
         $standard = MstStandard::findOrFail($id);
+
+        if (in_array($standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tidak dapat menghapus standar yang sedang Diajukan atau sudah Diterbitkan.'
+            ], 403);
+        }
+
         $standard->delete();
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Dokumen standar berhasil dihapus.',
             'data'    => null,
+        ]);
+    }
+
+    /**
+     * Submit the specified standard for approval (Ajukan).
+     */
+    public function submit($id): JsonResponse
+    {
+        $standard = MstStandard::findOrFail($id);
+
+        if (!in_array($standard->status, ['DRAFT', 'REVISI'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Hanya standar berstatus DRAFT atau REVISI yang dapat diajukan.'
+            ], 400);
+        }
+
+        $standard->status = 'WAITING_APPROVAL';
+        $standard->submitted_by = auth()->id();
+        $standard->save();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Standar Mutu berhasil diajukan untuk ditinjau.',
+            'data'    => $standard,
+        ]);
+    }
+
+    /**
+     * Approve the specified standard (Setujui -> TERBIT).
+     */
+    public function approve($id): JsonResponse
+    {
+        $standard = MstStandard::findOrFail($id);
+
+        if ($standard->status !== 'WAITING_APPROVAL') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Standar tidak dalam status Menunggu Persetujuan.'
+            ], 400);
+        }
+
+        $standard->status = 'TERBIT';
+        $standard->approved_by = auth()->id();
+        $standard->save();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Standar Mutu berhasil Diterbitkan.',
+            'data'    => $standard,
+        ]);
+    }
+
+    /**
+     * Reject the specified standard (Tolak -> REVISI).
+     */
+    public function reject(Request $request, $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'reason' => 'required|string'
+        ]);
+
+        $standard = MstStandard::findOrFail($id);
+
+        if ($standard->status !== 'WAITING_APPROVAL') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Standar tidak dalam status Menunggu Persetujuan.'
+            ], 400);
+        }
+
+        $standard->status = 'REVISI';
+        $standard->reject_reason = $validated['reason'];
+        $standard->save();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Standar Mutu telah ditolak dan dikembalikan untuk direvisi.',
+            'data'    => $standard,
         ]);
     }
 }

@@ -9,3 +9,11 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+@layer base {
+    input:not([type='checkbox']):not([type='radio']):not([type='submit']),
+    select,
+    textarea {
+        @apply px-3 py-2;
+    }
+}

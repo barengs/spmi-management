@@ -50,6 +50,14 @@ class MetricController extends Controller
                 ->max('order') + 1;
         }
 
+        $standard = MstStandard::findOrFail($validated['standard_id']);
+        if (in_array($standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tidak dapat merubah struktur dari Standar Mutu yang sedang Diajukan atau sudah Diterbitkan.'
+            ], 403);
+        }
+
         $metric = MstMetric::create($validated);
 
         return response()->json([
@@ -65,6 +73,13 @@ class MetricController extends Controller
     public function update(Request $request, $id): JsonResponse
     {
         $metric = MstMetric::findOrFail($id);
+
+        if (in_array($metric->standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tidak dapat mengubah node pada Standar Mutu yang sedang Diajukan atau sudah Diterbitkan.'
+            ], 403);
+        }
 
         $validated = $request->validate([
             'parent_id' => 'nullable|exists:mst_metrics,id',
@@ -105,6 +120,13 @@ class MetricController extends Controller
     {
         $metric = MstMetric::findOrFail($id);
         
+        if (in_array($metric->standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tidak dapat menghapus node dari Standar Mutu yang sedang Diajukan atau sudah Diterbitkan.'
+            ], 403);
+        }
+
         // Menghapus node ini akan secara otomatis menghapus anak-anaknya berkat `cascadeOnDelete` foreign key pada DB, 
         // namun untuk softdeletes Eloquent kita harus menginisiasinya secara eksplisit jika parent_id dan standard_id tidak null
         $this->deleteMetricAndChildren($metric);
