@@ -3,23 +3,44 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // 1. Seed organisasi
+        $this->call(UnitSeeder::class);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // 2. Seed roles & permissions (must run before user gets assigned a role)
+        $this->call(RolePermissionSeeder::class);
+
+        // 3. Create default SuperAdmin
+        $admin = User::firstOrCreate(
+            ['email' => 'admin@espmi.dev'],
+            [
+                'nidn_npk' => 'SUPER001',
+                'name'     => 'Administrator E-SPMI',
+                'password' => Hash::make('Password@123'),
+                'is_active' => true,
+            ]
+        );
+        $admin->assignRole('SuperAdmin');
+
+        // 4. Create a sample LPM user
+        $lpm = User::firstOrCreate(
+            ['email' => 'lpm@espmi.dev'],
+            [
+                'nidn_npk' => 'LPM001',
+                'name'     => 'Admin LPM',
+                'password' => Hash::make('Password@123'),
+                'is_active' => true,
+            ]
+        );
+        $lpm->assignRole('LPM-Admin');
+
+        $this->command->info('Seeding selesai! Login: admin@espmi.dev / Password@123');
     }
 }
+
