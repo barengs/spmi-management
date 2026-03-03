@@ -1,8 +1,67 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../../../services/api';
+import api from '../../services/api';
+import { toast } from 'react-toastify';
 
-const MetricNode = ({ node, level, onAddChild, onEdit, onDelete }) => {
+import StandardTargetConfig from './StandardTargetConfig';
+
+// Sub Component to display read-only targets
+const NodeTargetViewer = ({ metricId }) => {
+    const [targets, setTargets] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!metricId) return;
+        const fetchTargets = async () => {
+            try {
+                setLoading(true);
+                const [targetRes, levelRes] = await Promise.all([
+                    api.get(`/metrics/${metricId}/targets`),
+                    api.get(`/education-levels`)
+                ]);
+
+                const activeTargets = targetRes.data.data;
+                const levels = levelRes.data.data;
+
+                const mapped = activeTargets.map(t => {
+                    const l = levels.find(lv => lv.id === t.level_id);
+                    return { ...t, level_name: l ? l.name : 'Unknown' };
+                });
+                setTargets(mapped);
+            } catch (err) {
+                console.error("Gagal load target untuk viewer:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchTargets();
+    }, [metricId]);
+
+    if (loading) return <div className="text-sm text-gray-500 py-2 animate-pulse">Memuat target matriks...</div>;
+
+    if (targets.length === 0) {
+        return <div className="text-sm text-gray-500 py-2 italic">Belum ada target spesifik untuk jenjang manapun.</div>;
+    }
+
+    return (
+        <div className="space-y-3">
+            {targets.map(t => (
+                <div key={t.id} className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">
+                    <div className="font-semibold text-gray-900 dark:text-gray-100 flex justify-between items-center mb-1">
+                        <span>{t.level_name}</span>
+                        <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">{t.data_source}</span>
+                    </div>
+                    <div className="text-gray-600 dark:text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
+                        <div><span className="text-gray-400 dark:text-gray-500 font-medium text-xs uppercase">Target:</span> <span className="font-medium text-gray-800 dark:text-gray-200">{t.target_value}</span> {t.measure_unit}</div>
+                        <div><span className="text-gray-400 dark:text-gray-500 font-medium text-xs uppercase">Bukti:</span> {t.evidence_type}</div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget, onViewNode }) => {
     const [isExpanded, setIsExpanded] = useState(true);
 
     const getIcon = () => {
@@ -34,20 +93,24 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete }) => {
                     <span className="w-6 inline-block"></span>
                 )}
 
-                <div className="flex-1">
+                <div
+                    className="flex-1 cursor-pointer group"
+                    onClick={() => onViewNode(node)}
+                >
                     <div className="flex items-center gap-2 mb-1">
                         <span className="text-lg">{getIcon()}</span>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getTypeColor()}`}>
                             {node.type}
                         </span>
                         <span className="text-xs text-gray-400 dark:text-gray-500">ID: {node.id}</span>
+                        <span className="text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ml-2 hidden sm:inline-block">Lihat Detail →</span>
                     </div>
-                    <div className="text-sm font-medium text-gray-900 dark:text-white mt-1">
+                    <div className="text-sm font-medium text-gray-900 dark:text-white mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         {node.content}
                     </div>
                 </div>
 
-                <div className="ml-4 flex items-center space-x-2 opacity-100 sm:opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <div className="ml-4 flex flex-wrap justify-end gap-2 shrink-0 items-center">
                     {(node.type === 'Header' || node.type === 'Statement') && (
                         <button
                             onClick={() => onAddChild(node)}
@@ -55,6 +118,15 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete }) => {
                             title="Tambah Sub-Butir"
                         >
                             +Tambah
+                        </button>
+                    )}
+                    {node.type === 'Indicator' && (
+                        <button
+                            onClick={() => onConfigTarget(node)}
+                            className="p-1 px-2 font-medium text-xs text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800"
+                            title="Konfigurasi Target Per Jenjang"
+                        >
+                            🎯 Target Indikator
                         </button>
                     )}
                     <button
@@ -82,6 +154,8 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete }) => {
                             onAddChild={onAddChild}
                             onEdit={onEdit}
                             onDelete={onDelete}
+                            onConfigTarget={onConfigTarget}
+                            onViewNode={onViewNode}
                         />
                     ))}
                 </div>
@@ -108,6 +182,11 @@ export default function StandardBuilder() {
         type: 'Header',
     });
 
+    // Target Config Modal state
+    const [isTargetConfigOpen, setIsTargetConfigOpen] = useState(false);
+    const [selectedIndicator, setSelectedIndicator] = useState(null);
+    const [selectedIndicatorView, setSelectedIndicatorView] = useState(null);
+
     useEffect(() => {
         fetchData();
     }, [id]);
@@ -122,11 +201,16 @@ export default function StandardBuilder() {
             setStandard(stdRes.data.data);
             setTree(treeRes.data.data);
         } catch (err) {
-            alert('Gagal memuat struktur standar.');
+            toast.error('Gagal memuat struktur standar.');
             console.error(err);
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleConfigTarget = (node) => {
+        setSelectedIndicator(node);
+        setIsTargetConfigOpen(true);
     };
 
     const handleAddRoot = () => {
@@ -175,9 +259,10 @@ export default function StandardBuilder() {
         if (window.confirm(`Hapus node "${node.content.substring(0, 30)}..."?\nPeringatan: Menghapus ini akan memusnahkan SEMUA data di bawah hirarkinya!`)) {
             try {
                 await api.delete(`/metrics/${node.id}`);
+                toast.success('Node berhasil dihapus.');
                 fetchData();
             } catch (err) {
-                alert(err.response?.data?.message || 'Gagal menghapus node.');
+                toast.error(err.response?.data?.message || 'Gagal menghapus node.');
             }
         }
     };
@@ -190,13 +275,15 @@ export default function StandardBuilder() {
 
             if (editingNode) {
                 await api.put(`/metrics/${editingNode.id}`, payload);
+                toast.success('Node berhasil diperbarui.');
             } else {
                 await api.post('/metrics', payload);
+                toast.success('Node baru berhasil ditambahkan.');
             }
             fetchData();
             setIsModalOpen(false);
         } catch (err) {
-            alert(err.response?.data?.message || 'Gagal menyimpan node.');
+            toast.error(err.response?.data?.message || 'Gagal menyimpan node.');
         }
     };
 
@@ -229,40 +316,95 @@ export default function StandardBuilder() {
                 </button>
             </div>
 
-            <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-xl border border-gray-200 dark:border-gray-700 min-h-[500px]">
-                {tree.length === 0 ? (
-                    <div className="text-center py-12">
-                        <p className="text-gray-500 dark:text-gray-400 mb-4">Belum ada struktur hirarki di standar ini.</p>
-                        <button
-                            onClick={handleAddRoot}
-                            className="text-blue-600 font-medium hover:underline"
-                        >
-                            Mulai susun standar baru
-                        </button>
+            <div className={`flex gap-6 items-start transition-all duration-300`}>
+                {/* Left Column: Tree Builder */}
+                <div className={`transition-all duration-300 ${selectedIndicatorView ? 'w-2/3' : 'w-full'}`}>
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-xl border border-gray-200 dark:border-gray-700 min-h-[500px]">
+                        {tree.length === 0 ? (
+                            <div className="text-center py-12">
+                                <p className="text-gray-500 dark:text-gray-400 mb-4">Belum ada struktur hirarki di standar ini.</p>
+                                <button
+                                    onClick={handleAddRoot}
+                                    className="text-blue-600 font-medium hover:underline"
+                                >
+                                    Mulai susun standar baru
+                                </button>
+                            </div>
+                        ) : (
+                            <div>
+                                {tree.map(node => (
+                                    <MetricNode
+                                        key={node.id}
+                                        node={node}
+                                        level={0}
+                                        onAddChild={handleAddChild}
+                                        onEdit={handleEdit}
+                                        onDelete={handleDelete}
+                                        onConfigTarget={handleConfigTarget}
+                                        onViewNode={setSelectedIndicatorView}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
-                ) : (
-                    <div>
-                        {tree.map(node => (
-                            <MetricNode
-                                key={node.id}
-                                node={node}
-                                level={0}
-                                onAddChild={handleAddChild}
-                                onEdit={handleEdit}
-                                onDelete={handleDelete}
-                            />
-                        ))}
+                </div>
+
+                {/* Right Column: Node Detail Viewer */}
+                {selectedIndicatorView && (
+                    <div className="w-1/3 sticky top-6">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-blue-200 dark:border-blue-900 shadow-lg overflow-hidden flex flex-col max-h-[80vh]">
+                            <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/40 border-b border-blue-100 dark:border-blue-800 flex justify-between items-center">
+                                <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    Detail Informasi
+                                </h3>
+                                <button onClick={() => setSelectedIndicatorView(null)} className="text-blue-400 hover:text-blue-600">
+                                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="p-5 overflow-y-auto">
+                                <div className="mb-4">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedIndicatorView.type === 'Header' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' :
+                                        selectedIndicatorView.type === 'Statement' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200' :
+                                            'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                                        }`}>
+                                        {selectedIndicatorView.type}
+                                    </span>
+                                    <span className="ml-2 text-xs text-gray-500">ID: #{selectedIndicatorView.id}</span>
+                                </div>
+                                <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap mb-6">
+                                    {selectedIndicatorView.content}
+                                </div>
+
+                                {selectedIndicatorView.type === 'Indicator' && (
+                                    <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Target Jenjang</h4>
+                                            <button
+                                                onClick={() => handleConfigTarget(selectedIndicatorView)}
+                                                className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded"
+                                            >
+                                                Edit Target
+                                            </button>
+                                        </div>
+                                        <NodeTargetViewer metricId={selectedIndicatorView.id} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
 
-            {/* Modal */}
+            {/* Form Modal (Add/Edit Nodes) */}
             {isModalOpen && (
-                <div className="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-                    <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setIsModalOpen(false)}></div>
+                <div className="fixed z-[60] inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                        <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setIsModalOpen(false)}></div>
                         <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                        <div className="relative z-[60] inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
                             <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
                                 {editingNode ? 'Edit Node' : parentNode ? `Tambah Sub-Butir untuk ID #${parentNode.id}` : 'Tambah Akar Utama'}
                             </h3>
@@ -310,6 +452,13 @@ export default function StandardBuilder() {
                     </div>
                 </div>
             )}
+
+            {/* Target Configuration Modal (Rendered outside flex layout) */}
+            <StandardTargetConfig
+                metric={selectedIndicator}
+                isOpen={isTargetConfigOpen}
+                onClose={() => setIsTargetConfigOpen(false)}
+            />
         </div>
     );
 }

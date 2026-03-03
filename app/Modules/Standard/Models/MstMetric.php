@@ -40,4 +40,9 @@ class MstMetric extends Model
     {
         return $this->children()->with('childrenRecursive');
     }
+
+    public function targets(): HasMany
+    {
+        return $this->hasMany(MetricTarget::class, 'metric_id');
+    }
 }

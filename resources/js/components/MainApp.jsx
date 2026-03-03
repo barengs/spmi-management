@@ -7,6 +7,8 @@ import LoginPage from '../pages/auth/LoginPage';
 import Dashboard from '../pages/Dashboard';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const PrivateRoute = ({ children }) => {
     const token = useSelector((state) => state.auth.token);
@@ -27,6 +29,7 @@ const GuestRoute = ({ children }) => {
 export default function MainApp() {
     return (
         <Provider store={store}>
+            <ToastContainer position="top-right" autoClose={3000} />
             <Router>
                 <Routes>
                     {/* Guest Route: Login */}

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { setCredentials } from '../../store/authSlice';
 import api from '../../services/api';
-
+import { toast } from 'react-toastify';
 export default function LoginPage() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
@@ -26,6 +26,7 @@ export default function LoginPage() {
             const { token, user } = response.data.data;
 
             dispatch(setCredentials({ token, user }));
+            toast.success('Login berhasil! Selamat datang kembali.');
             navigate('/', { replace: true });
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed. Please check your credentials.');

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../store/authSlice';
 import api from '../../services/api';
+import { toast } from 'react-toastify';
 
 export default function Navbar({ toggleSidebar }) {
     const dispatch = useDispatch();
@@ -35,8 +36,10 @@ export default function Navbar({ toggleSidebar }) {
     const handleLogout = async () => {
         try {
             await api.post('/auth/logout');
+            toast.success('Logout berhasil! Sampai jumpa.');
         } catch (error) {
             console.error('Logout failed:', error);
+            toast.error('Masalah jaringan saat logout, namun sesi lokal dihapus.');
         } finally {
             dispatch(logout());
         }

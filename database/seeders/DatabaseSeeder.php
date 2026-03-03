@@ -40,6 +40,11 @@ class DatabaseSeeder extends Seeder
         );
         $lpm->assignRole('LPM-Admin');
 
+        $this->call([
+            RefEducationLevelSeeder::class,
+            StandardSeeder::class,
+        ]);
+
         $this->command->info('Seeding selesai! Login: admin@espmi.dev / Password@123');
     }
 }

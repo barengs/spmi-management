@@ -91,4 +91,28 @@ class AuthController extends Controller
             ],
         ]);
     }
+
+    /**
+     * POST /api/v1/auth/refresh
+     * Refresh the JWT token.
+     */
+    public function refresh(Request $request): JsonResponse
+    {
+        try {
+            $newToken = auth('api')->refresh();
+            
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Token berhasil diperbarui.',
+                'data'    => [
+                    'token' => $newToken,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Sesi tidak dapat diperbarui. Silakan login kembali.',
+            ], 401);
+        }
+    }
 }

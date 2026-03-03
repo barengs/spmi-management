@@ -29,6 +29,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('auth')->group(function () {
             Route::get('/me',    [AuthController::class, 'me']);
             Route::post('/logout', [AuthController::class, 'logout']);
+            Route::post('/refresh', [AuthController::class, 'refresh']);
         });
 
         // Organisasi / Unit
@@ -40,6 +41,9 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}',          [UnitController::class, 'update']);
             Route::delete('/{id}',       [UnitController::class, 'destroy']);
         });
+
+        // Master Data Jenjang Pendidikan
+        Route::get('/education-levels', [\App\Modules\Core\Controllers\RefEducationLevelController::class, 'index']);
 
         // Users
         Route::prefix('users')->group(function () {
@@ -63,11 +67,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/{standard_id}/metrics/tree', [\App\Modules\Standard\Controllers\MetricController::class, 'tree']);
         });
 
-        // Metrik / Indikator CRUD
+        // Metrik / Indikator CRUD & Target
         Route::prefix('metrics')->group(function () {
             Route::post('/',                    [\App\Modules\Standard\Controllers\MetricController::class, 'store']);
             Route::put('/{id}',                 [\App\Modules\Standard\Controllers\MetricController::class, 'update']);
             Route::delete('/{id}',              [\App\Modules\Standard\Controllers\MetricController::class, 'destroy']);
+            
+            // Target Diferensiasi per Jenjang
+            Route::get('/{metric_id}/targets',       [\App\Modules\Standard\Controllers\MetricTargetController::class, 'getTargets']);
+            Route::post('/{metric_id}/targets/sync', [\App\Modules\Standard\Controllers\MetricTargetController::class, 'syncTargets']);
         });
 
     });
