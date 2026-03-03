@@ -8,7 +8,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
     // Menu items based on capabilities/roles
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: '📊' },
-        { label: 'Penetapan Standar', path: '/standard', icon: '📝', roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee', 'Pimpinan'] },
+        { label: 'Penetapan Standar', path: '/standards', icon: '📝', roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee', 'Pimpinan'] },
         { label: 'Pelaksanaan', path: '/execution', icon: '📂', roles: ['SuperAdmin', 'LPM-Admin', 'Auditee'] },
         { label: 'Audit (AMI)', path: '/audit', icon: '🔍', roles: ['SuperAdmin', 'LPM-Admin', 'Auditor'] },
         { label: 'Tindak Koreksi', path: '/ptk', icon: '🛠️', roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee'] },
