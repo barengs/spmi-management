@@ -21,9 +21,9 @@ Route::prefix('v1')->group(function () {
     });
 
     // ------------------------------------------------------------------
-    // Protected routes (Sanctum token required)
+    // Protected routes (JWT token required)
     // ------------------------------------------------------------------
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware('auth:api')->group(function () {
 
         // Auth
         Route::prefix('auth')->group(function () {
@@ -49,6 +49,25 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}',                 [UserController::class, 'update']);
             Route::delete('/{id}',              [UserController::class, 'destroy']);
             Route::post('/{id}/force-reset',    [UserController::class, 'forceReset']);
+        });
+
+        // Dokumen Standar Mutu (MstStandard)
+        Route::prefix('standards')->group(function () {
+            Route::get('/',                     [\App\Modules\Standard\Controllers\StandardController::class, 'index']);
+            Route::post('/',                    [\App\Modules\Standard\Controllers\StandardController::class, 'store']);
+            Route::get('/{id}',                 [\App\Modules\Standard\Controllers\StandardController::class, 'show']);
+            Route::put('/{id}',                 [\App\Modules\Standard\Controllers\StandardController::class, 'update']);
+            Route::delete('/{id}',              [\App\Modules\Standard\Controllers\StandardController::class, 'destroy']);
+            
+            // Hirarki Metrik/Indikator di dalam suatu standar
+            Route::get('/{standard_id}/metrics/tree', [\App\Modules\Standard\Controllers\MetricController::class, 'tree']);
+        });
+
+        // Metrik / Indikator CRUD
+        Route::prefix('metrics')->group(function () {
+            Route::post('/',                    [\App\Modules\Standard\Controllers\MetricController::class, 'store']);
+            Route::put('/{id}',                 [\App\Modules\Standard\Controllers\MetricController::class, 'update']);
+            Route::delete('/{id}',              [\App\Modules\Standard\Controllers\MetricController::class, 'destroy']);
         });
 
     });

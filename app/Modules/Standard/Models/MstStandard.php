@@ -1,0 +1,33 @@
+<?php
+
+namespace App\Modules\Standard\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class MstStandard extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $fillable = [
+        'name',
+        'category',
+        'periode_tahun',
+        'is_active',
+        'referensi_regulasi',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+        ];
+    }
+
+    public function metrics(): HasMany
+    {
+        return $this->hasMany(MstMetric::class, 'standard_id');
+    }
+}
