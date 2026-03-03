@@ -21,23 +21,22 @@ class AuthController extends Controller
             'email'    => 'required|email',
             'password' => 'required|string',
         ]);
+        $credentials = $request->only('email', 'password');
 
-        $user = User::with('unit')
-                    ->where('email', $request->email)
-                    ->where('is_active', true)
-                    ->withoutTrashed()
-                    ->first();
-
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        if (! $token = auth('api')->attempt($credentials)) {
             throw ValidationException::withMessages([
                 'email' => ['Kredensial tidak valid.'],
             ]);
         }
 
-        // Revoke previous tokens (single session per user)
-        $user->tokens()->delete();
+        $user = auth('api')->user()->load('unit');
 
-        $token = $user->createToken('espmi-spa')->plainTextToken;
+        if (! $user->is_active) {
+            auth('api')->logout();
+            throw ValidationException::withMessages([
+                'email' => ['Akun Anda berstatus tidak aktif.'],
+            ]);
+        }
 
         return response()->json([
             'status'  => 'success',
@@ -62,7 +61,8 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        auth('api')->logout();
+
 
         return response()->json([
             'status'  => 'success',
