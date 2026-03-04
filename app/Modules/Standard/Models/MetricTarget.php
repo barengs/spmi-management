@@ -32,4 +32,10 @@ class MetricTarget extends Model
     {
         return $this->belongsTo(RefEducationLevel::class, 'level_id');
     }
+
+    public function evidences()
+    {
+        return $this->belongsToMany(MstEvidence::class, 'evidence_metric_target', 'metric_target_id', 'evidence_id')
+                    ->withTimestamps();
+    }
 }

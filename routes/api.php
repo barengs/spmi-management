@@ -84,6 +84,23 @@ Route::prefix('v1')->group(function () {
             Route::post('/{metric_id}/targets/sync', [\App\Modules\Standard\Controllers\MetricTargetController::class, 'syncTargets']);
         });
 
+        // Manajemen File Bukti (Evidence)
+        Route::prefix('evidences')->group(function () {
+            Route::get('/',                     [\App\Modules\Standard\Controllers\EvidenceController::class, 'index']);
+            Route::post('/',                    [\App\Modules\Standard\Controllers\EvidenceController::class, 'store']);
+            Route::post('/link',                [\App\Modules\Standard\Controllers\EvidenceController::class, 'link']);
+            Route::delete('/unlink',            [\App\Modules\Standard\Controllers\EvidenceController::class, 'unlink']);
+            Route::delete('/{id}',              [\App\Modules\Standard\Controllers\EvidenceController::class, 'destroy']);
+        });
+
+        // Sprint 8: Evaluasi Diri (Self-Assessment)
+        Route::prefix('self-assessments')->group(function () {
+            Route::get('/targets',              [\App\Modules\Audit\Controllers\SelfAssessmentController::class, 'getTargets']);
+            Route::post('/save',                [\App\Modules\Audit\Controllers\SelfAssessmentController::class, 'save']);
+            Route::post('/link-evidence',       [\App\Modules\Audit\Controllers\SelfAssessmentController::class, 'linkEvidence']);
+            Route::delete('/unlink-evidence',   [\App\Modules\Audit\Controllers\SelfAssessmentController::class, 'unlinkEvidence']);
+        });
+
     });
 
 });

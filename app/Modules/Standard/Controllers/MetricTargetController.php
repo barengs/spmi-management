@@ -17,7 +17,7 @@ class MetricTargetController extends Controller
     {
         $metric = MstMetric::findOrFail($metric_id);
         
-        $targets = MetricTarget::with('level')->where('metric_id', $metric_id)->get();
+        $targets = MetricTarget::with(['level', 'evidences'])->where('metric_id', $metric_id)->get();
         
         return response()->json([
             'status' => 'success',

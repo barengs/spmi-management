@@ -7,6 +7,7 @@ import LoginPage from '../pages/auth/LoginPage';
 import Dashboard from '../pages/Dashboard';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
+import SelfAssessmentPage from '../pages/audit/SelfAssessmentPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -54,6 +55,10 @@ export default function MainApp() {
                         <Route index element={<Dashboard />} />
                         <Route path="standards" element={<StandardIndex />} />
                         <Route path="standards/:id/builder" element={<StandardBuilder />} />
+
+                        {/* Audit / Pelaksanaan */}
+                        <Route path="self-assessments" element={<SelfAssessmentPage />} />
+
                         {/* Placeholder untuk rute lain nanti */}
                         <Route path="*" element={
                             <div className="p-8 text-center text-gray-500">

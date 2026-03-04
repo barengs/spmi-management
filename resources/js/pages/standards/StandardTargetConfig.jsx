@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
-
+import EvidenceUploaderModal from '../../components/EvidenceUploaderModal';
+import DocumentPreviewer from '../../components/DocumentPreviewer';
+import { FiPaperclip, FiTrash2, FiEye } from 'react-icons/fi';
 export default function StandardTargetConfig({ metric, isOpen, onClose }) {
     const [levels, setLevels] = useState([]);
     const [targets, setTargets] = useState({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
+    const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
+    const [selectedTargetId, setSelectedTargetId] = useState(null);
+    const [previewData, setPreviewData] = useState({ isOpen: false, url: '', type: '', name: '' });
     // Default configuration template
     const defaultRow = {
         is_active: false, // UI only control
@@ -46,14 +51,16 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                 const existing = fetchedTargets.find(t => t.level_id === level.id);
                 if (existing) {
                     targetState[level.id] = {
+                        id: existing.id,
                         is_active: true,
                         target_value: existing.target_value || '',
                         measure_unit: existing.measure_unit,
                         data_source: existing.data_source,
-                        evidence_type: existing.evidence_type
+                        evidence_type: existing.evidence_type,
+                        evidences: existing.evidences || []
                     };
                 } else {
-                    targetState[level.id] = { ...defaultRow };
+                    targetState[level.id] = { ...defaultRow, evidences: [] };
                 }
             });
 
@@ -74,6 +81,23 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                 [field]: value
             }
         }));
+    };
+
+    const handleUnlinkEvidence = async (levelId, targetId, evidenceId) => {
+        if (!confirm('Apakah Anda yakin ingin melepaskan tautan dokumen ini dari indikator capaian?')) return;
+
+        try {
+            await api.delete('/evidences/unlink', {
+                data: {
+                    evidence_id: evidenceId,
+                    metric_target_id: targetId
+                }
+            });
+            toast.success('Tautan dokumen berhasil dilepas.');
+            fetchData(); // Refresh UI
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal melepaskan dokumen.');
+        }
     };
 
     const handleSave = async () => {
@@ -173,14 +197,18 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                                             <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider border-r dark:border-gray-700">
                                                 Sumber Data (Sync)
                                             </th>
+                                            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider border-r dark:border-gray-700">
+                                                Tipe Bukti
+                                            </th>
                                             <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
-                                                Tipe Bukti (Upload)
+                                                Lampiran Bukti
                                             </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                         {levels.map((level) => {
                                             const isActive = targets[level.id]?.is_active;
+                                            const targetData = targets[level.id] || {};
                                             return (
                                                 <tr key={level.id} className={`${isActive ? 'bg-blue-50/30 dark:bg-blue-900/10' : 'bg-transparent text-gray-400 dark:text-gray-500'} transition-colors`}>
                                                     <td className="px-4 py-4 whitespace-nowrap text-center border-r dark:border-gray-700">
@@ -201,18 +229,18 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                                                         <input
                                                             type="text"
                                                             disabled={!isActive}
-                                                            value={targets[level.id]?.target_value || ''}
+                                                            value={targetData.target_value || ''}
                                                             onChange={(e) => handleRowChange(level.id, 'target_value', e.target.value)}
                                                             placeholder={isActive ? "Cth: 100 / Unggul" : "Nonaktif"}
-                                                            className={`block w-full sm:text-sm rounded-md border-gray-300 ${!isActive ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'} dark:border-gray-600 dark:text-white focus:ring-blue-500 focus:border-blue-500`}
+                                                            className={`block w-full sm:text-sm rounded-md border-gray-300 ${!isActive ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'} dark:border-gray-600 dark:text-white`}
                                                         />
                                                     </td>
                                                     <td className="px-4 py-3 border-r dark:border-gray-700">
                                                         <select
                                                             disabled={!isActive}
-                                                            value={targets[level.id]?.measure_unit || ''}
+                                                            value={targetData.measure_unit || ''}
                                                             onChange={(e) => handleRowChange(level.id, 'measure_unit', e.target.value)}
-                                                            className={`block w-full sm:text-sm rounded-md border-gray-300 ${!isActive ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'} dark:border-gray-600 dark:text-white focus:ring-blue-500 focus:border-blue-500`}
+                                                            className={`block w-full sm:text-sm rounded-md border-gray-300 ${!isActive ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'} dark:border-gray-600 dark:text-white`}
                                                         >
                                                             <option value="Jumlah">Jumlah (N)</option>
                                                             <option value="Persen">Persentase (%)</option>
@@ -225,9 +253,9 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                                                     <td className="px-4 py-3 border-r dark:border-gray-700">
                                                         <select
                                                             disabled={!isActive}
-                                                            value={targets[level.id]?.data_source || ''}
+                                                            value={targetData.data_source || ''}
                                                             onChange={(e) => handleRowChange(level.id, 'data_source', e.target.value)}
-                                                            className={`block w-full sm:text-sm rounded-md border-gray-300 ${!isActive ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'} dark:border-gray-600 dark:text-white focus:ring-blue-500 focus:border-blue-500`}
+                                                            className={`block w-full sm:text-xs rounded-md border-gray-300 ${!isActive ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'} dark:border-gray-600 dark:text-white focus:ring-blue-500 focus:border-blue-500`}
                                                         >
                                                             <option value="Manual">Input Manual</option>
                                                             <option value="SIAKAD">API SIAKAD (Otomatis)</option>
@@ -235,12 +263,12 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                                                             <option value="PDDikti">PDDikti (Feeder)</option>
                                                         </select>
                                                     </td>
-                                                    <td className="px-4 py-3">
+                                                    <td className="px-4 py-3 border-r dark:border-gray-700">
                                                         <select
                                                             disabled={!isActive}
-                                                            value={targets[level.id]?.evidence_type || ''}
+                                                            value={targetData.evidence_type || ''}
                                                             onChange={(e) => handleRowChange(level.id, 'evidence_type', e.target.value)}
-                                                            className={`block w-full sm:text-sm rounded-md border-gray-300 ${!isActive ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'} dark:border-gray-600 dark:text-white focus:ring-blue-500 focus:border-blue-500`}
+                                                            className={`block w-full sm:text-xs rounded-md border-gray-300 ${!isActive ? 'bg-gray-100 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'} dark:border-gray-600 dark:text-white focus:ring-blue-500 focus:border-blue-500`}
                                                         >
                                                             <option value="File PDF">Unggah File PDF</option>
                                                             <option value="Link Dokumen">Link URL Dokumen</option>
@@ -248,6 +276,44 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                                                             <option value="Teks Singkat">Teks Singkat</option>
                                                             <option value="Ya/Tidak">Ya / Tidak (Boolean)</option>
                                                         </select>
+                                                    </td>
+                                                    <td className="px-4 py-3 min-w-[200px]">
+                                                        {isActive && (
+                                                            <div className="flex flex-col gap-2">
+                                                                {/* Map Evidences */}
+                                                                {targetData.evidences && targetData.evidences.length > 0 ? (
+                                                                    <div className="flex flex-wrap gap-2 mb-2">
+                                                                        {targetData.evidences.map(ev => (
+                                                                            <span key={ev.id} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                                                <FiPaperclip className="mr-1" />
+                                                                                {ev.original_name.substring(0, 15) + '...'}
+                                                                                <button type="button" onClick={() => setPreviewData({ isOpen: true, url: `/storage/${ev.file_path}`, type: ev.mime_type, name: ev.original_name })} className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                                                                                    <FiEye />
+                                                                                </button>
+                                                                                <button type="button" onClick={() => handleUnlinkEvidence(level.id, targetData.id, ev.id)} className="ml-1 text-red-500 hover:text-red-700">
+                                                                                    <FiTrash2 />
+                                                                                </button>
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-xs text-gray-500 dark:text-gray-400 italic">Belum ada bukti yang dilampirkan.</span>
+                                                                )}
+                                                                {/* Only show 'Lampirkan' if there is an ID (it has been saved to DB) */}
+                                                                {targetData.id ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => { setEvidenceModalOpen(true); setSelectedTargetId(targetData.id); }}
+                                                                        className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                                                                    >
+                                                                        <FiPaperclip className="mr-1.5 h-3.5 w-3.5 text-gray-400" />
+                                                                        Lampirkan Bukti
+                                                                    </button>
+                                                                ) : (
+                                                                    <span className="text-[10px] text-orange-500 font-medium">Simpan konfigurasi dahulu untuk melampirkan file</span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );
@@ -278,6 +344,21 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                     </div>
                 </div>
             </div>
+
+            <EvidenceUploaderModal
+                isOpen={evidenceModalOpen}
+                onClose={() => setEvidenceModalOpen(false)}
+                metricTargetId={selectedTargetId}
+                onSuccess={fetchData} /* refresh the evidence list */
+            />
+
+            <DocumentPreviewer
+                isOpen={previewData.isOpen}
+                onClose={() => setPreviewData({ ...previewData, isOpen: false })}
+                fileUrl={previewData.url}
+                fileType={previewData.type}
+                fileName={previewData.name}
+            />
         </div>
     );
 }
