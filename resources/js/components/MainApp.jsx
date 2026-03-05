@@ -8,6 +8,11 @@ import Dashboard from '../pages/Dashboard';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
 import SelfAssessmentPage from '../pages/audit/SelfAssessmentPage';
+import PeriodIndex from '../pages/audit/Periods/PeriodIndex';
+import AuditorPlotting from '../pages/audit/Plotting/AuditorPlotting';
+import UnitIndex from '../pages/master/UnitIndex';
+import UserIndex from '../pages/master/UserIndex';
+import { ErrorBoundary } from './ErrorBoundary';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -30,45 +35,58 @@ const GuestRoute = ({ children }) => {
 export default function MainApp() {
     return (
         <Provider store={store}>
-            <ToastContainer position="top-right" autoClose={3000} />
-            <Router>
-                <Routes>
-                    {/* Guest Route: Login */}
-                    <Route
-                        path="/login"
-                        element={
-                            <GuestRoute>
-                                <LoginPage />
-                            </GuestRoute>
-                        }
-                    />
+            <ErrorBoundary>
+                <ToastContainer position="top-right" autoClose={3000} />
+                <Router>
+                    <Routes>
+                        {/* Guest Route: Login */}
+                        <Route
+                            path="/login"
+                            element={
+                                <GuestRoute>
+                                    <LoginPage />
+                                </GuestRoute>
+                            }
+                        />
 
-                    {/* Protected Routes under AppLayout */}
-                    <Route
-                        path="/"
-                        element={
-                            <PrivateRoute>
-                                <AppLayout />
-                            </PrivateRoute>
-                        }
-                    >
-                        <Route index element={<Dashboard />} />
-                        <Route path="standards" element={<StandardIndex />} />
-                        <Route path="standards/:id/builder" element={<StandardBuilder />} />
+                        {/* Protected Routes under AppLayout */}
+                        <Route
+                            path="/"
+                            element={
+                                <PrivateRoute>
+                                    <AppLayout />
+                                </PrivateRoute>
+                            }
+                        >
+                            <Route index element={<Dashboard />} />
+                            <Route path="standards" element={<StandardIndex />} />
+                            <Route path="standards/:id/builder" element={<StandardBuilder />} />
 
-                        {/* Audit / Pelaksanaan */}
-                        <Route path="self-assessments" element={<SelfAssessmentPage />} />
+                            {/* Audit / Pelaksanaan */}
+                            <Route path="self-assessments" element={<SelfAssessmentPage />} />
+                            <Route path="audit">
+                                <Route index element={<Navigate to="periods" replace />} />
+                                <Route path="periods" element={<PeriodIndex />} />
+                                <Route path=":id/plotting" element={<AuditorPlotting />} />
+                            </Route>
 
-                        {/* Placeholder untuk rute lain nanti */}
-                        <Route path="*" element={
-                            <div className="p-8 text-center text-gray-500">
-                                <h2 className="text-2xl font-bold mb-2">404 Not Found</h2>
-                                <p>Halaman tidak ditemukan atau sedang dalam pengembangan.</p>
-                            </div>
-                        } />
-                    </Route>
-                </Routes>
-            </Router>
+                            {/* Master Data */}
+                            <Route path="master">
+                                <Route path="units" element={<UnitIndex />} />
+                                <Route path="users" element={<UserIndex />} />
+                            </Route>
+
+                            {/* Placeholder untuk rute lain nanti */}
+                            <Route path="*" element={
+                                <div className="p-8 text-center text-gray-500">
+                                    <h2 className="text-2xl font-bold mb-2">404 Not Found</h2>
+                                    <p>Halaman tidak ditemukan atau sedang dalam pengembangan.</p>
+                                </div>
+                            } />
+                        </Route>
+                    </Routes>
+                </Router>
+            </ErrorBoundary>
         </Provider>
     );
 }

@@ -101,6 +101,22 @@ Route::prefix('v1')->group(function () {
             Route::delete('/unlink-evidence',   [\App\Modules\Audit\Controllers\SelfAssessmentController::class, 'unlinkEvidence']);
         });
 
+        // Sprint 10: Manajemen Audit Mutu Internal (AMI)
+        Route::prefix('audit')->group(function () {
+            // Periode Audit
+            Route::get('/periods',              [\App\Modules\Audit\Controllers\AuditPeriodController::class, 'index']);
+            Route::post('/periods',             [\App\Modules\Audit\Controllers\AuditPeriodController::class, 'store']);
+            Route::get('/periods/{id}',         [\App\Modules\Audit\Controllers\AuditPeriodController::class, 'show']);
+            Route::put('/periods/{id}',         [\App\Modules\Audit\Controllers\AuditPeriodController::class, 'update']);
+            
+            // Plotting Jadwal/Asesor
+            Route::get('/schedules',            [\App\Modules\Audit\Controllers\AuditScheduleController::class, 'index']);
+            Route::post('/schedules',           [\App\Modules\Audit\Controllers\AuditScheduleController::class, 'store']);
+            Route::get('/schedules/{id}',       [\App\Modules\Audit\Controllers\AuditScheduleController::class, 'show']);
+            Route::put('/schedules/{id}',       [\App\Modules\Audit\Controllers\AuditScheduleController::class, 'update']);
+            Route::delete('/schedules/{id}',    [\App\Modules\Audit\Controllers\AuditScheduleController::class, 'destroy']);
+        });
+
     });
 
 });
