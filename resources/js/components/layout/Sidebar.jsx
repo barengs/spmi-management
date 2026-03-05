@@ -1,23 +1,23 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import Icon, { Icons } from '../ui/Icon';
 
 export default function Sidebar({ isOpen, setIsOpen }) {
     const roles = useSelector((state) => state.auth.user?.roles || []);
 
     // Menu items based on capabilities/roles
     const menuItems = [
-        { label: 'Dashboard', path: '/', icon: '📊' },
-        { label: 'Penetapan Standar', path: '/standards', icon: '📝', roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee', 'Pimpinan'] },
-        { label: 'Pelaksanaan', path: '/execution', icon: '📂', roles: ['SuperAdmin', 'LPM-Admin', 'Auditee'] },
-        { label: 'Audit (AMI)', path: '/audit', icon: '🔍', roles: ['SuperAdmin', 'LPM-Admin', 'Auditor'] },
-        { label: 'Tindak Koreksi', path: '/ptk', icon: '🛠️', roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee'] },
-        { label: 'Report Eksekutif', path: '/report', icon: '📈', roles: ['SuperAdmin', 'LPM-Admin', 'Pimpinan'] },
-        { label: 'Pengaturan Sistem', path: '/settings', icon: '⚙️', roles: ['SuperAdmin'] },
+        { label: 'Dashboard', path: '/', icon: Icons.dashboard },
+        { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee', 'Pimpinan'] },
+        { label: 'Pelaksanaan', path: '/execution', icon: Icons.execution, roles: ['SuperAdmin', 'LPM-Admin', 'Auditee'] },
+        { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, roles: ['SuperAdmin', 'LPM-Admin', 'Auditor'] },
+        { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee'] },
+        { label: 'Report Eksekutif', path: '/report', icon: Icons.report, roles: ['SuperAdmin', 'LPM-Admin', 'Pimpinan'] },
+        { label: 'Pengaturan Sistem', path: '/settings', icon: Icons.settings, roles: ['SuperAdmin'] },
     ];
 
     // Filter menu items based on user role
-    // In a real app we'd check permissions instead, but this gives a good shell UX based on Sprint 1 setup
     const authorizedMenu = menuItems.filter(item => {
         if (!item.roles) return true;
         return item.roles.some(role => roles.includes(role));
@@ -36,8 +36,8 @@ export default function Sidebar({ isOpen, setIsOpen }) {
             <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} `}>
 
                 <div className="flex h-16 items-center px-6 border-b border-gray-200 dark:border-gray-700">
-                    <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400">
-                        E-SPMI 🌿
+                    <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 flex items-center gap-2">
+                        E-SPMI <Icon icon={Icons.logo} className="text-green-500" />
                     </span>
                 </div>
 
@@ -56,7 +56,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                                     }`
                                 }
                             >
-                                <span className="mr-3 text-lg">{item.icon}</span>
+                                <Icon icon={item.icon} width={20} className="mr-3" />
                                 {item.label}
                             </NavLink>
                         ))}

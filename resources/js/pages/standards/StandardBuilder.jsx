@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
+import Icon, { Icons } from '../../components/ui/Icon';
 
 import StandardTargetConfig from './StandardTargetConfig';
 
@@ -65,9 +66,9 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
     const [isExpanded, setIsExpanded] = useState(true);
 
     const getIcon = () => {
-        if (node.type === 'Header') return '📁';
-        if (node.type === 'Statement') return '📄';
-        return '🎯'; // Indicator
+        if (node.type === 'Header') return Icons.folder;
+        if (node.type === 'Statement') return Icons.document;
+        return Icons.target;
     };
 
     const getTypeColor = () => {
@@ -87,7 +88,7 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
                         onClick={() => setIsExpanded(!isExpanded)}
                         className="mr-2 mt-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     >
-                        {isExpanded ? '▼' : '▶'}
+                        <Icon icon={isExpanded ? Icons.expand : Icons.collapse} width={20} />
                     </button>
                 ) : (
                     <span className="w-6 inline-block"></span>
@@ -98,7 +99,7 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
                     onClick={() => onViewNode(node)}
                 >
                     <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg">{getIcon()}</span>
+                        <Icon icon={getIcon()} width={20} />
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getTypeColor()}`}>
                             {node.type}
                         </span>
@@ -115,31 +116,35 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
                         {(node.type === 'Header' || node.type === 'Statement') && (
                             <button
                                 onClick={() => onAddChild(node)}
-                                className="p-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/50"
+                                className="p-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/50 flex items-center gap-1"
                                 title="Tambah Sub-Butir"
                             >
-                                +Tambah
+                                <Icon icon={Icons.add} width={14} />
+                                Tambah
                             </button>
                         )}
                         {node.type === 'Indicator' && (
                             <button
                                 onClick={() => onConfigTarget(node)}
-                                className="p-1 px-2 font-medium text-xs text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800"
+                                className="p-1 px-2 font-medium text-xs text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 flex items-center gap-1"
                                 title="Konfigurasi Target Per Jenjang"
                             >
-                                🎯 Target Indikator
+                                <Icon icon={Icons.target} width={14} />
+                                Target Indikator
                             </button>
                         )}
                         <button
                             onClick={() => onEdit(node)}
-                            className="p-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded dark:text-indigo-400 dark:hover:text-indigo-300 dark:hover:bg-indigo-900/50"
+                            className="p-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded dark:text-indigo-400 dark:hover:text-indigo-300 dark:hover:bg-indigo-900/50 flex items-center gap-1"
                         >
+                            <Icon icon={Icons.edit} width={14} />
                             Edit
                         </button>
                         <button
                             onClick={() => onDelete(node)}
-                            className="p-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/50"
+                            className="p-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/50 flex items-center gap-1"
                         >
+                            <Icon icon={Icons.delete} width={14} />
                             Hapus
                         </button>
                     </div>
@@ -177,7 +182,7 @@ export default function StandardBuilder() {
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingNode, setEditingNode] = useState(null);
-    const [parentNode, setParentNode] = useState(null); // Node yang sedang ditambahi child
+    const [parentNode, setParentNode] = useState(null);
     const [formData, setFormData] = useState({
         standard_id: id,
         parent_id: '',
@@ -232,7 +237,6 @@ export default function StandardBuilder() {
         setEditingNode(null);
         setParentNode(parent);
 
-        // Auto default next type based on parent logic mapping hierarchy 
         let nextType = 'Statement';
         if (parent.type === 'Header') nextType = 'Header';
         if (parent.type === 'Statement') nextType = 'Indicator';
@@ -274,7 +278,7 @@ export default function StandardBuilder() {
         e.preventDefault();
         try {
             const payload = { ...formData };
-            if (!payload.parent_id) payload.parent_id = null; // nullify empty string
+            if (!payload.parent_id) payload.parent_id = null;
 
             if (editingNode) {
                 await api.put(`/metrics/${editingNode.id}`, payload);
@@ -300,9 +304,10 @@ export default function StandardBuilder() {
                 <div>
                     <button
                         onClick={() => navigate('/standards')}
-                        className="mb-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center"
+                        className="mb-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
                     >
-                        ← Kembali ke Daftar Standar
+                        <Icon icon={Icons.back} width={18} />
+                        Kembali ke Daftar Standar
                     </button>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                         Builder: {standard?.name}
@@ -310,8 +315,9 @@ export default function StandardBuilder() {
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         Periode: {standard?.periode_tahun} | Kategori: {standard?.category}
                         {['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
-                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
-                                🛡 Mode Baca (Terkunci)
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 gap-1">
+                                <Icon icon={Icons.shield} width={14} />
+                                Mode Baca (Terkunci)
                             </span>
                         )}
                     </p>
@@ -319,9 +325,10 @@ export default function StandardBuilder() {
                 {!['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
                     <button
                         onClick={handleAddRoot}
-                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                        className="inline-flex items-center gap-1 px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
                     >
-                        + Tambah Akar Baru
+                        <Icon icon={Icons.add} width={18} />
+                        Tambah Akar Baru
                     </button>
                 )}
             </div>
@@ -366,13 +373,11 @@ export default function StandardBuilder() {
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-blue-200 dark:border-blue-900 shadow-lg overflow-hidden flex flex-col max-h-[80vh]">
                             <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/40 border-b border-blue-100 dark:border-blue-800 flex justify-between items-center">
                                 <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    <Icon icon={Icons.info} width={18} />
                                     Detail Informasi
                                 </h3>
                                 <button onClick={() => setSelectedIndicatorView(null)} className="text-blue-400 hover:text-blue-600">
-                                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
+                                    <Icon icon={Icons.close} width={20} />
                                 </button>
                             </div>
                             <div className="p-5 overflow-y-auto">
@@ -395,8 +400,9 @@ export default function StandardBuilder() {
                                             <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Target Jenjang</h4>
                                             <button
                                                 onClick={() => handleConfigTarget(selectedIndicatorView)}
-                                                className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded"
+                                                className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded flex items-center gap-1"
                                             >
+                                                <Icon icon={Icons.edit} width={12} />
                                                 Edit Target
                                             </button>
                                         </div>
@@ -464,7 +470,7 @@ export default function StandardBuilder() {
                 </div>
             )}
 
-            {/* Target Configuration Modal (Rendered outside flex layout) */}
+            {/* Target Configuration Modal */}
             <StandardTargetConfig
                 metric={selectedIndicator}
                 isOpen={isTargetConfigOpen}
