@@ -39,7 +39,7 @@ class WorkingPaperController extends Controller
             },
             // Load isian kertas kerja Auditor saat ini
             'workingPapers' => function($query) use ($scheduleId) {
-                $query->where('audit_schedule_id', $scheduleId)->with('findings');
+                $query->where('audit_schedule_id', $scheduleId)->with('finding');
             }
         ])->whereHas('metric.standard', function ($q) {
             $q->where('is_active', true);
@@ -73,9 +73,12 @@ class WorkingPaperController extends Controller
     {
         $request->validate([
             'metric_target_id' => 'required|exists:metric_targets,id',
-            'auditor_score'    => 'nullable|numeric|min:0|max:4',
+            'auditor_score'    => 'nullable|numeric|min:0|max:9999',
             'status'           => 'nullable|in:SESUAI,OB,KTS_MINOR,KTS_MAYOR,MELAMPAUI',
-            'auditor_notes'    => 'nullable|string'
+            'auditor_notes'    => 'nullable|string',
+            'finding_uraian'   => 'nullable|string',
+            'finding_akar'     => 'nullable|string',
+            'finding_rekomendasi' => 'nullable|string'
         ]);
 
         $schedule = TrxAuditSchedule::findOrFail($scheduleId);
@@ -100,9 +103,26 @@ class WorkingPaperController extends Controller
             ]
         );
 
+        // Jika status adalah KTS atau OB, simpan Temuan
+        if (in_array($request->status, ['OB', 'KTS_MINOR', 'KTS_MAYOR'])) {
+            $paper->finding()->updateOrCreate(
+                ['audit_working_paper_id' => $paper->id],
+                [
+                    'uraian_temuan' => $request->finding_uraian ?? '',
+                    'akar_masalah'  => $request->finding_akar ?? '',
+                    'rekomendasi'   => $request->finding_rekomendasi ?? ''
+                ]
+            );
+        } else {
+            // Hapus finding jika status kembali ke Sesuai/Melampaui
+            if ($paper->finding) {
+                $paper->finding()->delete();
+            }
+        }
+
         return response()->json([
             'message' => 'Kertas kerja berhasil diamankan system (Auto-Save).',
-            'data'    => $paper->load('findings')
+            'data'    => $paper->load('finding')
         ]);
     }
 }

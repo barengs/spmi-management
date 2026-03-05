@@ -25,8 +25,8 @@ class TrxAuditWorkingPaper extends Model
         return $this->belongsTo(MetricTarget::class, 'metric_target_id');
     }
 
-    public function findings()
+    public function finding()
     {
-        return $this->hasMany(TrxAuditFinding::class, 'audit_working_paper_id');
+        return $this->hasOne(TrxAuditFinding::class, 'audit_working_paper_id');
     }
 }

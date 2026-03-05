@@ -38,7 +38,10 @@ export default function DeskEvaluation() {
                     initialPapers[target.id] = {
                         auditor_score: saved?.auditor_score ?? '',
                         status: saved?.status ?? '',
-                        auditor_notes: saved?.auditor_notes ?? ''
+                        auditor_notes: saved?.auditor_notes ?? '',
+                        finding_uraian: saved?.finding?.uraian_temuan ?? '',
+                        finding_akar: saved?.finding?.akar_masalah ?? '',
+                        finding_rekomendasi: saved?.finding?.rekomendasi ?? ''
                     };
                 });
             });
@@ -67,13 +70,30 @@ export default function DeskEvaluation() {
     };
 
     // Handler ketika field input (skor, status, notes) berubah
-    const handleChange = (metricTargetId, field, value) => {
+    const handleChange = (metricTargetId, field, value, targetValue = null) => {
         setPapers(prev => {
+            let updatedFields = { [field]: value };
+
+            // Auto-Status Logic
+            if (field === 'auditor_score' && value !== '' && targetValue !== null) {
+                const scoreNum = parseFloat(value);
+                const targetNum = parseFloat(targetValue);
+                if (!isNaN(scoreNum) && !isNaN(targetNum)) {
+                    if (scoreNum < targetNum) {
+                        updatedFields.status = 'KTS_MINOR';
+                    } else if (scoreNum > targetNum) {
+                        updatedFields.status = 'MELAMPAUI';
+                    } else {
+                        updatedFields.status = 'SESUAI';
+                    }
+                }
+            }
+
             const updated = {
                 ...prev,
                 [metricTargetId]: {
                     ...prev[metricTargetId],
-                    [field]: value
+                    ...updatedFields
                 }
             };
 
@@ -223,17 +243,18 @@ export default function DeskEvaluation() {
                                 </div>
                                 <div className="space-y-6">
                                     {group.targets.map(target => {
-                                        const formInput = papers[target.id] || { auditor_score: '', status: '', auditor_notes: '' };
+                                        const formInput = papers[target.id] || { auditor_score: '', status: '', auditor_notes: '', finding_uraian: '', finding_akar: '', finding_rekomendasi: '' };
+                                        const isKTS = ['OB', 'KTS_MINOR', 'KTS_MAYOR'].includes(formInput.status);
 
                                         return (
-                                            <div key={`input-${target.id}`} className="bg-gray-50 dark:bg-gray-800/80 rounded border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+                                            <div key={`input-${target.id}`} className={`bg-gray-50 dark:bg-gray-800/80 rounded border ${isKTS ? 'border-red-300 dark:border-red-800' : 'border-gray-200 dark:border-gray-700'} p-4 shadow-sm`}>
                                                 <div className="flex gap-4 mb-4">
                                                     <div className="w-1/3">
                                                         <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Skor Verifikasi Ketercapaian</label>
                                                         <input
                                                             type="number" step="0.01" min="0" max="4"
                                                             value={formInput.auditor_score}
-                                                            onChange={(e) => handleChange(target.id, 'auditor_score', e.target.value)}
+                                                            onChange={(e) => handleChange(target.id, 'auditor_score', e.target.value, target.target_value)}
                                                             className="w-full text-sm rounded bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white"
                                                             placeholder="0.00 - 4.00"
                                                         />
@@ -243,7 +264,7 @@ export default function DeskEvaluation() {
                                                         <select
                                                             value={formInput.status}
                                                             onChange={(e) => handleChange(target.id, 'status', e.target.value)}
-                                                            className="w-full text-sm rounded bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white"
+                                                            className={`w-full text-sm rounded bg-white dark:bg-gray-900 ${isKTS ? 'border-red-400 focus:ring-red-500 focus:border-red-500 text-red-700 dark:text-red-400 dark:border-red-700' : 'border-gray-300 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white'}`}
                                                         >
                                                             <option value="">-- Pilih Status / Keputusan --</option>
                                                             <option value="SESUAI">Sesuai (Terpenuhi)</option>
@@ -254,14 +275,56 @@ export default function DeskEvaluation() {
                                                         </select>
                                                     </div>
                                                 </div>
+
+                                                {isKTS && (
+                                                    <div className="mb-4 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/50 rounded-lg p-4 space-y-4">
+                                                        <div className="flex items-center mb-2">
+                                                            <FiAlertTriangle className="text-red-500 mr-2 h-5 w-5" />
+                                                            <h5 className="font-bold text-red-800 dark:text-red-400 text-sm">Formulir Temuan Ketidaksesuaian (Wajib Diisi)</h5>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Uraian Temuan</label>
+                                                            <textarea
+                                                                rows="2" required
+                                                                value={formInput.finding_uraian}
+                                                                onChange={(e) => handleChange(target.id, 'finding_uraian', e.target.value)}
+                                                                className="w-full text-sm rounded bg-white dark:bg-gray-900 border-red-300 dark:border-red-700 focus:ring-red-500 focus:border-red-500 dark:text-white"
+                                                                placeholder="Jelaskan secara spesifik ketidaksesuaian yang ditemukan..."
+                                                            />
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div>
+                                                                <label className="block text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Akar Masalah</label>
+                                                                <textarea
+                                                                    rows="2" required
+                                                                    value={formInput.finding_akar}
+                                                                    onChange={(e) => handleChange(target.id, 'finding_akar', e.target.value)}
+                                                                    className="w-full text-sm rounded bg-white dark:bg-gray-900 border-red-300 dark:border-red-700 focus:ring-red-500 focus:border-red-500 dark:text-white"
+                                                                    placeholder="Apa penyebab mendasar masalah ini?"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Rekomendasi Perbaikan</label>
+                                                                <textarea
+                                                                    rows="2" required
+                                                                    value={formInput.finding_rekomendasi}
+                                                                    onChange={(e) => handleChange(target.id, 'finding_rekomendasi', e.target.value)}
+                                                                    className="w-full text-sm rounded bg-white dark:bg-gray-900 border-red-300 dark:border-red-700 focus:ring-red-500 focus:border-red-500 dark:text-white"
+                                                                    placeholder="Solusi / perbaikan yang direkomendasikan..."
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 <div>
-                                                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Catatan Auditor (Deskripsi Kualitatif)</label>
+                                                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Catatan Tambahan Auditor (Opsional)</label>
                                                     <textarea
-                                                        rows="3"
+                                                        rows="2"
                                                         value={formInput.auditor_notes}
                                                         onChange={(e) => handleChange(target.id, 'auditor_notes', e.target.value)}
                                                         className="w-full text-sm rounded bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white"
-                                                        placeholder="Tuliskan justifikasi penilaian, akar masalah, atau rekomendasi spesifik jika ada..."
+                                                        placeholder="Tuliskan justifikasi penilaian tambahan jika ada..."
                                                     />
                                                 </div>
                                             </div>
