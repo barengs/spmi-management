@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../store/authSlice';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
+import Icon, { Icons } from '../ui/Icon';
 
 export default function Navbar({ toggleSidebar }) {
     const dispatch = useDispatch();
@@ -53,9 +54,7 @@ export default function Navbar({ toggleSidebar }) {
                     onClick={toggleSidebar}
                     className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white lg:hidden p-2 rounded-md focus:outline-none"
                 >
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
+                    <Icon icon={Icons.menu} width={24} className="text-gray-600 dark:text-gray-300" />
                 </button>
 
                 {/* Breadcrumbs Placeholder for future */}
@@ -72,12 +71,16 @@ export default function Navbar({ toggleSidebar }) {
                     onClick={toggleDarkMode}
                     className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-yellow-400 focus:outline-none transition-colors border border-transparent rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                    {darkMode ? '☀️' : '🌙'}
+                    <Icon 
+                        icon={darkMode ? Icons.sun : Icons.moon} 
+                        width={20} 
+                        className={darkMode ? 'text-yellow-500' : 'text-gray-600'}
+                    />
                 </button>
 
                 {/* Notifications */}
                 <button className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition relative">
-                    🔔
+                    <Icon icon={Icons.bell} width={20} />
                     <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-800"></span>
                 </button>
 

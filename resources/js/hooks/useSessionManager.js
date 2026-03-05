@@ -41,7 +41,10 @@ export default function useSessionManager() {
             if (timeIdle >= LOCK_TIMEOUT_MS && !isLocked) {
                 // Inactive for 30 mins -> lock screen
                 dispatch(setLocked(true));
-                toast('Layar terkunci karena tidak ada aktivitas.', { icon: '🔒' });
+                toast('Layar terkunci karena tidak ada aktivitas.', { 
+                    icon: '🔒',
+                    className: 'dark:bg-gray-800 dark:text-white'
+                });
             }
         }, 60 * 1000);
 

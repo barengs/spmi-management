@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { setLocked } from '../../store/authSlice';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
+import Icon, { Icons } from '../ui/Icon';
 
 export default function LockScreen() {
     const isLocked = useSelector(state => state.auth.isLocked);
@@ -40,7 +41,7 @@ export default function LockScreen() {
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden w-full max-w-sm border border-gray-200 dark:border-gray-700 p-8 transform transition-all">
                 <div className="text-center mb-6">
                     <div className="h-20 w-20 rounded-full bg-blue-100 dark:bg-blue-900/50 flex flex-col items-center justify-center mx-auto mb-4 border-2 border-blue-500">
-                        <span className="text-3xl text-blue-600 dark:text-blue-400">🔒</span>
+                        <Icon icon={Icons.locked} width={40} className="text-blue-600 dark:text-blue-400" />
                     </div>
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">Layar Terkunci</h2>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">

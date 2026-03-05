@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import StandardCloneModal from './StandardCloneModal';
+import Icon, { Icons } from '../../components/ui/Icon';
 import {
     createColumnHelper,
     flexRender,
@@ -196,23 +197,26 @@ export default function StandardIndex() {
                 const status = info.getValue() || 'DRAFT';
                 if (status === 'TERBIT') {
                     return (
-                        <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold leading-5 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 shadow-sm border border-emerald-200 dark:border-emerald-800">
-                            🛡 Terbit
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold leading-5 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 shadow-sm border border-emerald-200 dark:border-emerald-800">
+                            <Icon icon={Icons.shield} width={14} />
+                            Terbit
                         </span>
                     );
                 }
                 if (status === 'WAITING_APPROVAL') {
                     return (
-                        <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold leading-5 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 shadow-sm border border-blue-200 dark:border-blue-800 animate-pulse">
-                            ⏳ Menunggu Review
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold leading-5 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 shadow-sm border border-blue-200 dark:border-blue-800 animate-pulse">
+                            <Icon icon={Icons.pending} width={14} />
+                            Menunggu Review
                         </span>
                     );
                 }
                 if (status === 'REVISI') {
                     return (
                         <div className="flex flex-col gap-1 items-start">
-                            <span className="inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold leading-5 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300 shadow-sm border border-rose-200 dark:border-rose-800">
-                                ↺ Revisi
+                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold leading-5 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300 shadow-sm border border-rose-200 dark:border-rose-800">
+                                <Icon icon={Icons.refresh} width={14} />
+                                Revisi
                             </span>
                             {info.row.original.reject_reason && (
                                 <span className="text-[10px] text-rose-600 dark:text-rose-400 italic max-w-xs truncate" title={info.row.original.reject_reason}>
@@ -224,8 +228,9 @@ export default function StandardIndex() {
                 }
                 // DRAFT
                 return (
-                    <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold leading-5 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 shadow-sm border border-amber-200 dark:border-amber-800">
-                        📝 Draft
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold leading-5 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 shadow-sm border border-amber-200 dark:border-amber-800">
+                        <Icon icon={Icons.draft} width={14} />
+                        Draft
                     </span>
                 );
             }
@@ -338,9 +343,10 @@ export default function StandardIndex() {
                 <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
                     <button
                         onClick={() => handleOpenModal()}
-                        className="inline-flex items-center justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:w-auto"
+                        className="inline-flex items-center gap-1 justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:w-auto"
                     >
-                        + Tambah Standar
+                        <Icon icon={Icons.add} width={18} />
+                        Tambah Standar
                     </button>
                 </div>
             </div>
@@ -355,7 +361,7 @@ export default function StandardIndex() {
             <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="w-full sm:max-w-xs relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <span className="text-gray-500 sm:text-sm">🔍</span>
+                        <Icon icon={Icons.search} width={16} className="text-gray-400" />
                     </div>
                     <input
                         type="text"
@@ -387,9 +393,9 @@ export default function StandardIndex() {
                                                             header.getContext()
                                                         )}
                                                         {{
-                                                            asc: ' 🔼',
-                                                            desc: ' 🔽',
-                                                        }[header.column.getIsSorted()] ?? <span className="opacity-0 group-hover:opacity-100 text-gray-300"> ↕️</span>}
+                                                            asc: <Icon icon={Icons.sortAsc} width={14} />,
+                                                            desc: <Icon icon={Icons.sortDesc} width={14} />,
+                                                        }[header.column.getIsSorted()] ?? <Icon icon={Icons.sort} width={14} className="opacity-0 group-hover:opacity-100 text-gray-300" />}
                                                     </div>
                                                 </th>
                                             ))}
@@ -430,16 +436,18 @@ export default function StandardIndex() {
                                         <button
                                             onClick={() => table.previousPage()}
                                             disabled={!table.getCanPreviousPage()}
-                                            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50"
+                                            className="relative inline-flex items-center gap-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50"
                                         >
+                                            <Icon icon={Icons.prev} width={16} />
                                             Previous
                                         </button>
                                         <button
                                             onClick={() => table.nextPage()}
                                             disabled={!table.getCanNextPage()}
-                                            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50"
+                                            className="ml-3 relative inline-flex items-center gap-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-50"
                                         >
                                             Next
+                                            <Icon icon={Icons.next} width={16} />
                                         </button>
                                     </div>
                                     <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
@@ -456,28 +464,28 @@ export default function StandardIndex() {
                                                     disabled={!table.getCanPreviousPage()}
                                                     className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 disabled:opacity-50"
                                                 >
-                                                    {'<<'}
+                                                    <Icon icon={Icons.first} width={20} />
                                                 </button>
                                                 <button
                                                     onClick={() => table.previousPage()}
                                                     disabled={!table.getCanPreviousPage()}
                                                     className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 disabled:opacity-50"
                                                 >
-                                                    {'<'}
+                                                    <Icon icon={Icons.prev} width={20} />
                                                 </button>
                                                 <button
                                                     onClick={() => table.nextPage()}
                                                     disabled={!table.getCanNextPage()}
                                                     className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 disabled:opacity-50"
                                                 >
-                                                    {'>'}
+                                                    <Icon icon={Icons.next} width={20} />
                                                 </button>
                                                 <button
                                                     onClick={() => table.setPageIndex(table.getPageCount() - 1)}
                                                     disabled={!table.getCanNextPage()}
                                                     className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 disabled:opacity-50"
                                                 >
-                                                    {'>>'}
+                                                    <Icon icon={Icons.last} width={20} />
                                                 </button>
                                             </nav>
                                         </div>
@@ -563,16 +571,28 @@ export default function StandardIndex() {
                                         <button
                                             type="submit"
                                             disabled={isSubmitting}
-                                            className="w-full inline-flex justify-center rounded-md flex-row items-center border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                                            className="w-full inline-flex justify-center rounded-md flex-row items-center gap-1 border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm disabled:opacity-50"
                                         >
-                                            {isSubmitting ? 'Merekam Data...' : 'Simpan Dokumen'}
+                                            {isSubmitting ? (
+                                                <>
+                                                    <span className="animate-spin">
+                                                        <Icon icon={Icons.refresh} width={16} />
+                                                    </span>
+                                                    Merekam Data...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Icon icon={Icons.save} width={16} />
+                                                    Simpan Dokumen
+                                                </>
+                                            )}
                                         </button>
                                         <button
                                             type="button"
                                             onClick={handleCloseModal}
                                             className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:col-start-1 sm:text-sm dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                                         >
-                                            Batal Buka
+                                            Batal
                                         </button>
                                     </div>
                                 </form>

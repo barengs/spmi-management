@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
+import Icon, { Icons } from '../../components/ui/Icon';
 
 export default function StandardTargetConfig({ metric, isOpen, onClose }) {
     const [levels, setLevels] = useState([]);
@@ -8,9 +9,8 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
-    // Default configuration template
     const defaultRow = {
-        is_active: false, // UI only control
+        is_active: false,
         target_value: '',
         measure_unit: 'Jumlah',
         data_source: 'Manual',
@@ -28,7 +28,6 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
             setLoading(true);
             setError(null);
 
-            // Fetch education levels and existing targets simultaneously
             const [levelsRes, targetsRes] = await Promise.all([
                 api.get('/education-levels'),
                 api.get(`/metrics/${metric.id}/targets`)
@@ -39,10 +38,8 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
 
             setLevels(fetchedLevels);
 
-            // Initialize form state
             const targetState = {};
             fetchedLevels.forEach(level => {
-                // Check if target exists for this level
                 const existing = fetchedTargets.find(t => t.level_id === level.id);
                 if (existing) {
                     targetState[level.id] = {
@@ -80,7 +77,6 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
         try {
             setSaving(true);
 
-            // Build payload containing only active rows
             const payloadArray = [];
             Object.keys(targets).forEach(levelId => {
                 if (targets[levelId].is_active) {
@@ -99,7 +95,7 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
             });
 
             toast.success('Konfigurasi target berhasil disimpan.');
-            onClose(); // Auto close on success
+            onClose();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Gagal menyimpan target diferensiasi.');
             console.error(err);
@@ -121,7 +117,8 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                         <div className="flex justify-between items-start">
                             <div>
                                 <h3 className="text-xl leading-6 font-bold text-gray-900 dark:text-white flex items-center gap-2" id="target-modal-title">
-                                    <span className="text-2xl">🎯</span> Matriks Target Diferensiasi
+                                    <Icon icon={Icons.target} width={28} className="text-blue-600" />
+                                    Matriks Target Diferensiasi
                                 </h3>
                                 <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-3xl">
                                     Pilih jenjang pendidikan yang diwajibkan untuk memenuhi indikator kinerja ini, lalu atur angka target dan metode pembuktiannya secara spesifik.
@@ -129,9 +126,7 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                             </div>
                             <button onClick={onClose} disabled={saving} className="text-gray-400 hover:text-gray-500 focus:outline-none">
                                 <span className="sr-only">Tutup</span>
-                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                <Icon icon={Icons.close} width={24} />
                             </button>
                         </div>
 
@@ -271,9 +266,21 @@ export default function StandardTargetConfig({ metric, isOpen, onClose }) {
                             type="button"
                             onClick={handleSave}
                             disabled={loading || saving}
-                            className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-6 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm transition-colors disabled:opacity-50"
+                            className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-6 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm transition-colors disabled:opacity-50 items-center gap-2"
                         >
-                            {saving ? 'Menyimpan...' : 'Simpan Konfigurasi Matriks'}
+                            {saving ? (
+                                <>
+                                    <span className="animate-spin">
+                                        <Icon icon={Icons.refresh} width={16} />
+                                    </span>
+                                    Menyimpan...
+                                </>
+                            ) : (
+                                <>
+                                    <Icon icon={Icons.save} width={16} />
+                                    Simpan Konfigurasi Matriks
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>

@@ -15,6 +15,7 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
+        "@iconify/react": "^5.2.0",
         "@reduxjs/toolkit": "^2.11.2",
         "@tanstack/react-table": "^8.21.3",
         "@vitejs/plugin-react": "^5.1.4",
