@@ -10,6 +10,7 @@ import StandardBuilder from '../pages/standards/StandardBuilder';
 import SelfAssessmentPage from '../pages/audit/SelfAssessmentPage';
 import PeriodIndex from '../pages/audit/Periods/PeriodIndex';
 import AuditorPlotting from '../pages/audit/Plotting/AuditorPlotting';
+import DeskEvaluation from '../pages/audit/WorkingPaper/DeskEvaluation';
 import UnitIndex from '../pages/master/UnitIndex';
 import UserIndex from '../pages/master/UserIndex';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -68,6 +69,7 @@ export default function MainApp() {
                                 <Route index element={<Navigate to="periods" replace />} />
                                 <Route path="periods" element={<PeriodIndex />} />
                                 <Route path=":id/plotting" element={<AuditorPlotting />} />
+                                <Route path=":id/working-paper" element={<DeskEvaluation />} />
                             </Route>
 
                             {/* Master Data */}

@@ -38,4 +38,14 @@ class MetricTarget extends Model
         return $this->belongsToMany(MstEvidence::class, 'evidence_metric_target', 'metric_target_id', 'evidence_id')
                     ->withTimestamps();
     }
+
+    public function selfAssessments()
+    {
+        return $this->hasMany(\App\Modules\Audit\Models\TrxSelfAssessment::class, 'metric_target_id');
+    }
+
+    public function workingPapers()
+    {
+        return $this->hasMany(\App\Modules\Audit\Models\TrxAuditWorkingPaper::class, 'metric_target_id');
+    }
 }

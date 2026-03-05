@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { FiPlus, FiEdit2, FiTrash2, FiLayers } from 'react-icons/fi';
-import api from '../../../services/api';
+import api from '../../services/api';
 
 export default function UnitIndex() {
     const [units, setUnits] = useState([]);
@@ -157,7 +157,7 @@ export default function UnitIndex() {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-7xl mx-auto lg:px-8">
             <div className="sm:flex sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Master Data: Unit Kerja</h1>

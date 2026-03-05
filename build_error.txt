@@ -1,0 +1,59 @@
+﻿[36mvite v7.3.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32mΓ£ô[39m 62 modules transformed.
+node.exe : 
+[31mΓ£ù[39m Build 
+failed in 2.67s
+At C:\Users\del\AppData
+\Roaming\npm\npx.ps1:24
+ char:5
++     & "node$exe"  "$b
+asedir/node_modules/npm
+/bin/npx-cli.js" $args
++     ~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: ([31mΓ£ù[39m   
+  Build failed in 2    
+.67s:String) [], R    
+emoteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+[31merror during 
+build:
+[31mCould not resolve 
+"../../../../services/a
+pi" from "resources/js/
+pages/audit/WorkingPape
+r/DeskEvaluation.jsx"[
+31m
+file: [36mC:/Users/del
+/Music/espmi/resources/
+js/pages/audit/WorkingP
+aper/DeskEvaluation.jsx
+[31m
+    at getRollupError (
+file:///C:/Users/del/Mu
+sic/espmi/node_modules/
+rollup/dist/es/shared/p
+arseAst.js:402:41)
+    at error (file:///C
+:/Users/del/Music/espmi
+/node_modules/rollup/di
+st/es/shared/parseAst.j
+s:398:42)
+    at ModuleLoader.han
+dleInvalidResolvedId (f
+ile:///C:/Users/del/Mus
+ic/espmi/node_modules/r
+ollup/dist/es/shared/no
+de-entry.js:21710:24)
+    at file:///C:/Users
+/del/Music/espmi/node_m
+odules/rollup/dist/es/s
+hared/node-entry.js:216
+70:26[39m

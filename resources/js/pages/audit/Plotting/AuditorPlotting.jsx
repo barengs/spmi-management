@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FiArrowLeft, FiPlus, FiTrash2, FiUsers, FiEdit3 } from 'react-icons/fi';
+import { FiArrowLeft, FiPlus, FiUsers, FiEdit2, FiTrash2, FiFileText } from 'react-icons/fi';
 import api from '../../../services/api';
 
 export default function AuditorPlotting() {
@@ -36,12 +36,15 @@ export default function AuditorPlotting() {
 
             // Fetch all Flat Units for Dropdown
             const unitsRes = await api.get('/units/flat');
-            // Hanya aktifkan unit level Prodi/Fakultas
-            setUnits(unitsRes.data.filter(u => u.level !== 'Universitas' && u.level !== 'Yayasan'));
+            // Hanya aktifkan unit level Prodi/Fakultas (department/faculty)
+            setUnits(unitsRes.data.data.filter(u => u.level === 'department' || u.level === 'faculty'));
 
             // Fetch list users with role Auditor
             const usersRes = await api.get('/users?role=Auditor');
-            setAuditors(usersRes.data.data);
+            const extractedAuditors = Array.isArray(usersRes.data?.data?.data)
+                ? usersRes.data.data.data
+                : (Array.isArray(usersRes.data?.data) ? usersRes.data.data : []);
+            setAuditors(extractedAuditors);
 
         } catch (error) {
             toast.error('Gagal memuat data persiapan plotting.');
@@ -87,7 +90,7 @@ export default function AuditorPlotting() {
 
             if (formData.id) {
                 // Update Schedule (Status, Date & Auditors)
-                await api.put(`/audit/schedules/${formData.id}`, {
+                await api.put(`/ audit / schedules / ${formData.id} `, {
                     status: formData.status,
                     scheduled_date: formData.scheduled_date || null,
                     auditor_ids: formData.auditor_ids
@@ -124,7 +127,7 @@ export default function AuditorPlotting() {
     const handleDelete = async (id) => {
         if (!window.confirm('Hapus plotting jadwal ini?')) return;
         try {
-            await api.delete(`/audit/schedules/${id}`);
+            await api.delete(`/ audit / schedules / ${id} `);
             toast.success('Jadwal plotting dihapus.');
             fetchSchedules();
         } catch (error) {
@@ -192,7 +195,7 @@ export default function AuditorPlotting() {
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col space-y-1">
                                                 {schedule.auditors.map((auditor, i) => (
-                                                    <span key={auditor.id} className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${auditor.pivot.is_lead ? 'bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300' : 'bg-gray-100 text-gray-800 border border-gray-200 dark:bg-gray-700 dark:text-gray-300'}`}>
+                                                    <span key={auditor.id} className={`inline - flex items - center px - 2 py - 0.5 rounded text - xs font - medium ${auditor.pivot.is_lead ? 'bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300' : 'bg-gray-100 text-gray-800 border border-gray-200 dark:bg-gray-700 dark:text-gray-300'} `}>
                                                         {auditor.name} {auditor.pivot.is_lead ? '(Lead)' : ''}
                                                     </span>
                                                 ))}
@@ -204,6 +207,13 @@ export default function AuditorPlotting() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                            <Link
+                                                to={`/audit/${schedule.id}/working-paper`}
+                                                className="inline-flex items-center text-emerald-600 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 mr-4 font-bold"
+                                                title="Buka Kertas Kerja Audit"
+                                            >
+                                                <FiFileText className="mr-1 h-4 w-4" /> Kertas Kerja
+                                            </Link>
                                             <button onClick={() => handleOpenModal(schedule)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mr-4">
                                                 Edit
                                             </button>
@@ -220,87 +230,89 @@ export default function AuditorPlotting() {
             </div>
 
             {/* Modal Formulir Plotting */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-gray-500/75 dark:bg-gray-900/80 p-4 transition-opacity" onClick={() => setIsModalOpen(false)}>
-                    <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-xl border border-gray-200 dark:border-gray-700 transform transition-all" onClick={(e) => e.stopPropagation()}>
-                        <form onSubmit={handleSave}>
-                            <div className="px-6 pt-6 pb-4">
-                                <h3 className="text-lg leading-6 font-bold text-gray-900 dark:text-white border-b pb-2 mb-4 border-gray-200 dark:border-gray-700">
-                                    {formData.id ? 'Perbarui Jadwal & Tim Asesor' : 'Assign Asesor ke Auditee (Prodi)'}
-                                </h3>
-                                <div className="space-y-4">
-                                    {/* Jika update, unit_id sebaiknya disabled atau biarkan read-only buat aman */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pilih Unit (Auditee)</label>
-                                        <select
-                                            required disabled={formData.id !== null}
-                                            value={formData.unit_id} onChange={e => setFormData({ ...formData, unit_id: e.target.value })}
-                                            className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-60"
-                                        >
-                                            <option value="" disabled>-- Pilih Prodi --</option>
-                                            {units.map(u => (
-                                                <option key={u.id} value={u.id}>{u.name} (Tingkat {u.level})</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tanggal Visitasi/Audit (Opsional)</label>
-                                        <input
-                                            type="date"
-                                            value={formData.scheduled_date} onChange={e => setFormData({ ...formData, scheduled_date: e.target.value })}
-                                            className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                        />
-                                    </div>
-
-                                    {formData.id && (
+            {
+                isModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-gray-500/75 dark:bg-gray-900/80 p-4 transition-opacity" onClick={() => setIsModalOpen(false)}>
+                        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-xl border border-gray-200 dark:border-gray-700 transform transition-all" onClick={(e) => e.stopPropagation()}>
+                            <form onSubmit={handleSave}>
+                                <div className="px-6 pt-6 pb-4">
+                                    <h3 className="text-lg leading-6 font-bold text-gray-900 dark:text-white border-b pb-2 mb-4 border-gray-200 dark:border-gray-700">
+                                        {formData.id ? 'Perbarui Jadwal & Tim Asesor' : 'Assign Asesor ke Auditee (Prodi)'}
+                                    </h3>
+                                    <div className="space-y-4">
+                                        {/* Jika update, unit_id sebaiknya disabled atau biarkan read-only buat aman */}
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status Progres</label>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pilih Unit (Auditee)</label>
                                             <select
-                                                value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })}
-                                                className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                required disabled={formData.id !== null}
+                                                value={formData.unit_id} onChange={e => setFormData({ ...formData, unit_id: e.target.value })}
+                                                className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-60"
                                             >
-                                                <option value="SCHEDULED">SCHEDULED (Terjadwal)</option>
-                                                <option value="IN_PROGRESS">IN_PROGRESS (Berlangsung)</option>
-                                                <option value="DESK_EVALUATION">DESK_EVALUATION (Audit Dokumen)</option>
-                                                <option value="FIELD_EVALUATION">FIELD_EVALUATION (Audit Lapangan)</option>
-                                                <option value="COMPLETED">COMPLETED (Selesai Evaluasi)</option>
+                                                <option value="" disabled>-- Pilih Prodi --</option>
+                                                {units.map(u => (
+                                                    <option key={u.id} value={u.id}>{u.name} (Tingkat {u.level})</option>
+                                                ))}
                                             </select>
                                         </div>
-                                    )}
 
-                                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded border border-indigo-100 dark:border-indigo-800">
-                                        <label className="block text-sm font-medium text-indigo-800 dark:text-indigo-300 mb-2">
-                                            Penunjukan Tim Auditor (Bisa Lebih Dari 1)
-                                        </label>
-                                        <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-3 block">
-                                            * Tahan tombol CTRL / CMD sambil klik untuk memilih multpel asesor. Orang pertama yang dipilih akan diset sebagai *Lead Auditor*.
-                                        </p>
-                                        <select
-                                            multiple required size={6}
-                                            value={formData.auditor_ids}
-                                            onChange={handleAuditorSelection}
-                                            className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2"
-                                        >
-                                            {auditors.map(a => (
-                                                <option key={a.id} value={a.id} className="py-1">{a.name} ({a.unit?.name || 'Unit Eksternal'})</option>
-                                            ))}
-                                        </select>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tanggal Visitasi/Audit (Opsional)</label>
+                                            <input
+                                                type="date"
+                                                value={formData.scheduled_date} onChange={e => setFormData({ ...formData, scheduled_date: e.target.value })}
+                                                className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                            />
+                                        </div>
+
+                                        {formData.id && (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status Progres</label>
+                                                <select
+                                                    value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })}
+                                                    className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                >
+                                                    <option value="SCHEDULED">SCHEDULED (Terjadwal)</option>
+                                                    <option value="IN_PROGRESS">IN_PROGRESS (Berlangsung)</option>
+                                                    <option value="DESK_EVALUATION">DESK_EVALUATION (Audit Dokumen)</option>
+                                                    <option value="FIELD_EVALUATION">FIELD_EVALUATION (Audit Lapangan)</option>
+                                                    <option value="COMPLETED">COMPLETED (Selesai Evaluasi)</option>
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded border border-indigo-100 dark:border-indigo-800">
+                                            <label className="block text-sm font-medium text-indigo-800 dark:text-indigo-300 mb-2">
+                                                Penunjukan Tim Auditor (Bisa Lebih Dari 1)
+                                            </label>
+                                            <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-3 block">
+                                                * Tahan tombol CTRL / CMD sambil klik untuk memilih multpel asesor. Orang pertama yang dipilih akan diset sebagai *Lead Auditor*.
+                                            </p>
+                                            <select
+                                                multiple required size={6}
+                                                value={formData.auditor_ids}
+                                                onChange={handleAuditorSelection}
+                                                className="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2"
+                                            >
+                                                {auditors.map(a => (
+                                                    <option key={a.id} value={a.id} className="py-1">{a.name} ({a.unit?.name || 'Unit Eksternal'})</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
-                                <button type="submit" disabled={saving} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm" >
-                                    {saving ? 'Loading...' : 'Simpan Plotting'}
-                                </button>
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" >
-                                    Batal
-                                </button>
-                            </div>
-                        </form>
+                                <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
+                                    <button type="submit" disabled={saving} className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm" >
+                                        {saving ? 'Loading...' : 'Simpan Plotting'}
+                                    </button>
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" >
+                                        Batal
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }

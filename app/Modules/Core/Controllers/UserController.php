@@ -19,7 +19,7 @@ class UserController extends Controller
     {
         $users = User::with('unit', 'roles')
                      ->when($request->get('unit_id'), fn($q, $v) => $q->where('unit_id', $v))
-                     ->when($request->get('role'), fn($q, $v) => $q->role($v))
+                     ->when($request->get('role'), fn($q, $v) => $q->whereHas('roles', fn($qr) => $qr->where('name', $v)))
                      ->when($request->get('search'), fn($q, $v) => $q->where(function ($sub) use ($v) {
                          $sub->where('name', 'like', "%{$v}%")
                              ->orWhere('email', 'like', "%{$v}%")

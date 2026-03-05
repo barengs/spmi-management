@@ -115,6 +115,10 @@ Route::prefix('v1')->group(function () {
             Route::get('/schedules/{id}',       [\App\Modules\Audit\Controllers\AuditScheduleController::class, 'show']);
             Route::put('/schedules/{id}',       [\App\Modules\Audit\Controllers\AuditScheduleController::class, 'update']);
             Route::delete('/schedules/{id}',    [\App\Modules\Audit\Controllers\AuditScheduleController::class, 'destroy']);
+
+            // Kertas Kerja Audit (Working Papers)
+            Route::get('/schedules/{id}/working-papers',  [\App\Modules\Audit\Controllers\WorkingPaperController::class, 'getPaper']);
+            Route::post('/schedules/{id}/working-papers', [\App\Modules\Audit\Controllers\WorkingPaperController::class, 'savePaper']);
         });
 
     });
