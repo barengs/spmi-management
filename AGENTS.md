@@ -461,4 +461,45 @@ APP_DEBUG=false       # Set to false in production
 
 ---
 
-*Last Updated: 2026-03-05*
+## 13. Current State Audit (2026-03-10)
+
+The repository currently contains several additions and implementation details beyond sections above:
+
+### Newly Present Modules / Features
+- `RefEducationLevel` module (`app/Modules/Core/Models/RefEducationLevel.php`, controller, seeder)
+- `MetricTarget` model + API for per-education-level indicator targets
+- `StandardCloneController` for deep clone of standards, metric trees, and indicator targets
+- Standard lifecycle workflow fields and endpoints: `DRAFT`, `WAITING_APPROVAL`, `TERBIT`, `REVISI`
+
+### Frontend Libraries Actually Used
+- `@tanstack/react-table` used in `resources/js/pages/standards/StandardIndex.jsx`
+- `react-toastify` used across auth/layout/standards pages
+- `@iconify/react` wrapped by `resources/js/components/ui/Icon.jsx`
+- `zustand` is installed in `package.json` but currently not used in `resources/js`
+
+### Structural Notes
+- There are duplicate/legacy placeholder paths:
+  - `app/Http/Controllers/Modules/...`
+  - `app/Models/Modules/...`
+  These are separate from the active `app/Modules/...` implementation and should be reviewed to avoid confusion.
+
+### Risks / Inconsistencies To Address
+1. **Model namespace mismatch**
+   - `MstStandard::submitter()` and `approver()` reference `App\Modules\Core\Models\User`, while active user model is `App\Models\User`.
+2. **Metric target FK type mismatch**
+   - `metric_targets.metric_id` is `uuid`, but `mst_metrics.id` is `bigint`.
+3. **JWT vs token cleanup call**
+   - `UserController::destroy()` calls `$user->tokens()->delete()` although authentication uses JWT (`tymon/jwt-auth`) and `User` does not include Sanctum token relation.
+4. **RBAC guard consistency**
+   - Seeder writes roles/permissions with `guard_name = web`, while API auth guard is `api` (JWT). Re-check permission middleware strategy to prevent guard mismatch behavior.
+5. **Testing depth**
+   - Current tests are still starter-level (`tests/Feature/ExampleTest.php`, `tests/Unit/ExampleTest.php`).
+
+### Quick Verification Paths
+- API routing truth source: `routes/api.php`
+- SPA routing truth source: `resources/js/components/MainApp.jsx`
+- Auth flow: `app/Modules/Core/Controllers/AuthController.php`, `resources/js/store/authSlice.js`, `resources/js/services/api.js`
+
+---
+
+*Last Updated: 2026-03-10*
