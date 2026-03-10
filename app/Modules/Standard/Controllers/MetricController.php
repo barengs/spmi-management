@@ -11,6 +11,70 @@ use Illuminate\Validation\ValidationException;
 
 class MetricController extends Controller
 {
+    private function hierarchyValidationError(array $payload, ?MstMetric $metric = null): ?JsonResponse
+    {
+        $resolvedParentId = array_key_exists('parent_id', $payload)
+            ? $payload['parent_id']
+            : $metric?->parent_id;
+        $resolvedType = $payload['type'] ?? $metric?->type;
+        $parent = $resolvedParentId ? MstMetric::findOrFail($resolvedParentId) : null;
+
+        if ($resolvedParentId === null && $resolvedType === 'Indicator') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Indicator tidak dapat dibuat sebagai node akar.',
+            ], 422);
+        }
+
+        if ($parent?->type === 'Indicator') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Indicator tidak dapat memiliki child node.',
+            ], 422);
+        }
+
+        if ($parent?->type === 'Statement' && $resolvedType !== 'Indicator') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Child dari Statement wajib bertipe Indicator.',
+            ], 422);
+        }
+
+        if ($parent?->type === 'Header' && $resolvedType === 'Indicator') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Indicator tidak dapat langsung berada di bawah Header. Tambahkan Statement terlebih dahulu.',
+            ], 422);
+        }
+
+        if (! $metric) {
+            return null;
+        }
+
+        if ($resolvedType === 'Indicator' && $metric->children()->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Node yang sudah memiliki child tidak dapat diubah menjadi Indicator.',
+            ], 422);
+        }
+
+        if ($resolvedType === 'Statement' && $metric->children()->where('type', '!=', 'Indicator')->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Statement hanya boleh memiliki child bertipe Indicator.',
+            ], 422);
+        }
+
+        if ($resolvedType === 'Header' && $metric->children()->where('type', 'Indicator')->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Header tidak boleh memiliki child Indicator secara langsung.',
+            ], 422);
+        }
+
+        return null;
+    }
+
     /**
      * Dapatkan hirarki indikator/metrik dari sebuah standar.
      */
@@ -48,6 +112,10 @@ class MetricController extends Controller
             $validated['order'] = MstMetric::where('standard_id', $validated['standard_id'])
                 ->where('parent_id', $validated['parent_id'])
                 ->max('order') + 1;
+        }
+
+        if ($error = $this->hierarchyValidationError($validated)) {
+            return $error;
         }
 
         $standard = MstStandard::findOrFail($validated['standard_id']);
@@ -102,6 +170,10 @@ class MetricController extends Controller
                 }
                 $currentParent = $currentParent->parent;
             }
+        }
+
+        if ($error = $this->hierarchyValidationError($validated, $metric)) {
+            return $error;
         }
 
         $metric->update($validated);

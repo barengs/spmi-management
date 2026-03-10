@@ -195,6 +195,25 @@ export default function StandardBuilder() {
     const [selectedIndicator, setSelectedIndicator] = useState(null);
     const [selectedIndicatorView, setSelectedIndicatorView] = useState(null);
 
+    const statementWarnings = [];
+
+    const collectStatementWarnings = (nodes) => {
+        nodes.forEach((node) => {
+            if (node.type === 'Statement') {
+                const directIndicators = (node.children_recursive || []).filter((child) => child.type === 'Indicator');
+                if (directIndicators.length === 0) {
+                    statementWarnings.push(node);
+                }
+            }
+
+            if (node.children_recursive?.length) {
+                collectStatementWarnings(node.children_recursive);
+            }
+        });
+    };
+
+    collectStatementWarnings(tree);
+
     useEffect(() => {
         fetchData();
     }, [id]);
@@ -332,6 +351,21 @@ export default function StandardBuilder() {
                     </button>
                 )}
             </div>
+
+            {statementWarnings.length > 0 && (
+                <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <div className="flex items-start gap-2">
+                        <Icon icon={Icons.warning} width={18} className="mt-0.5 shrink-0 text-amber-700" />
+                        <div>
+                            <div className="font-semibold">Validasi struktur Sprint 3 belum terpenuhi.</div>
+                            <div className="mt-1">
+                                {statementWarnings.length} statement masih belum memiliki minimal satu indicator. Standar belum bisa diajukan
+                                sebelum struktur ini dilengkapi.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className={`flex gap-6 items-start transition-all duration-300`}>
                 {/* Left Column: Tree Builder */}

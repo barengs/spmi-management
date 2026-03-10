@@ -9,6 +9,26 @@ use Illuminate\Http\Request;
 
 class StandardController extends Controller
 {
+    private function structureValidationError(MstStandard $standard): ?JsonResponse
+    {
+        $invalidStatements = $standard->statementsWithoutIndicators();
+
+        if ($invalidStatements->isEmpty()) {
+            return null;
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Masih ada Statement yang belum memiliki minimal satu Indicator.',
+            'errors' => [
+                'statements' => $invalidStatements->map(fn ($statement) => [
+                    'id' => $statement->id,
+                    'content' => $statement->content,
+                ])->values(),
+            ],
+        ], 422);
+    }
+
     /**
      * Display a listing of the standards.
      */
@@ -137,6 +157,10 @@ class StandardController extends Controller
             ], 400);
         }
 
+        if ($error = $this->structureValidationError($standard)) {
+            return $error;
+        }
+
         $standard->status = 'WAITING_APPROVAL';
         $standard->submitted_by = auth()->id();
         $standard->save();
@@ -160,6 +184,10 @@ class StandardController extends Controller
                 'status' => 'error',
                 'message' => 'Standar tidak dalam status Menunggu Persetujuan.'
             ], 400);
+        }
+
+        if ($error = $this->structureValidationError($standard)) {
+            return $error;
         }
 
         $standard->status = 'TERBIT';
