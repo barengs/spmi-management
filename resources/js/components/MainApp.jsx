@@ -5,6 +5,7 @@ import { store } from '../store';
 import AppLayout from './layout/AppLayout';
 import LoginPage from '../pages/auth/LoginPage';
 import Dashboard from '../pages/Dashboard';
+import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
 import PermissionMatrixPage from '../pages/settings/PermissionMatrixPage';
@@ -67,6 +68,7 @@ export default function MainApp() {
                         <Route index element={<Dashboard />} />
                         <Route path="standards" element={<StandardIndex />} />
                         <Route path="standards/:id/builder" element={<StandardBuilder />} />
+                        <Route path="execution" element={<ExecutionRepositoryPage />} />
                         <Route
                             path="settings"
                             element={

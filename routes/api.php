@@ -4,6 +4,7 @@ use App\Modules\Core\Controllers\AuthController;
 use App\Modules\Core\Controllers\RolePermissionController;
 use App\Modules\Core\Controllers\UnitController;
 use App\Modules\Core\Controllers\UserController;
+use App\Modules\Evidence\Controllers\EvidenceController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -89,6 +90,13 @@ Route::prefix('v1')->group(function () {
             // Target Diferensiasi per Jenjang
             Route::get('/{metric_id}/targets',       [\App\Modules\Standard\Controllers\MetricTargetController::class, 'getTargets']);
             Route::post('/{metric_id}/targets/sync', [\App\Modules\Standard\Controllers\MetricTargetController::class, 'syncTargets']);
+            Route::get('/{metric_id}/evidences',     [EvidenceController::class, 'index']);
+            Route::post('/{metric_id}/evidences',    [EvidenceController::class, 'store']);
+        });
+
+        Route::prefix('evidences')->group(function () {
+            Route::get('/{id}/download',       [EvidenceController::class, 'download']);
+            Route::delete('/{id}',             [EvidenceController::class, 'destroy']);
         });
 
     });

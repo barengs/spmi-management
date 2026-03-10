@@ -17,6 +17,12 @@ api.interceptors.request.use(
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
+
+        // Let the browser set multipart boundaries automatically.
+        if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+            delete config.headers['Content-Type'];
+        }
+
         return config;
     },
     (error) => Promise.reject(error)
@@ -35,4 +41,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-
