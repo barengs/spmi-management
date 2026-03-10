@@ -164,7 +164,22 @@ php artisan jwt:secret
 
 ### 4. Database Setup
 
-#### SQLite (Default)
+#### PostgreSQL (Default)
+```bash
+# Update .env
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=spmi_management
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+DB_SSLMODE=prefer
+
+# Buat database
+createdb spmi_management
+```
+
+#### SQLite (Alternative)
 ```bash
 # Pastikan SQLite extension terinstall di PHP
 php -m | grep -i sqlite
