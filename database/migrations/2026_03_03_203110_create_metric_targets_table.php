@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('metric_targets', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('metric_id');
+            $table->foreignId('metric_id')->constrained('mst_metrics')->onDelete('cascade');
             $table->uuid('level_id');
             $table->string('target_value')->nullable();
             $table->enum('measure_unit', ['Persen', 'Jumlah', 'Rupiah', 'Capaian Mutu', 'Waktu/Bulan', 'Teks Dasar', 'Skala'])->default('Jumlah');
@@ -22,7 +22,6 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->foreign('metric_id')->references('id')->on('mst_metrics')->onDelete('cascade');
             $table->foreign('level_id')->references('id')->on('ref_education_levels')->onDelete('cascade');
             
             // 1 Metric & 1 Jenjang hanya boleh punya 1 setting Target yang aktif

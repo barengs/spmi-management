@@ -77,6 +77,8 @@ export const Icons = {
     bell: 'material-symbols:notifications',
     search: 'material-symbols:search',
     info: 'material-symbols:info',
+    eye: 'material-symbols:visibility',
+    eyeOff: 'material-symbols:visibility-off',
     warning: 'material-symbols:warning',
     error: 'material-symbols:error',
     success: 'material-symbols:check-circle',

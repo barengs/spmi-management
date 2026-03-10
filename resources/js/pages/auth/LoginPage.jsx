@@ -4,12 +4,15 @@ import { useDispatch } from 'react-redux';
 import { setCredentials } from '../../store/authSlice';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
+import Icon, { Icons } from '../../components/ui/Icon';
+
 export default function LoginPage() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -75,15 +78,23 @@ export default function LoginPage() {
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Password
                             </label>
-                            <div className="mt-1">
+                            <div className="relative mt-1">
                                 <input
-                                    type="password"
+                                    type={showPassword ? 'text' : 'password'}
                                     required
-                                    className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:text-white"
+                                    className="appearance-none block w-full rounded-md border border-gray-300 px-3 py-2 pr-11 shadow-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="Password@123"
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword((current) => !current)}
+                                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 transition hover:text-blue-600 dark:text-gray-500 dark:hover:text-blue-400"
+                                    aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                                >
+                                    <Icon icon={showPassword ? Icons.eyeOff : Icons.eye} width={20} />
+                                </button>
                             </div>
                         </div>
 
