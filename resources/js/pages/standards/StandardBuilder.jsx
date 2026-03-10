@@ -1,10 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 import StandardTargetConfig from './StandardTargetConfig';
+
+function highlightText(text, query) {
+    const normalizedQuery = query.trim();
+
+    if (!normalizedQuery) {
+        return text;
+    }
+
+    const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = String(text).split(new RegExp(`(${escapedQuery})`, 'ig'));
+
+    return parts.map((part, index) => {
+        if (part.toLowerCase() === normalizedQuery.toLowerCase()) {
+            return (
+                <mark
+                    key={`${part}-${index}`}
+                    className="rounded bg-amber-200 px-1 text-gray-900"
+                >
+                    {part}
+                </mark>
+            );
+        }
+
+        return <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>;
+    });
+}
 
 // Sub Component to display read-only targets
 const NodeTargetViewer = ({ metricId }) => {
@@ -62,9 +88,22 @@ const NodeTargetViewer = ({ metricId }) => {
     );
 };
 
-const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget, onViewNode, isTerbit }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
-
+const MetricNode = ({
+    node,
+    level,
+    onAddChild,
+    onEdit,
+    onDelete,
+    onConfigTarget,
+    onViewNode,
+    isTerbit,
+    expandedIds,
+    onToggleExpand,
+    activeNodeId,
+    registerNodeRef,
+    searchQuery,
+}) => {
+    const isExpanded = expandedIds.has(node.id);
     const getIcon = () => {
         if (node.type === 'Header') return Icons.folder;
         if (node.type === 'Statement') return Icons.document;
@@ -80,12 +119,17 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
     return (
         <div className="mb-2">
             <div
-                className={`flex items-start p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-white dark:bg-gray-800 shadow-sm`}
+                ref={(element) => registerNodeRef(node.id, element)}
+                className={`flex items-start rounded-lg border p-3 shadow-sm transition-colors ${
+                    activeNodeId === node.id
+                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 dark:border-blue-400 dark:bg-blue-900/30 dark:ring-blue-900'
+                        : 'border-gray-200 bg-white hover:border-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-500'
+                }`}
                 style={{ marginLeft: `${level * 2}rem` }}
             >
                 {node.children_recursive && node.children_recursive.length > 0 ? (
                     <button
-                        onClick={() => setIsExpanded(!isExpanded)}
+                        onClick={() => onToggleExpand(node.id)}
                         className="mr-2 mt-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     >
                         <Icon icon={isExpanded ? Icons.expand : Icons.collapse} width={20} />
@@ -107,7 +151,7 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
                         <span className="text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ml-2 hidden sm:inline-block">Lihat Detail →</span>
                     </div>
                     <div className="text-sm font-medium text-gray-900 dark:text-white mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                        {node.content}
+                        {highlightText(node.content, searchQuery)}
                     </div>
                 </div>
 
@@ -164,6 +208,11 @@ const MetricNode = ({ node, level, onAddChild, onEdit, onDelete, onConfigTarget,
                             onConfigTarget={onConfigTarget}
                             onViewNode={onViewNode}
                             isTerbit={isTerbit}
+                            expandedIds={expandedIds}
+                            onToggleExpand={onToggleExpand}
+                            activeNodeId={activeNodeId}
+                            registerNodeRef={registerNodeRef}
+                            searchQuery={searchQuery}
                         />
                     ))}
                 </div>
@@ -194,11 +243,24 @@ export default function StandardBuilder() {
     const [isTargetConfigOpen, setIsTargetConfigOpen] = useState(false);
     const [selectedIndicator, setSelectedIndicator] = useState(null);
     const [selectedIndicatorView, setSelectedIndicatorView] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [expandedIds, setExpandedIds] = useState(new Set());
+    const nodeRefs = useRef({});
 
     const statementWarnings = [];
+    const flatNodes = [];
+    const parentMap = {};
+    const expandableIds = [];
 
-    const collectStatementWarnings = (nodes) => {
+    const collectNodeMetadata = (nodes, parentId = null) => {
         nodes.forEach((node) => {
+            flatNodes.push(node);
+            parentMap[node.id] = parentId;
+
+            if (node.children_recursive?.length) {
+                expandableIds.push(node.id);
+            }
+
             if (node.type === 'Statement') {
                 const directIndicators = (node.children_recursive || []).filter((child) => child.type === 'Indicator');
                 if (directIndicators.length === 0) {
@@ -207,12 +269,21 @@ export default function StandardBuilder() {
             }
 
             if (node.children_recursive?.length) {
-                collectStatementWarnings(node.children_recursive);
+                collectNodeMetadata(node.children_recursive, node.id);
             }
         });
     };
 
-    collectStatementWarnings(tree);
+    collectNodeMetadata(tree);
+
+    const searchResults = searchQuery.trim()
+        ? flatNodes
+            .filter((node) => {
+                const haystack = `${node.content} ${node.type} ${node.id}`.toLowerCase();
+                return haystack.includes(searchQuery.trim().toLowerCase());
+            })
+            .slice(0, 8)
+        : [];
 
     useEffect(() => {
         fetchData();
@@ -227,6 +298,17 @@ export default function StandardBuilder() {
             ]);
             setStandard(stdRes.data.data);
             setTree(treeRes.data.data);
+            setExpandedIds(new Set(
+                (function collectExpandable(nodes, carry = []) {
+                    nodes.forEach((node) => {
+                        if (node.children_recursive?.length) {
+                            carry.push(node.id);
+                            collectExpandable(node.children_recursive, carry);
+                        }
+                    });
+                    return carry;
+                })(treeRes.data.data)
+            ));
         } catch (err) {
             toast.error('Gagal memuat struktur standar.');
             console.error(err);
@@ -238,6 +320,54 @@ export default function StandardBuilder() {
     const handleConfigTarget = (node) => {
         setSelectedIndicator(node);
         setIsTargetConfigOpen(true);
+    };
+
+    const toggleExpand = (nodeId) => {
+        setExpandedIds((current) => {
+            const next = new Set(current);
+
+            if (next.has(nodeId)) {
+                next.delete(nodeId);
+            } else {
+                next.add(nodeId);
+            }
+
+            return next;
+        });
+    };
+
+    const registerNodeRef = (nodeId, element) => {
+        if (element) {
+            nodeRefs.current[nodeId] = element;
+        } else {
+            delete nodeRefs.current[nodeId];
+        }
+    };
+
+    const focusNode = (node) => {
+        const branchIds = [];
+        let cursor = node.id;
+
+        while (cursor) {
+            branchIds.push(cursor);
+            cursor = parentMap[cursor];
+        }
+
+        setExpandedIds((current) => {
+            const next = new Set(current);
+            branchIds.forEach((id) => next.add(id));
+            return next;
+        });
+        setSelectedIndicatorView(node);
+
+        window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+                nodeRefs.current[node.id]?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                });
+            });
+        });
     };
 
     const handleAddRoot = () => {
@@ -352,6 +482,63 @@ export default function StandardBuilder() {
                 )}
             </div>
 
+            <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                    Pencarian Struktur
+                </label>
+                <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <Icon icon={Icons.search} width={16} className="text-gray-400" />
+                    </div>
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        placeholder="Cari isi node, tipe, atau ID seperti Algolia..."
+                        className="w-full rounded-2xl border border-gray-300 py-2.5 pl-10 pr-12 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                    {searchQuery && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                        >
+                            <Icon icon={Icons.close} width={16} />
+                        </button>
+                    )}
+                </div>
+                {searchQuery && (
+                    <div className="mt-3 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
+                        {searchResults.length > 0 ? (
+                            <div className="divide-y divide-gray-200">
+                                {searchResults.map((node) => (
+                                    <button
+                                        key={node.id}
+                                        type="button"
+                                        onClick={() => focusNode(node)}
+                                        className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition hover:bg-blue-50"
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="truncate text-sm font-medium text-gray-900">{highlightText(node.content, searchQuery)}</div>
+                                            <div className="mt-1 text-xs text-gray-500">
+                                                {highlightText(`${node.type} • ID ${node.id}`, searchQuery)}
+                                            </div>
+                                        </div>
+                                        <span className="text-xs font-semibold uppercase tracking-[0.15em] text-blue-600">
+                                            Buka
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="px-4 py-3 text-sm text-gray-500">
+                                Tidak ada node yang cocok dengan pencarian ini.
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
             {statementWarnings.length > 0 && (
                 <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <div className="flex items-start gap-2">
@@ -392,8 +579,13 @@ export default function StandardBuilder() {
                                         onEdit={handleEdit}
                                         onDelete={handleDelete}
                                         onConfigTarget={handleConfigTarget}
-                                        onViewNode={setSelectedIndicatorView}
+                                        onViewNode={focusNode}
                                         isTerbit={['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
+                                        expandedIds={expandedIds}
+                                        onToggleExpand={toggleExpand}
+                                        activeNodeId={selectedIndicatorView?.id}
+                                        registerNodeRef={registerNodeRef}
+                                        searchQuery={searchQuery}
                                     />
                                 ))}
                             </div>
