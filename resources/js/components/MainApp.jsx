@@ -7,6 +7,7 @@ import LoginPage from '../pages/auth/LoginPage';
 import Dashboard from '../pages/Dashboard';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
+import PermissionMatrixPage from '../pages/settings/PermissionMatrixPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -24,6 +25,18 @@ const GuestRoute = ({ children }) => {
         return <Navigate to="/" replace />;
     }
     return children;
+};
+
+const PermissionRoute = ({ permission, children }) => {
+    const user = useSelector((state) => state.auth.user);
+    const permissions = user?.permissions || [];
+    const roles = user?.roles || [];
+
+    if (roles.includes('SuperAdmin') || permissions.includes(permission)) {
+        return children;
+    }
+
+    return <Navigate to="/" replace />;
 };
 
 export default function MainApp() {
@@ -54,6 +67,14 @@ export default function MainApp() {
                         <Route index element={<Dashboard />} />
                         <Route path="standards" element={<StandardIndex />} />
                         <Route path="standards/:id/builder" element={<StandardBuilder />} />
+                        <Route
+                            path="settings"
+                            element={
+                                <PermissionRoute permission="role.manage">
+                                    <PermissionMatrixPage />
+                                </PermissionRoute>
+                            }
+                        />
                         {/* Placeholder untuk rute lain nanti */}
                         <Route path="*" element={
                             <div className="p-8 text-center text-gray-500">
@@ -67,4 +88,3 @@ export default function MainApp() {
         </Provider>
     );
 }
-

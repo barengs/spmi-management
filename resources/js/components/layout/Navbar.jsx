@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../store/authSlice';
 import api from '../../services/api';
@@ -105,7 +106,7 @@ export default function Navbar({ toggleSidebar }) {
                                 <div className="text-xs text-gray-500 truncate">{user?.email}</div>
                             </div>
                             <a href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Profil</a>
-                            <a href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Pengaturan</a>
+                            <Link to="/settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Pengaturan</Link>
                             <div className="border-t border-gray-100 dark:border-gray-700 mt-1"></div>
                             <button
                                 onClick={handleLogout}

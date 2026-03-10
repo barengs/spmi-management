@@ -5,6 +5,7 @@ import Icon, { Icons } from '../ui/Icon';
 
 export default function Sidebar({ isOpen, setIsOpen }) {
     const roles = useSelector((state) => state.auth.user?.roles || []);
+    const permissions = useSelector((state) => state.auth.user?.permissions || []);
 
     // Menu items based on capabilities/roles
     const menuItems = [
@@ -14,13 +15,17 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, roles: ['SuperAdmin', 'LPM-Admin', 'Auditor'] },
         { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee'] },
         { label: 'Report Eksekutif', path: '/report', icon: Icons.report, roles: ['SuperAdmin', 'LPM-Admin', 'Pimpinan'] },
-        { label: 'Pengaturan Sistem', path: '/settings', icon: Icons.settings, roles: ['SuperAdmin'] },
+        { label: 'Pengaturan Sistem', path: '/settings', icon: Icons.settings, permissions: ['role.manage'] },
     ];
 
     // Filter menu items based on user role
     const authorizedMenu = menuItems.filter(item => {
-        if (!item.roles) return true;
-        return item.roles.some(role => roles.includes(role));
+        const hasRoleAccess = !item.roles || item.roles.some(role => roles.includes(role));
+        const hasPermissionAccess = roles.includes('SuperAdmin')
+            || !item.permissions
+            || item.permissions.some(permission => permissions.includes(permission));
+
+        return hasRoleAccess && hasPermissionAccess;
     });
 
     return (

@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Controllers\AuthController;
+use App\Modules\Core\Controllers\RolePermissionController;
 use App\Modules\Core\Controllers\UnitController;
 use App\Modules\Core\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -53,6 +54,12 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}',                 [UserController::class, 'update']);
             Route::delete('/{id}',              [UserController::class, 'destroy']);
             Route::post('/{id}/force-reset',    [UserController::class, 'forceReset']);
+        });
+
+        // Role & Permission Matrix
+        Route::prefix('rbac')->group(function () {
+            Route::get('/matrix',               [RolePermissionController::class, 'index']);
+            Route::put('/roles/{role}',         [RolePermissionController::class, 'update']);
         });
 
         // Dokumen Standar Mutu (MstStandard)
