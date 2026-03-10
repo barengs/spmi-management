@@ -9,10 +9,37 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EvidenceController extends Controller
 {
+    public function auditIndex(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('audit.score.update')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk melakukan review audit.',
+            ], 403);
+        }
+
+        $evidences = TrxEvidence::query()
+            ->with([
+                'metric:id,standard_id,content',
+                'metric.standard:id,name,category,periode_tahun',
+                'uploader:id,name,email',
+                'reviewer:id,name,email',
+            ])
+            ->latest()
+            ->get()
+            ->map(fn (TrxEvidence $evidence) => $this->transformEvidence($evidence));
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $evidences,
+        ]);
+    }
+
     public function index($metricId): JsonResponse
     {
         $metric = MstMetric::findOrFail($metricId);
@@ -75,6 +102,10 @@ class EvidenceController extends Controller
             'stored_name' => null,
             'mime_type' => null,
             'size_bytes' => null,
+            'review_status' => 'PENDING',
+            'review_comment' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
         ];
 
         if ($validated['source_type'] === 'link') {
@@ -129,6 +160,48 @@ class EvidenceController extends Controller
         ]);
     }
 
+    public function review(Request $request, $id): JsonResponse
+    {
+        if (! $request->user()?->can('audit.score.update')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk melakukan review audit.',
+            ], 403);
+        }
+
+        $evidence = TrxEvidence::with([
+            'metric.standard',
+            'uploader:id,name,email',
+            'reviewer:id,name,email',
+        ])->findOrFail($id);
+
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['accept', 'reject'])],
+            'comment' => 'nullable|string',
+        ]);
+
+        if ($validated['action'] === 'reject' && blank($validated['comment'] ?? null)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Komentar auditor wajib diisi saat menolak bukti.',
+            ], 422);
+        }
+
+        $evidence->review_status = $validated['action'] === 'accept' ? 'ACCEPTED' : 'REJECTED';
+        $evidence->review_comment = $validated['comment'] ?? $evidence->review_comment;
+        $evidence->reviewed_by = $request->user()->id;
+        $evidence->reviewed_at = now();
+        $evidence->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $validated['action'] === 'accept'
+                ? 'Bukti audit diterima.'
+                : 'Bukti audit ditolak dan komentar auditor disimpan.',
+            'data' => $this->transformEvidence($evidence->fresh(['metric.standard', 'uploader:id,name,email', 'reviewer:id,name,email'])),
+        ]);
+    }
+
     public function download($id): StreamedResponse
     {
         $evidence = TrxEvidence::findOrFail($id);
@@ -155,12 +228,30 @@ class EvidenceController extends Controller
             'stored_name' => $evidence->stored_name,
             'mime_type' => $evidence->mime_type,
             'size_bytes' => $evidence->size_bytes,
+            'review_status' => $evidence->review_status,
+            'review_comment' => $evidence->review_comment,
+            'reviewed_at' => $evidence->reviewed_at?->toISOString(),
             'is_previewable' => $evidence->source_type === 'link' || str_starts_with($evidence->mime_type ?? '', 'application/pdf'),
             'download_url' => $evidence->source_type === 'file' ? "/api/v1/evidences/{$evidence->id}/download" : null,
             'uploader' => $evidence->uploader ? [
                 'id' => $evidence->uploader->id,
                 'name' => $evidence->uploader->name,
                 'email' => $evidence->uploader->email,
+            ] : null,
+            'reviewer' => $evidence->reviewer ? [
+                'id' => $evidence->reviewer->id,
+                'name' => $evidence->reviewer->name,
+                'email' => $evidence->reviewer->email,
+            ] : null,
+            'metric' => $evidence->relationLoaded('metric') && $evidence->metric ? [
+                'id' => $evidence->metric->id,
+                'content' => $evidence->metric->content,
+                'standard' => $evidence->metric->relationLoaded('standard') && $evidence->metric->standard ? [
+                    'id' => $evidence->metric->standard->id,
+                    'name' => $evidence->metric->standard->name,
+                    'category' => $evidence->metric->standard->category,
+                    'periode_tahun' => $evidence->metric->standard->periode_tahun,
+                ] : null,
             ] : null,
             'created_at' => $evidence->created_at?->toISOString(),
         ];

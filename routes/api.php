@@ -95,8 +95,10 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::prefix('evidences')->group(function () {
+            Route::get('/audit',               [EvidenceController::class, 'auditIndex']);
             Route::get('/{id}/download',       [EvidenceController::class, 'download']);
             Route::delete('/{id}',             [EvidenceController::class, 'destroy']);
+            Route::patch('/{id}/review',       [EvidenceController::class, 'review']);
         });
 
     });

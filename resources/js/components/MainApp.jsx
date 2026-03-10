@@ -5,6 +5,7 @@ import { store } from '../store';
 import AppLayout from './layout/AppLayout';
 import LoginPage from '../pages/auth/LoginPage';
 import Dashboard from '../pages/Dashboard';
+import EvidenceAuditPage from '../pages/audit/EvidenceAuditPage';
 import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
@@ -69,6 +70,14 @@ export default function MainApp() {
                         <Route path="standards" element={<StandardIndex />} />
                         <Route path="standards/:id/builder" element={<StandardBuilder />} />
                         <Route path="execution" element={<ExecutionRepositoryPage />} />
+                        <Route
+                            path="audit"
+                            element={
+                                <PermissionRoute permission="audit.score.update">
+                                    <EvidenceAuditPage />
+                                </PermissionRoute>
+                            }
+                        />
                         <Route
                             path="settings"
                             element={

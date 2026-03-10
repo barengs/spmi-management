@@ -5,8 +5,8 @@ namespace App\Modules\Evidence\Models;
 use App\Models\User;
 use App\Modules\Standard\Models\MstMetric;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TrxEvidence extends Model
@@ -27,12 +27,17 @@ class TrxEvidence extends Model
         'stored_name',
         'mime_type',
         'size_bytes',
+        'review_status',
+        'review_comment',
+        'reviewed_by',
+        'reviewed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'size_bytes' => 'integer',
+            'reviewed_at' => 'datetime',
         ];
     }
 
@@ -44,5 +49,10 @@ class TrxEvidence extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
     }
 }

@@ -33,6 +33,18 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function reviewBadge(reviewStatus) {
+    if (reviewStatus === 'ACCEPTED') {
+        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    }
+
+    if (reviewStatus === 'REJECTED') {
+        return 'bg-rose-100 text-rose-800 border-rose-200';
+    }
+
+    return 'bg-amber-100 text-amber-800 border-amber-200';
+}
+
 export default function ExecutionRepositoryPage() {
     const [standards, setStandards] = useState([]);
     const [selectedStandardId, setSelectedStandardId] = useState('');
@@ -444,6 +456,24 @@ export default function ExecutionRepositoryPage() {
                                             </div>
                                             {evidence.notes && (
                                                 <div className="mt-2 text-sm text-gray-600">{evidence.notes}</div>
+                                            )}
+                                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${reviewBadge(evidence.review_status)}`}>
+                                                    {evidence.review_status}
+                                                </span>
+                                                {evidence.reviewer?.name && (
+                                                    <span className="text-xs text-gray-500">
+                                                        Reviewer: {evidence.reviewer.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {evidence.review_comment && (
+                                                <div className="mt-3 rounded-2xl bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                                                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">
+                                                        Komentar Auditor
+                                                    </div>
+                                                    {evidence.review_comment}
+                                                </div>
                                             )}
                                         </div>
 
