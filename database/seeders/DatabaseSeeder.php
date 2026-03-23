@@ -43,9 +43,10 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RefEducationLevelSeeder::class,
             StandardSeeder::class,
+            AuditDemoSeeder::class,
+            StandardPendingAuditorReviewSeeder::class,
         ]);
 
         $this->command->info('Seeding selesai! Login: admin@espmi.dev / Password@123');
     }
 }
-

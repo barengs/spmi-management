@@ -15,6 +15,8 @@ class User extends Authenticatable implements JWTSubject
 {
     use HasFactory, Notifiable, SoftDeletes, HasRoles;
 
+    protected string $guard_name = 'web';
+
     protected $fillable = [
         'nidn_npk',
         'name',
@@ -69,5 +71,9 @@ class User extends Authenticatable implements JWTSubject
     {
         return $query->where('is_active', true);
     }
-}
 
+    protected function getDefaultGuardName(): string
+    {
+        return $this->guard_name;
+    }
+}

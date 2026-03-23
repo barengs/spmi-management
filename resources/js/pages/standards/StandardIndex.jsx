@@ -17,13 +17,26 @@ import {
 
 export default function StandardIndex() {
     const [standards, setStandards] = useState([]);
+    const [pendingAuditCounts, setPendingAuditCounts] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [globalFilter, setGlobalFilter] = useState('');
 
     const user = useSelector(state => state.auth.user);
-    const isPimpinan = user?.roles?.some(r => r.name === 'Pimpinan');
+    const roles = user?.roles || [];
+    const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
+    const isPimpinan = hasRole('Pimpinan');
+    const canManageStandards = hasRole('SuperAdmin')
+        || user?.permissions?.includes('standard.create')
+        || user?.permissions?.includes('standard.update')
+        || user?.permissions?.includes('standard.delete')
+        || user?.permissions?.includes('standard.publish');
+    const canReviewAudit = hasRole('SuperAdmin')
+        || hasRole('Auditor')
+        || hasRole('LPM-Admin')
+        || user?.permissions?.includes('audit.score.update');
+    const canReviewStandards = hasRole('SuperAdmin') || hasRole('Pimpinan') || hasRole('Auditor') || user?.permissions?.includes('standard.publish');
 
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,6 +54,39 @@ export default function StandardIndex() {
     useEffect(() => {
         fetchStandards();
     }, []);
+
+    useEffect(() => {
+        if (!canReviewAudit) {
+            setPendingAuditCounts({});
+            return;
+        }
+
+        const fetchPendingAuditCounts = async () => {
+            try {
+                const response = await api.get('/evidences/audit');
+                const evidences = response.data.data || [];
+                const nextCounts = evidences.reduce((carry, evidence) => {
+                    if (evidence.review_status !== 'PENDING') {
+                        return carry;
+                    }
+
+                    const standardId = evidence.metric?.standard?.id;
+                    if (!standardId) {
+                        return carry;
+                    }
+
+                    carry[standardId] = (carry[standardId] || 0) + 1;
+                    return carry;
+                }, {});
+
+                setPendingAuditCounts(nextCounts);
+            } catch (error) {
+                setPendingAuditCounts({});
+            }
+        };
+
+        fetchPendingAuditCounts();
+    }, [canReviewAudit]);
 
     const fetchStandards = async () => {
         try {
@@ -123,35 +169,6 @@ export default function StandardIndex() {
                 fetchStandards();
             } catch (err) {
                 toast.error(err.response?.data?.message || 'Gagal mengajukan standar.');
-            }
-        }
-    };
-
-    const handleApprove = async (id) => {
-        if (window.confirm('Setujui Standar Mutu ini? Aksi ini akan mengunci dokumen secara PERMANEN (Terbit).')) {
-            try {
-                await api.patch(`/standards/${id}/approve`);
-                toast.success('Standar Mutu disetujui dan Diterbitkan (Locked).');
-                fetchStandards();
-            } catch (err) {
-                toast.error(err.response?.data?.message || 'Gagal menyetujui standar.');
-            }
-        }
-    };
-
-    const handleReject = async (id) => {
-        const reason = window.prompt('Alasan menolak Standar Mutu ini? (Wajib diisi)');
-        if (reason !== null) {
-            if (reason.trim() === '') {
-                toast.warning('Alasan penolakan harus diisi!');
-                return;
-            }
-            try {
-                await api.patch(`/standards/${id}/reject`, { reason });
-                toast.success('Standar Mutu berhasil ditolak untuk Direvisi.');
-                fetchStandards();
-            } catch (err) {
-                toast.error(err.response?.data?.message || 'Gagal menolak standar.');
             }
         }
     };
@@ -252,6 +269,7 @@ export default function StandardIndex() {
             cell: info => {
                 const item = info.row.original;
                 const isLockedForAdmin = item.status === 'WAITING_APPROVAL' || item.status === 'TERBIT';
+                const pendingAuditCount = pendingAuditCounts[item.id] || 0;
 
                 return (
                     <div className="flex space-x-3 justify-end text-sm font-medium items-center flex-wrap gap-y-2">
@@ -264,20 +282,28 @@ export default function StandardIndex() {
                                 Struktur
                             </Link>
                         )}
-                        {!isPimpinan && (
+                        {canManageStandards && !isPimpinan && (
                             <button onClick={() => handleOpenCloneModal(item)} className="text-teal-600 hover:text-teal-900 dark:text-teal-400 dark:hover:text-teal-300" title="Salin ke periode baru">
                                 Salin
                             </button>
                         )}
+                        {canReviewAudit && pendingAuditCount > 0 && (
+                            <Link
+                                to={`/standards/${item.id}/review`}
+                                className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
+                            >
+                                Mulai Review ({pendingAuditCount})
+                            </Link>
+                        )}
 
                         {/* LPM-Admin Actions */}
-                        {!isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI') && (
+                        {canManageStandards && !isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI') && (
                             <button onClick={() => handleSubmitForApproval(item.id)} className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 font-bold bg-blue-50 dark:bg-blue-900/40 px-2 py-1 rounded" title="Ajukan Review ke Pimpinan">
                                 Ajukan
                             </button>
                         )}
 
-                        {!isPimpinan && (
+                        {canManageStandards && !isPimpinan && (
                             <>
                                 <button
                                     onClick={() => handleOpenModal(item)}
@@ -296,22 +322,19 @@ export default function StandardIndex() {
                             </>
                         )}
 
-                        {/* Pimpinan Actions */}
-                        {isPimpinan && item.status === 'WAITING_APPROVAL' && (
-                            <div className="flex items-center space-x-2 border-l border-gray-300 dark:border-gray-600 pl-2 ml-2">
-                                <button onClick={() => handleApprove(item.id)} className="text-emerald-700 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-900/60 dark:hover:bg-emerald-800 px-2 py-1 rounded text-xs font-bold transition-colors">
-                                    Setujui
-                                </button>
-                                <button onClick={() => handleReject(item.id)} className="text-rose-700 hover:text-rose-900 bg-rose-100 hover:bg-rose-200 dark:text-rose-300 dark:bg-rose-900/60 dark:hover:bg-rose-800 px-2 py-1 rounded text-xs font-bold transition-colors">
-                                    Tolak
-                                </button>
-                            </div>
+                        {canReviewStandards && item.status === 'WAITING_APPROVAL' && (
+                            <Link
+                                to={`/standards/${item.id}/review`}
+                                className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
+                            >
+                                Detail Review
+                            </Link>
                         )}
                     </div>
                 );
             }
         })
-    ], [standards]);
+    ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canReviewStandards]);
 
     const table = useReactTable({
         data: standards,
@@ -340,6 +363,7 @@ export default function StandardIndex() {
                         Daftar seluruh dokumen SN-Dikti dan Standar Institusi untuk penjaminan mutu jenjang perguruan tinggi.
                     </p>
                 </div>
+                {canManageStandards && (
                 <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
                     <button
                         onClick={() => handleOpenModal()}
@@ -349,6 +373,7 @@ export default function StandardIndex() {
                         Tambah Standar
                     </button>
                 </div>
+                )}
             </div>
 
             {error && (

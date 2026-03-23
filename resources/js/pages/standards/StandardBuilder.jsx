@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import Icon, { Icons } from '../../components/ui/Icon';
@@ -224,6 +225,7 @@ const MetricNode = ({
 export default function StandardBuilder() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const user = useSelector((state) => state.auth.user);
     const [standard, setStandard] = useState(null);
     const [tree, setTree] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -246,6 +248,9 @@ export default function StandardBuilder() {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedIds, setExpandedIds] = useState(new Set());
     const nodeRefs = useRef({});
+    const canManageStructure = user?.roles?.includes('SuperAdmin')
+        || user?.permissions?.includes('standard.update')
+        || user?.permissions?.includes('standard.delete');
 
     const statementWarnings = [];
     const flatNodes = [];
@@ -463,7 +468,7 @@ export default function StandardBuilder() {
                     </h1>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         Periode: {standard?.periode_tahun} | Kategori: {standard?.category}
-                        {['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
+                        {(!canManageStructure || ['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)) && (
                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 gap-1">
                                 <Icon icon={Icons.shield} width={14} />
                                 Mode Baca (Terkunci)
@@ -471,7 +476,7 @@ export default function StandardBuilder() {
                         )}
                     </p>
                 </div>
-                {!['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
+                {canManageStructure && !['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
                     <button
                         onClick={handleAddRoot}
                         className="inline-flex items-center gap-1 px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
@@ -561,12 +566,16 @@ export default function StandardBuilder() {
                         {tree.length === 0 ? (
                             <div className="text-center py-12">
                                 <p className="text-gray-500 dark:text-gray-400 mb-4">Belum ada struktur hirarki di standar ini.</p>
-                                <button
-                                    onClick={handleAddRoot}
-                                    className="text-blue-600 font-medium hover:underline"
-                                >
-                                    Mulai susun standar baru
-                                </button>
+                                {canManageStructure ? (
+                                    <button
+                                        onClick={handleAddRoot}
+                                        className="text-blue-600 font-medium hover:underline"
+                                    >
+                                        Mulai susun standar baru
+                                    </button>
+                                ) : (
+                                    <div className="text-sm text-gray-500">Standar ini hanya dapat dibaca oleh role Anda.</div>
+                                )}
                             </div>
                         ) : (
                             <div>
@@ -580,7 +589,7 @@ export default function StandardBuilder() {
                                         onDelete={handleDelete}
                                         onConfigTarget={handleConfigTarget}
                                         onViewNode={focusNode}
-                                        isTerbit={['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
+                                        isTerbit={!canManageStructure || ['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
                                         expandedIds={expandedIds}
                                         onToggleExpand={toggleExpand}
                                         activeNodeId={selectedIndicatorView?.id}
@@ -626,7 +635,8 @@ export default function StandardBuilder() {
                                             <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Target Jenjang</h4>
                                             <button
                                                 onClick={() => handleConfigTarget(selectedIndicatorView)}
-                                                className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded flex items-center gap-1"
+                                                disabled={!canManageStructure}
+                                                className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${canManageStructure ? 'text-blue-600 hover:text-blue-800 bg-blue-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
                                             >
                                                 <Icon icon={Icons.edit} width={12} />
                                                 Edit Target
@@ -642,7 +652,7 @@ export default function StandardBuilder() {
             </div>
 
             {/* Form Modal (Add/Edit Nodes) */}
-            {isModalOpen && (
+            {canManageStructure && isModalOpen && (
                 <div className="fixed z-[60] inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                         <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => setIsModalOpen(false)}></div>
@@ -701,7 +711,7 @@ export default function StandardBuilder() {
                 metric={selectedIndicator}
                 isOpen={isTargetConfigOpen}
                 onClose={() => setIsTargetConfigOpen(false)}
-                isTerbit={['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
+                isTerbit={!canManageStructure || ['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
             />
         </div>
     );

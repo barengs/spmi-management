@@ -11,6 +11,32 @@ use Illuminate\Validation\ValidationException;
 
 class MetricController extends Controller
 {
+    private function denyUnlessCanReview(Request $request, string $message): ?JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! ($user->hasRole('SuperAdmin') || $user->hasRole('Auditor') || $user->can('standard.publish'))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        return null;
+    }
+
+    private function denyUnless(Request $request, string $permission, string $message): ?JsonResponse
+    {
+        if (! $request->user()?->can($permission)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        return null;
+    }
+
     private function hierarchyValidationError(array $payload, ?MstMetric $metric = null): ?JsonResponse
     {
         $resolvedParentId = array_key_exists('parent_id', $payload)
@@ -75,6 +101,46 @@ class MetricController extends Controller
         return null;
     }
 
+    private function resetReviewState(MstMetric $metric): void
+    {
+        $metric->forceFill([
+            'review_status' => 'ACCEPTED',
+            'review_action' => null,
+            'review_comment' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ])->save();
+    }
+
+    private function cascadeResetReviewState(MstMetric $metric): void
+    {
+        $this->resetReviewState($metric);
+
+        foreach ($metric->children as $child) {
+            $this->cascadeResetReviewState($child);
+        }
+    }
+
+    private function applyRejectedState(MstMetric $metric, Request $request, string $comment, string $reviewAction): void
+    {
+        $metric->forceFill([
+            'review_status' => 'REJECTED',
+            'review_action' => $reviewAction,
+            'review_comment' => $comment,
+            'reviewed_by' => $request->user()->id,
+            'reviewed_at' => now(),
+        ])->save();
+    }
+
+    private function cascadeRejectedState(MstMetric $metric, Request $request, string $comment, string $reviewAction): void
+    {
+        $this->applyRejectedState($metric, $request, $comment, $reviewAction);
+
+        foreach ($metric->children as $child) {
+            $this->cascadeRejectedState($child, $request, $comment, $reviewAction);
+        }
+    }
+
     /**
      * Dapatkan hirarki indikator/metrik dari sebuah standar.
      */
@@ -100,6 +166,10 @@ class MetricController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        if ($denied = $this->denyUnless($request, 'standard.update', 'Anda tidak memiliki hak akses untuk mengubah struktur standar.')) {
+            return $denied;
+        }
+
         $validated = $request->validate([
             'standard_id' => 'required|exists:mst_standards,id',
             'parent_id'   => 'nullable|exists:mst_metrics,id',
@@ -140,6 +210,10 @@ class MetricController extends Controller
      */
     public function update(Request $request, $id): JsonResponse
     {
+        if ($denied = $this->denyUnless($request, 'standard.update', 'Anda tidak memiliki hak akses untuk mengubah struktur standar.')) {
+            return $denied;
+        }
+
         $metric = MstMetric::findOrFail($id);
 
         if (in_array($metric->standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
@@ -188,8 +262,12 @@ class MetricController extends Controller
     /**
      * Hapus node (otomatis cascade on delete di DB jika didefiniskan, tapi karena softdelete kita perlu trigger manual recursive jika diperlukan)
      */
-    public function destroy($id): JsonResponse
+    public function destroy(Request $request, $id): JsonResponse
     {
+        if ($denied = $this->denyUnless($request, 'standard.delete', 'Anda tidak memiliki hak akses untuk menghapus struktur standar.')) {
+            return $denied;
+        }
+
         $metric = MstMetric::findOrFail($id);
         
         if (in_array($metric->standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
@@ -216,5 +294,71 @@ class MetricController extends Controller
             $this->deleteMetricAndChildren($child);
         }
         $metric->delete();
+    }
+
+    public function review(Request $request, $id): JsonResponse
+    {
+        if ($denied = $this->denyUnlessCanReview($request, 'Anda tidak memiliki hak akses untuk melakukan review standar.')) {
+            return $denied;
+        }
+
+        $metric = MstMetric::with('childrenRecursive')->findOrFail($id);
+
+        if ($metric->standard->status !== 'WAITING_APPROVAL') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Review node hanya dapat dilakukan saat standar menunggu persetujuan.',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'action' => 'required|in:accept,reject',
+            'comment' => 'nullable|string',
+            'review_action' => 'nullable|in:REMOVE,UPDATE',
+        ]);
+
+        if ($validated['action'] === 'reject') {
+            if (blank($validated['comment'] ?? null)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Komentar reviewer wajib diisi saat menolak node.',
+                ], 422);
+            }
+
+            if (blank($validated['review_action'] ?? null)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Pilih tindak lanjut node: hapus atau ubah konten.',
+                ], 422);
+            }
+
+            if ($metric->type === 'Header') {
+                $this->cascadeRejectedState($metric, $request, $validated['comment'], $validated['review_action']);
+            } else {
+                $this->applyRejectedState($metric, $request, $validated['comment'], $validated['review_action']);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => $metric->type === 'Header'
+                    ? 'Header ditolak dan seluruh node turunannya ikut ditandai untuk revisi.'
+                    : 'Node standar ditandai untuk revisi.',
+                'data' => $metric->fresh(),
+            ]);
+        }
+
+        if ($metric->type === 'Header') {
+            $this->cascadeResetReviewState($metric);
+        } else {
+            $this->resetReviewState($metric);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $metric->type === 'Header'
+                ? 'Header dan seluruh node turunannya ditandai sudah dicek auditor.'
+                : 'Node standar ditandai sudah dicek auditor.',
+            'data' => $metric->fresh(),
+        ]);
     }
 }

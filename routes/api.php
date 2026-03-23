@@ -74,6 +74,7 @@ Route::prefix('v1')->group(function () {
             // Sprint 5: Cloning & Publish (Multi-level Authorization)
             Route::post('/{id}/clone',          [\App\Modules\Standard\Controllers\StandardCloneController::class, 'clone']);
             Route::patch('/{id}/submit',        [\App\Modules\Standard\Controllers\StandardController::class, 'submit']);
+            Route::patch('/{id}/submit-review', [\App\Modules\Standard\Controllers\StandardController::class, 'submitReview']);
             Route::patch('/{id}/approve',       [\App\Modules\Standard\Controllers\StandardController::class, 'approve']);
             Route::patch('/{id}/reject',        [\App\Modules\Standard\Controllers\StandardController::class, 'reject']);
             
@@ -86,6 +87,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/',                    [\App\Modules\Standard\Controllers\MetricController::class, 'store']);
             Route::put('/{id}',                 [\App\Modules\Standard\Controllers\MetricController::class, 'update']);
             Route::delete('/{id}',              [\App\Modules\Standard\Controllers\MetricController::class, 'destroy']);
+            Route::patch('/{id}/review',        [\App\Modules\Standard\Controllers\MetricController::class, 'review']);
             
             // Target Diferensiasi per Jenjang
             Route::get('/{metric_id}/targets',       [\App\Modules\Standard\Controllers\MetricTargetController::class, 'getTargets']);

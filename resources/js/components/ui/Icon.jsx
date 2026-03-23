@@ -41,6 +41,7 @@ export default function IconifyIcon({
 export const Icons = {
     // Navigation & Layout
     menu: 'material-symbols:menu',
+    more: 'material-symbols:more-horiz',
     close: 'material-symbols:close',
     back: 'material-symbols:arrow-back',
     home: 'material-symbols:home',

@@ -7,7 +7,7 @@ export default function Dashboard() {
 
     return (
         <div className="p-6">
-            <h1 className="text-2xl font-bold mb-4 dark:text-white">Dashboard Eksekutif</h1>
+            <h1 className="text-2xl font-bold mb-4 dark:text-white">Dashboard Eksekutif</h1>    
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
                 <h2 className="text-lg font-semibold mb-2 dark:text-white">Selamat datang, {user?.name}!</h2>

@@ -66,6 +66,13 @@ class EvidenceController extends Controller
 
     public function store(Request $request, $metricId): JsonResponse
     {
+        if (! $request->user()?->can('evidence.upload')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk mengunggah bukti.',
+            ], 403);
+        }
+
         $metric = MstMetric::with('standard')->findOrFail($metricId);
 
         if ($metric->type !== 'Indicator') {
@@ -136,8 +143,15 @@ class EvidenceController extends Controller
         ], 201);
     }
 
-    public function destroy($id): JsonResponse
+    public function destroy(Request $request, $id): JsonResponse
     {
+        if (! $request->user()?->can('evidence.delete')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk menghapus bukti.',
+            ], 403);
+        }
+
         $evidence = TrxEvidence::with('metric.standard')->findOrFail($id);
 
         if (in_array($evidence->metric->standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {

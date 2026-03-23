@@ -271,12 +271,21 @@ make dev           # Start dev servers
 
 ## 🔐 Default Credentials
 
-Setelah menjalankan seeder, login dengan:
+Setelah menjalankan `php artisan db:seed`, login dengan:
 
 | Email | Password | Role |
 |-------|----------|------|
 | `admin@espmi.dev` | `Password@123` | SuperAdmin |
 | `lpm@espmi.dev` | `Password@123` | LPM-Admin |
+| `auditor@espmi.dev` | `Password@123` | Auditor |
+| `auditee@espmi.dev` | `Password@123` | Auditee |
+| `pimpinan@espmi.dev` | `Password@123` | Pimpinan |
+
+### Demo Accounts Notes
+
+- `auditor@espmi.dev` digunakan untuk review node standar dan submit hasil review ke Pimpinan.
+- `pimpinan@espmi.dev` digunakan untuk keputusan final standar: terbitkan atau kembalikan untuk revisi.
+- Seeder demo juga menyiapkan contoh standar `WAITING_APPROVAL` yang belum direview auditor.
 
 ---
 
@@ -333,4 +342,4 @@ This project is open-sourced software licensed under the [MIT license](https://o
 <p align="center">Built with ❤️ for Indonesian Higher Education Quality Assurance</p>
 
 
-Login: admin@espmi.dev / Password@123
+Login default: `admin@espmi.dev` / `Password@123`

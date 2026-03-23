@@ -6,9 +6,11 @@ import AppLayout from './layout/AppLayout';
 import LoginPage from '../pages/auth/LoginPage';
 import Dashboard from '../pages/Dashboard';
 import EvidenceAuditPage from '../pages/audit/EvidenceAuditPage';
+import StandardAuditReviewPage from '../pages/audit/StandardAuditReviewPage';
 import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
+import StandardReviewPage from '../pages/standards/StandardReviewPage';
 import PermissionMatrixPage from '../pages/settings/PermissionMatrixPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -69,12 +71,28 @@ export default function MainApp() {
                         <Route index element={<Dashboard />} />
                         <Route path="standards" element={<StandardIndex />} />
                         <Route path="standards/:id/builder" element={<StandardBuilder />} />
-                        <Route path="execution" element={<ExecutionRepositoryPage />} />
+                        <Route path="standards/:id/review" element={<StandardReviewPage />} />
+                        <Route
+                            path="execution"
+                            element={
+                                <PermissionRoute permission="evidence.upload">
+                                    <ExecutionRepositoryPage />
+                                </PermissionRoute>
+                            }
+                        />
                         <Route
                             path="audit"
                             element={
                                 <PermissionRoute permission="audit.score.update">
                                     <EvidenceAuditPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="audit/standards/:standardId/review"
+                            element={
+                                <PermissionRoute permission="audit.score.update">
+                                    <StandardAuditReviewPage />
                                 </PermissionRoute>
                             }
                         />

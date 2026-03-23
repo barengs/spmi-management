@@ -2,6 +2,7 @@
 
 namespace App\Modules\Standard\Models;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,7 +19,19 @@ class MstMetric extends Model
         'content',
         'type',
         'order',
+        'review_status',
+        'review_action',
+        'review_comment',
+        'reviewed_by',
+        'reviewed_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'reviewed_at' => 'datetime',
+        ];
+    }
 
     public function standard(): BelongsTo
     {
@@ -39,6 +52,11 @@ class MstMetric extends Model
     public function childrenRecursive(): HasMany
     {
         return $this->children()->with('childrenRecursive');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
     }
 
     public function targets(): HasMany

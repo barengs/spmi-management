@@ -21,6 +21,8 @@ class MstStandard extends Model
         'status',
         'submitted_by',
         'approved_by',
+        'review_submitted_by',
+        'review_submitted_at',
         'reject_reason',
     ];
 
@@ -38,6 +40,7 @@ class MstStandard extends Model
     {
         return [
             'is_active' => 'boolean',
+            'review_submitted_at' => 'datetime',
         ];
     }
 
