@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
@@ -46,6 +47,7 @@ function reviewBadge(reviewStatus) {
 }
 
 export default function ExecutionRepositoryPage() {
+    const user = useSelector((state) => state.auth.user);
     const [standards, setStandards] = useState([]);
     const [selectedStandardId, setSelectedStandardId] = useState('');
     const [indicators, setIndicators] = useState([]);
@@ -62,6 +64,8 @@ export default function ExecutionRepositoryPage() {
     const [previewUrl, setPreviewUrl] = useState('');
     const [previewType, setPreviewType] = useState('');
     const [previewLoading, setPreviewLoading] = useState(false);
+    const canUploadEvidence = user?.roles?.includes('SuperAdmin') || user?.permissions?.includes('evidence.upload');
+    const canDeleteEvidence = user?.roles?.includes('SuperAdmin') || user?.permissions?.includes('evidence.delete');
 
     useEffect(() => {
         const fetchStandards = async () => {
@@ -327,106 +331,112 @@ export default function ExecutionRepositoryPage() {
                             </div>
                         </div>
 
-                        <form onSubmit={handleUpload} className="mt-6 space-y-5">
-                            <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setUploadMode('file')}
-                                    className={`rounded-full px-4 py-2 text-sm font-medium ${uploadMode === 'file' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-                                >
-                                    File Upload
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setUploadMode('link')}
-                                    className={`rounded-full px-4 py-2 text-sm font-medium ${uploadMode === 'link' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-                                >
-                                    Link Dokumen
-                                </button>
-                            </div>
+                        {canUploadEvidence ? (
+                            <form onSubmit={handleUpload} className="mt-6 space-y-5">
+                                <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setUploadMode('file')}
+                                        className={`rounded-full px-4 py-2 text-sm font-medium ${uploadMode === 'file' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                                    >
+                                        File Upload
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setUploadMode('link')}
+                                        className={`rounded-full px-4 py-2 text-sm font-medium ${uploadMode === 'link' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                                    >
+                                        Link Dokumen
+                                    </button>
+                                </div>
 
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-gray-700">Judul Bukti</label>
-                                    <input
-                                        type="text"
-                                        value={title}
-                                        onChange={(event) => setTitle(event.target.value)}
-                                        className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                                        placeholder="Contoh: SK Kurikulum 2026"
-                                    />
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label className="mb-2 block text-sm font-medium text-gray-700">Judul Bukti</label>
+                                        <input
+                                            type="text"
+                                            value={title}
+                                            onChange={(event) => setTitle(event.target.value)}
+                                            className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                            placeholder="Contoh: SK Kurikulum 2026"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-2 block text-sm font-medium text-gray-700">Catatan</label>
+                                        <input
+                                            type="text"
+                                            value={notes}
+                                            onChange={(event) => setNotes(event.target.value)}
+                                            className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                            placeholder="Opsional"
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-gray-700">Catatan</label>
-                                    <input
-                                        type="text"
-                                        value={notes}
-                                        onChange={(event) => setNotes(event.target.value)}
-                                        className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                                        placeholder="Opsional"
-                                    />
-                                </div>
-                            </div>
 
-                            {uploadMode === 'file' ? (
-                                <div
-                                    onDragEnter={() => setDragActive(true)}
-                                    onDragOver={(event) => {
-                                        event.preventDefault();
-                                        setDragActive(true);
-                                    }}
-                                    onDragLeave={() => setDragActive(false)}
-                                    onDrop={(event) => {
-                                        event.preventDefault();
-                                        setDragActive(false);
-                                        const droppedFile = event.dataTransfer.files?.[0];
-                                        if (droppedFile) {
-                                            setSelectedFile(droppedFile);
-                                        }
-                                    }}
-                                    className={`rounded-3xl border-2 border-dashed px-6 py-10 text-center transition ${
-                                        dragActive ? 'border-sky-500 bg-sky-50' : 'border-gray-300 bg-gray-50'
-                                    }`}
-                                >
-                                    <Icon icon={Icons.execution} width={28} className="mx-auto text-sky-600" />
-                                    <div className="mt-4 text-sm font-medium text-gray-800">Drag & drop file bukti di sini</div>
-                                    <div className="mt-1 text-xs text-gray-500">PDF, DOCX, XLSX maksimal 20MB</div>
-                                    <input
-                                        type="file"
-                                        accept=".pdf,.doc,.docx,.xls,.xlsx"
-                                        onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
-                                        className="mx-auto mt-4 block text-sm text-gray-600"
-                                    />
-                                    {selectedFile && (
-                                        <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">
-                                            File terpilih: <span className="font-medium">{selectedFile.name}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div>
-                                    <label className="mb-2 block text-sm font-medium text-gray-700">Tautan Dokumen</label>
-                                    <input
-                                        type="url"
-                                        value={linkUrl}
-                                        onChange={(event) => setLinkUrl(event.target.value)}
-                                        className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                                        placeholder="https://..."
-                                    />
-                                </div>
-                            )}
+                                {uploadMode === 'file' ? (
+                                    <div
+                                        onDragEnter={() => setDragActive(true)}
+                                        onDragOver={(event) => {
+                                            event.preventDefault();
+                                            setDragActive(true);
+                                        }}
+                                        onDragLeave={() => setDragActive(false)}
+                                        onDrop={(event) => {
+                                            event.preventDefault();
+                                            setDragActive(false);
+                                            const droppedFile = event.dataTransfer.files?.[0];
+                                            if (droppedFile) {
+                                                setSelectedFile(droppedFile);
+                                            }
+                                        }}
+                                        className={`rounded-3xl border-2 border-dashed px-6 py-10 text-center transition ${
+                                            dragActive ? 'border-sky-500 bg-sky-50' : 'border-gray-300 bg-gray-50'
+                                        }`}
+                                    >
+                                        <Icon icon={Icons.execution} width={28} className="mx-auto text-sky-600" />
+                                        <div className="mt-4 text-sm font-medium text-gray-800">Drag & drop file bukti di sini</div>
+                                        <div className="mt-1 text-xs text-gray-500">PDF, DOCX, XLSX maksimal 20MB</div>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.doc,.docx,.xls,.xlsx"
+                                            onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+                                            className="mx-auto mt-4 block text-sm text-gray-600"
+                                        />
+                                        {selectedFile && (
+                                            <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-gray-700 shadow-sm">
+                                                File terpilih: <span className="font-medium">{selectedFile.name}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="mb-2 block text-sm font-medium text-gray-700">Tautan Dokumen</label>
+                                        <input
+                                            type="url"
+                                            value={linkUrl}
+                                            onChange={(event) => setLinkUrl(event.target.value)}
+                                            className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                            placeholder="https://..."
+                                        />
+                                    </div>
+                                )}
 
-                            <div className="flex justify-end">
-                                <button
-                                    type="submit"
-                                    disabled={uploading || !selectedIndicator}
-                                    className="inline-flex items-center gap-2 rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    <Icon icon={uploading ? Icons.refresh : Icons.save} width={16} className={uploading ? 'animate-spin' : ''} />
-                                    Simpan Bukti
-                                </button>
+                                <div className="flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={uploading || !selectedIndicator}
+                                        className="inline-flex items-center gap-2 rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Icon icon={uploading ? Icons.refresh : Icons.save} width={16} className={uploading ? 'animate-spin' : ''} />
+                                        Simpan Bukti
+                                    </button>
+                                </div>
+                            </form>
+                        ) : (
+                            <div className="mt-6 rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">
+                                Role Anda tidak memiliki akses untuk mengunggah bukti. Halaman ini tampil sebagai mode baca.
                             </div>
-                        </form>
+                        )}
                     </div>
 
                     <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -494,13 +504,15 @@ export default function ExecutionRepositoryPage() {
                                                     Unduh
                                                 </button>
                                             )}
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDelete(evidence)}
-                                                className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
-                                            >
-                                                Hapus
-                                            </button>
+                                            {canDeleteEvidence && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(evidence)}
+                                                    className="rounded-full border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                                                >
+                                                    Hapus
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

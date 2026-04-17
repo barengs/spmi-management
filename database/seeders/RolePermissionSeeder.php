@@ -91,10 +91,10 @@ class RolePermissionSeeder extends Seeder
             'report.view',
         ]);
 
-        // Pimpinan — read-only, reports and dashboard
+        // Pimpinan — executive review, can finalize approval of standards
         $pimpinan = Role::firstOrCreate(['name' => 'Pimpinan', 'guard_name' => 'web']);
         $pimpinan->syncPermissions([
-            'standard.view',
+            'standard.view', 'standard.publish',
             'audit.view', 'audit.score.view',
             'report.view', 'report.export',
         ]);

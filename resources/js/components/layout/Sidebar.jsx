@@ -6,22 +6,24 @@ import Icon, { Icons } from '../ui/Icon';
 export default function Sidebar({ isOpen, setIsOpen }) {
     const roles = useSelector((state) => state.auth.user?.roles || []);
     const permissions = useSelector((state) => state.auth.user?.permissions || []);
+    const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
 
     // Menu items based on capabilities/roles
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: Icons.dashboard },
-        { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee', 'Pimpinan'] },
-        { label: 'Pelaksanaan', path: '/execution', icon: Icons.execution, roles: ['SuperAdmin', 'LPM-Admin', 'Auditee'] },
-        { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, roles: ['SuperAdmin', 'LPM-Admin', 'Auditor'] },
-        { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, roles: ['SuperAdmin', 'LPM-Admin', 'Auditor', 'Auditee'] },
-        { label: 'Report Eksekutif', path: '/report', icon: Icons.report, roles: ['SuperAdmin', 'LPM-Admin', 'Pimpinan'] },
+        { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view'] },
+        { label: 'Pelaksanaan', path: '/execution', icon: Icons.execution, permissions: ['evidence.upload'] },
+        { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, permissions: ['audit.score.update'] },
+        { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, permissions: ['ptk.view'] },
+        { label: 'Report Eksekutif', path: '/report', icon: Icons.report, permissions: ['report.view'] },
+        { label: 'Manajemen Pengguna', path: '/settings/users', icon: Icons.shield, roles: ['SuperAdmin'], permissions: ['user.view'] },
         { label: 'Pengaturan Sistem', path: '/settings', icon: Icons.settings, permissions: ['role.manage'] },
     ];
 
     // Filter menu items based on user role
     const authorizedMenu = menuItems.filter(item => {
-        const hasRoleAccess = !item.roles || item.roles.some(role => roles.includes(role));
-        const hasPermissionAccess = roles.includes('SuperAdmin')
+        const hasRoleAccess = !item.roles || item.roles.some(role => hasRole(role));
+        const hasPermissionAccess = hasRole('SuperAdmin')
             || !item.permissions
             || item.permissions.some(permission => permissions.includes(permission));
 

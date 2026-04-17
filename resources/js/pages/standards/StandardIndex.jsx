@@ -22,6 +22,7 @@ export default function StandardIndex() {
     const [error, setError] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [globalFilter, setGlobalFilter] = useState('');
+    const [selectedPeriod, setSelectedPeriod] = useState(null);
 
     const user = useSelector(state => state.auth.user);
     const roles = user?.roles || [];
@@ -36,7 +37,7 @@ export default function StandardIndex() {
         || hasRole('Auditor')
         || hasRole('LPM-Admin')
         || user?.permissions?.includes('audit.score.update');
-    const canReviewStandards = hasRole('SuperAdmin') || hasRole('Pimpinan') || hasRole('Auditor') || user?.permissions?.includes('standard.publish');
+    const canReviewStandards = hasRole('SuperAdmin') || hasRole('Pimpinan') || user?.permissions?.includes('standard.publish');
 
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -54,6 +55,69 @@ export default function StandardIndex() {
     useEffect(() => {
         fetchStandards();
     }, []);
+
+    const getPeriodStatus = (items) => {
+        if (!items.length) {
+            return 'Dalam Proses';
+        }
+
+        return items.every((item) => item.status === 'TERBIT') ? 'Dilaksanakan' : 'Dalam Proses';
+    };
+
+    const periodGroups = useMemo(() => {
+        const grouped = standards.reduce((carry, item) => {
+            const periodKey = item.periode_tahun ? String(item.periode_tahun) : 'Tanpa Periode';
+
+            if (!carry[periodKey]) {
+                carry[periodKey] = [];
+            }
+
+            carry[periodKey].push(item);
+
+            return carry;
+        }, {});
+
+        return Object.entries(grouped)
+            .sort(([left], [right]) => {
+                if (left === 'Tanpa Periode') {
+                    return 1;
+                }
+
+                if (right === 'Tanpa Periode') {
+                    return -1;
+                }
+
+                return Number(right) - Number(left);
+            })
+            .map(([period, items]) => ({
+                period,
+                items,
+            }));
+    }, [standards]);
+
+    useEffect(() => {
+        if (periodGroups.length === 0) {
+            setSelectedPeriod(null);
+            return;
+        }
+
+        const stillExists = periodGroups.some(({ period }) => period === selectedPeriod);
+
+        if (!stillExists) {
+            setSelectedPeriod(periodGroups[0].period);
+        }
+    }, [periodGroups, selectedPeriod]);
+
+    const filteredStandards = useMemo(() => {
+        if (!selectedPeriod) {
+            return [];
+        }
+
+        return standards.filter((item) => {
+            const itemPeriod = item.periode_tahun ? String(item.periode_tahun) : 'Tanpa Periode';
+            return itemPeriod === selectedPeriod;
+        });
+    }, [selectedPeriod, standards]);
 
     useEffect(() => {
         if (!canReviewAudit) {
@@ -271,90 +335,93 @@ export default function StandardIndex() {
                 const isLockedForAdmin = item.status === 'WAITING_APPROVAL' || item.status === 'TERBIT';
                 const pendingAuditCount = pendingAuditCounts[item.id] || 0;
                 const canShowStructure = !isPimpinan || item.status !== 'DRAFT';
-                const showStartReview = canReviewAudit && pendingAuditCount > 0;
-                const showDetailReview = !showStartReview && canReviewStandards && item.status === 'WAITING_APPROVAL';
-                const showSubmit = !showStartReview
-                    && !showDetailReview
-                    && canManageStandards
-                    && !isPimpinan
-                    && (item.status === 'DRAFT' || item.status === 'REVISI');
+                const actionButtons = [];
+
+                if (canShowStructure) {
+                    actionButtons.push(
+                        <Link
+                            key="structure"
+                            to={`/standards/${item.id}/builder`}
+                            className="rounded px-2 py-1 text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
+                        >
+                            Struktur
+                        </Link>
+                    );
+                }
+
+                if (canReviewAudit && pendingAuditCount > 0) {
+                    actionButtons.push(
+                        <Link
+                            key="start-review"
+                            to={`/standards/${item.id}/review`}
+                            className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
+                        >
+                            Mulai Review ({pendingAuditCount})
+                        </Link>
+                    );
+                } else if (canReviewStandards && item.status === 'WAITING_APPROVAL') {
+                    actionButtons.push(
+                        <Link
+                            key="detail-review"
+                            to={`/standards/${item.id}/review`}
+                            className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
+                        >
+                            Detail Review
+                        </Link>
+                    );
+                } else if (canManageStandards && !isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI')) {
+                    actionButtons.push(
+                        <button
+                            key="submit"
+                            onClick={() => handleSubmitForApproval(item.id)}
+                            className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
+                            title="Ajukan Review ke Pimpinan"
+                        >
+                            Ajukan
+                        </button>
+                    );
+                }
+
+                if (canManageStandards && !isPimpinan && !isLockedForAdmin) {
+                    actionButtons.push(
+                        <button
+                            key="clone"
+                            onClick={() => handleOpenCloneModal(item)}
+                            className="rounded px-2 py-1 text-teal-600 transition hover:bg-teal-50 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
+                            title="Salin ke periode baru"
+                        >
+                            Salin
+                        </button>
+                    );
+                }
+
+                if (canManageStandards && !isPimpinan) {
+                    actionButtons.push(
+                        <button
+                            key="edit"
+                            onClick={() => handleOpenModal(item)}
+                            disabled={isLockedForAdmin}
+                            className={`rounded px-2 py-1 transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-blue-600 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-400 dark:hover:bg-blue-950/40 dark:hover:text-blue-300'}`}
+                        >
+                            Edit
+                        </button>
+                    );
+
+                    actionButtons.push(
+                        <button
+                            key="delete"
+                            onClick={() => handleDelete(item.id)}
+                            disabled={isLockedForAdmin}
+                            className={`rounded px-2 py-1 transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-red-600 hover:bg-red-50 hover:text-red-900 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300'}`}
+                        >
+                            Hapus
+                        </button>
+                    );
+                }
 
                 return (
-                    <div className="grid min-w-[22rem] grid-cols-3 items-start justify-items-center gap-3 text-sm font-medium">
-                        {canShowStructure ? (
-                            <Link
-                                to={`/standards/${item.id}/builder`}
-                                className="rounded px-2 py-1 text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
-                            >
-                                Struktur
-                            </Link>
-                        ) : (
-                            <span className="invisible rounded px-2 py-1">Struktur</span>
-                        )}
-
-                        <div className="flex min-h-9 items-center justify-center">
-                            {showStartReview && (
-                                <Link
-                                    to={`/standards/${item.id}/review`}
-                                    className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
-                                >
-                                    Mulai Review ({pendingAuditCount})
-                                </Link>
-                            )}
-                            {showDetailReview && (
-                                <Link
-                                    to={`/standards/${item.id}/review`}
-                                    className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
-                                >
-                                    Detail Review
-                                </Link>
-                            )}
-                            {showSubmit && (
-                                <button
-                                    onClick={() => handleSubmitForApproval(item.id)}
-                                    className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
-                                    title="Ajukan Review ke Pimpinan"
-                                >
-                                    Ajukan
-                                </button>
-                            )}
-                            {!showStartReview && !showDetailReview && !showSubmit && (
-                                <span className="invisible rounded px-2 py-1">Aksi</span>
-                            )}
-                        </div>
-
-                        <div className="flex min-h-9 max-w-[10rem] flex-wrap items-center justify-center gap-2">
-                            {canManageStandards && !isPimpinan && !isLockedForAdmin && (
-                                <button
-                                    onClick={() => handleOpenCloneModal(item)}
-                                    className="rounded px-2 py-1 text-teal-600 transition hover:bg-teal-50 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
-                                    title="Salin ke periode baru"
-                                >
-                                    Salin
-                                </button>
-                            )}
-                            {canManageStandards && !isPimpinan && (
-                                <button
-                                    onClick={() => handleOpenModal(item)}
-                                    disabled={isLockedForAdmin}
-                                    className={`rounded px-2 py-1 transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-blue-600 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-400 dark:hover:bg-blue-950/40 dark:hover:text-blue-300'}`}
-                                >
-                                    Edit
-                                </button>
-                            )}
-                            {canManageStandards && !isPimpinan && (
-                                <button
-                                    onClick={() => handleDelete(item.id)}
-                                    disabled={isLockedForAdmin}
-                                    className={`rounded px-2 py-1 transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-red-600 hover:bg-red-50 hover:text-red-900 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300'}`}
-                                >
-                                    Hapus
-                                </button>
-                            )}
-                            {!(canManageStandards && !isPimpinan) && (
-                                <span className="invisible rounded px-2 py-1">Kelola</span>
-                            )}
-                        </div>
+                    <div className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm font-medium">
+                        {actionButtons}
                     </div>
                 );
             }
@@ -362,7 +429,7 @@ export default function StandardIndex() {
     ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canReviewStandards]);
 
     const table = useReactTable({
-        data: standards,
+        data: filteredStandards,
         columns,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
@@ -385,7 +452,7 @@ export default function StandardIndex() {
                 <div className="sm:flex-auto">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dokumen Standar Mutu</h1>
                     <p className="mt-2 text-sm text-gray-700 dark:text-gray-400">
-                        Daftar seluruh dokumen SN-Dikti dan Standar Institusi untuk penjaminan mutu jenjang perguruan tinggi.
+                        Pilih periode terlebih dahulu, lalu lihat seluruh dokumen SN-Dikti dan Standar Institusi yang terdaftar pada periode tersebut.
                     </p>
                 </div>
                 {canManageStandards && (
@@ -407,8 +474,104 @@ export default function StandardIndex() {
                 </div>
             )}
 
+            <div className="mt-6">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Daftar Periode</h2>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Klik salah satu periode untuk menampilkan daftar standar yang terkait.
+                        </p>
+                    </div>
+                    <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        {periodGroups.length} periode
+                    </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {loading ? (
+                        <div className="col-span-full rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                            Memuat daftar periode...
+                        </div>
+                    ) : periodGroups.length === 0 ? (
+                        <div className="col-span-full rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                            Belum ada periode standar yang tersedia.
+                        </div>
+                    ) : (
+                        periodGroups.map(({ period, items }) => {
+                            const isSelected = selectedPeriod === period;
+                            const publishedCount = items.filter((item) => item.status === 'TERBIT').length;
+                            const periodStatus = getPeriodStatus(items);
+
+                            return (
+                                <button
+                                    key={period}
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedPeriod(period);
+                                        setGlobalFilter('');
+                                        table.setPageIndex(0);
+                                    }}
+                                    className={`rounded-2xl border px-5 py-4 text-left transition ${
+                                        isSelected
+                                            ? 'border-blue-500 bg-blue-50 shadow-sm ring-2 ring-blue-200 dark:border-blue-400 dark:bg-blue-950/30 dark:ring-blue-900'
+                                            : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-blue-700 dark:hover:bg-gray-800'
+                                    }`}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                                                Periode
+                                            </div>
+                                            <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+                                                {period}
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-2">
+                                            <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                                periodStatus === 'Dilaksanakan'
+                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                            }`}>
+                                                {periodStatus}
+                                            </span>
+                                            {isSelected && (
+                                                <span className="inline-flex rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white">
+                                                    Dipilih
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                                        <span>{items.length} standar</span>
+                                        <span>{publishedCount} terbit</span>
+                                    </div>
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+
             {/* Table Controls (Search & View) */}
             <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="w-full sm:w-auto">
+                    <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
+                        <span className="font-semibold text-gray-900 dark:text-white">Periode aktif:</span>{' '}
+                        {selectedPeriod || '-'}
+                        <span className="ml-2 text-gray-500 dark:text-gray-400">
+                            ({filteredStandards.length} standar)
+                        </span>
+                        {selectedPeriod && (
+                            <span className={`ml-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                getPeriodStatus(filteredStandards) === 'Dilaksanakan'
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                            }`}>
+                                {getPeriodStatus(filteredStandards)}
+                            </span>
+                        )}
+                    </div>
+                </div>
                 <div className="w-full sm:max-w-xs relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Icon icon={Icons.search} width={16} className="text-gray-400" />
@@ -417,7 +580,8 @@ export default function StandardIndex() {
                         type="text"
                         value={globalFilter ?? ''}
                         onChange={e => setGlobalFilter(e.target.value)}
-                        placeholder="Cari standar..."
+                        placeholder={selectedPeriod ? `Cari standar periode ${selectedPeriod}...` : 'Pilih periode terlebih dahulu'}
+                        disabled={!selectedPeriod}
                         className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     />
                 </div>
@@ -434,7 +598,9 @@ export default function StandardIndex() {
                                             {headerGroup.headers.map(header => (
                                                 <th
                                                     key={header.id}
-                                                    className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400 group cursor-pointer"
+                                                    className={`px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400 group cursor-pointer ${
+                                                        header.id === 'actions' ? 'w-1 whitespace-nowrap' : ''
+                                                    }`}
                                                     onClick={header.column.getToggleSortingHandler()}
                                                 >
                                                     <div className="flex items-center gap-2">
@@ -469,7 +635,12 @@ export default function StandardIndex() {
                                         table.getRowModel().rows.map(row => (
                                             <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                                                 {row.getVisibleCells().map(cell => (
-                                                    <td key={cell.id} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                    <td
+                                                        key={cell.id}
+                                                        className={`px-6 py-4 text-sm text-gray-900 ${
+                                                            cell.column.id === 'actions' ? 'w-1 whitespace-normal text-center' : 'whitespace-nowrap'
+                                                        }`}
+                                                    >
                                                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                                     </td>
                                                 ))}

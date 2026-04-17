@@ -8,18 +8,37 @@ use App\Modules\Core\Models\ActivityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
+    private function denyUnless(Request $request, string $permission, string $message): ?JsonResponse
+    {
+        if (! $request->user()?->can($permission)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        return null;
+    }
+
     /**
      * GET /api/v1/users
      */
     public function index(Request $request): JsonResponse
     {
+        if ($response = $this->denyUnless($request, 'user.view', 'Anda tidak memiliki hak akses untuk melihat data pengguna.')) {
+            return $response;
+        }
+
         $users = User::with('unit', 'roles')
                      ->when($request->get('unit_id'), fn($q, $v) => $q->where('unit_id', $v))
                      ->when($request->get('role'), fn($q, $v) => $q->role($v))
+                     ->when($request->has('is_active') && $request->get('is_active') !== '', fn($q) => $q->where('is_active', filter_var($request->get('is_active'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)))
                      ->when($request->get('search'), fn($q, $v) => $q->where(function ($sub) use ($v) {
                          $sub->where('name', 'like', "%{$v}%")
                              ->orWhere('email', 'like', "%{$v}%")
@@ -30,7 +49,12 @@ class UserController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => $users,
+            'data'   => [
+                'users' => $users,
+                'roles' => Role::query()
+                    ->orderBy('name')
+                    ->get(['id', 'name']),
+            ],
         ]);
     }
 
@@ -39,6 +63,10 @@ class UserController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        if ($response = $this->denyUnless($request, 'user.create', 'Anda tidak memiliki hak akses untuk membuat pengguna.')) {
+            return $response;
+        }
+
         $validated = $request->validate([
             'nidn_npk' => 'nullable|string|max:20|unique:users,nidn_npk',
             'name'     => 'required|string|max:200',
@@ -50,7 +78,7 @@ class UserController extends Controller
         ]);
 
         // Generate a temporary secure password
-        $tempPassword = \Str::random(12);
+        $tempPassword = Str::random(12);
 
         $user = User::create([
             ...$validated,
@@ -79,6 +107,10 @@ class UserController extends Controller
      */
     public function show(int $id): JsonResponse
     {
+        if ($response = $this->denyUnless(request(), 'user.view', 'Anda tidak memiliki hak akses untuk melihat data pengguna.')) {
+            return $response;
+        }
+
         $user = User::with('unit', 'roles', 'permissions')->findOrFail($id);
 
         return response()->json([
@@ -93,6 +125,10 @@ class UserController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
+        if ($response = $this->denyUnless($request, 'user.update', 'Anda tidak memiliki hak akses untuk memperbarui pengguna.')) {
+            return $response;
+        }
+
         $user = User::findOrFail($id);
         $oldData = $user->toArray();
 
@@ -131,6 +167,10 @@ class UserController extends Controller
      */
     public function destroy(int $id): JsonResponse
     {
+        if ($response = $this->denyUnless(request(), 'user.delete', 'Anda tidak memiliki hak akses untuk menonaktifkan pengguna.')) {
+            return $response;
+        }
+
         $user = User::findOrFail($id);
 
         // Cannot delete yourself
@@ -143,7 +183,6 @@ class UserController extends Controller
         }
 
         ActivityLog::record('DELETE', User::class, $user->id, $user->toArray(), null);
-        $user->tokens()->delete();
         $user->delete();
 
         return response()->json([
@@ -159,6 +198,10 @@ class UserController extends Controller
      */
     public function forceReset(int $id): JsonResponse
     {
+        if ($response = $this->denyUnless(request(), 'user.update', 'Anda tidak memiliki hak akses untuk mengirim reset password.')) {
+            return $response;
+        }
+
         $user = User::findOrFail($id);
 
         Password::sendResetLink(['email' => $user->email]);

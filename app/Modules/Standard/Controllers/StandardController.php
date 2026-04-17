@@ -26,7 +26,7 @@ class StandardController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || ! ($user->hasRole('SuperAdmin') || $user->hasRole('Auditor') || $user->can('standard.publish'))) {
+        if (! $user || ! ($user->hasRole('SuperAdmin') || $user->can('standard.publish'))) {
             return response()->json([
                 'status' => 'error',
                 'message' => $message,

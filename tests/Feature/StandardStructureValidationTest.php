@@ -25,8 +25,9 @@ class StandardStructureValidationTest extends TestCase
     private function actingAsLpmAdmin(): User
     {
         $permission = Permission::firstOrCreate(['name' => 'standard.update', 'guard_name' => 'web']);
+        $publishPermission = Permission::firstOrCreate(['name' => 'standard.publish', 'guard_name' => 'web']);
         $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
-        $role->givePermissionTo($permission);
+        $role->givePermissionTo([$permission, $publishPermission]);
 
         $user = User::factory()->create();
         $user->assignRole($role);

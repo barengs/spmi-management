@@ -306,7 +306,7 @@ export default function StandardReviewPage() {
         const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
 
         return {
-            canAuditReview: hasRole('SuperAdmin') || hasRole('Auditor') || (user?.permissions || []).includes('standard.publish'),
+            canAuditReview: hasRole('SuperAdmin') || (user?.permissions || []).includes('standard.publish'),
             canFinalizeReview: hasRole('SuperAdmin') || hasRole('Pimpinan'),
         };
     }, [user]);
@@ -334,7 +334,7 @@ export default function StandardReviewPage() {
         }
 
         if (!userAccess.canAuditReview) {
-            return 'Aksi review node hanya tampil untuk Auditor atau SuperAdmin.';
+            return 'Aksi review node hanya tampil untuk admin pengelola standar atau SuperAdmin.';
         }
 
         if (standard?.status !== 'WAITING_APPROVAL') {

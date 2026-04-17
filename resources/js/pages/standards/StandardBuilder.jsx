@@ -226,6 +226,8 @@ export default function StandardBuilder() {
     const { id } = useParams();
     const navigate = useNavigate();
     const user = useSelector((state) => state.auth.user);
+    const roles = user?.roles || [];
+    const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
     const [standard, setStandard] = useState(null);
     const [tree, setTree] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -248,7 +250,7 @@ export default function StandardBuilder() {
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedIds, setExpandedIds] = useState(new Set());
     const nodeRefs = useRef({});
-    const canManageStructure = user?.roles?.includes('SuperAdmin')
+    const canManageStructure = hasRole('SuperAdmin')
         || user?.permissions?.includes('standard.update')
         || user?.permissions?.includes('standard.delete');
 

@@ -12,6 +12,9 @@ import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
 import StandardReviewPage from '../pages/standards/StandardReviewPage';
 import PermissionMatrixPage from '../pages/settings/PermissionMatrixPage';
+import UserManagementPage from '../pages/settings/UserManagementPage';
+import PtkPage from '../pages/ptk/PtkPage';
+import ReportPage from '../pages/report/ReportPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -35,8 +38,9 @@ const PermissionRoute = ({ permission, children }) => {
     const user = useSelector((state) => state.auth.user);
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
+    const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
 
-    if (roles.includes('SuperAdmin') || permissions.includes(permission)) {
+    if (hasRole('SuperAdmin') || permissions.includes(permission)) {
         return children;
     }
 
@@ -93,6 +97,30 @@ export default function MainApp() {
                             element={
                                 <PermissionRoute permission="audit.score.update">
                                     <StandardAuditReviewPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="ptk"
+                            element={
+                                <PermissionRoute permission="ptk.view">
+                                    <PtkPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="report"
+                            element={
+                                <PermissionRoute permission="report.view">
+                                    <ReportPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="settings/users"
+                            element={
+                                <PermissionRoute permission="user.view">
+                                    <UserManagementPage />
                                 </PermissionRoute>
                             }
                         />
