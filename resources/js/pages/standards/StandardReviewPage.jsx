@@ -303,11 +303,10 @@ export default function StandardReviewPage() {
 
     const userAccess = useMemo(() => {
         const roles = user?.roles || [];
-        const permissions = user?.permissions || [];
         const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
 
         return {
-            canAuditReview: hasRole('SuperAdmin') || hasRole('Auditor') || permissions.includes('standard.publish'),
+            canAuditReview: hasRole('SuperAdmin') || hasRole('Auditor') || (user?.permissions || []).includes('standard.publish'),
             canFinalizeReview: hasRole('SuperAdmin') || hasRole('Pimpinan'),
         };
     }, [user]);

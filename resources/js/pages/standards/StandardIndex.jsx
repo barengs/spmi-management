@@ -270,66 +270,91 @@ export default function StandardIndex() {
                 const item = info.row.original;
                 const isLockedForAdmin = item.status === 'WAITING_APPROVAL' || item.status === 'TERBIT';
                 const pendingAuditCount = pendingAuditCounts[item.id] || 0;
+                const canShowStructure = !isPimpinan || item.status !== 'DRAFT';
+                const showStartReview = canReviewAudit && pendingAuditCount > 0;
+                const showDetailReview = !showStartReview && canReviewStandards && item.status === 'WAITING_APPROVAL';
+                const showSubmit = !showStartReview
+                    && !showDetailReview
+                    && canManageStandards
+                    && !isPimpinan
+                    && (item.status === 'DRAFT' || item.status === 'REVISI');
 
                 return (
-                    <div className="flex space-x-3 justify-end text-sm font-medium items-center flex-wrap gap-y-2">
-                        {/* Selalu tersedia: Builder dan Salin */}
-                        {(!isPimpinan || item.status !== 'DRAFT') && (
+                    <div className="grid min-w-[22rem] grid-cols-3 items-start justify-items-center gap-3 text-sm font-medium">
+                        {canShowStructure ? (
                             <Link
                                 to={`/standards/${item.id}/builder`}
-                                className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                className="rounded px-2 py-1 text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
                             >
                                 Struktur
                             </Link>
-                        )}
-                        {canManageStandards && !isPimpinan && (
-                            <button onClick={() => handleOpenCloneModal(item)} className="text-teal-600 hover:text-teal-900 dark:text-teal-400 dark:hover:text-teal-300" title="Salin ke periode baru">
-                                Salin
-                            </button>
-                        )}
-                        {canReviewAudit && pendingAuditCount > 0 && (
-                            <Link
-                                to={`/standards/${item.id}/review`}
-                                className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
-                            >
-                                Mulai Review ({pendingAuditCount})
-                            </Link>
+                        ) : (
+                            <span className="invisible rounded px-2 py-1">Struktur</span>
                         )}
 
-                        {/* LPM-Admin Actions */}
-                        {canManageStandards && !isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI') && (
-                            <button onClick={() => handleSubmitForApproval(item.id)} className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 font-bold bg-blue-50 dark:bg-blue-900/40 px-2 py-1 rounded" title="Ajukan Review ke Pimpinan">
-                                Ajukan
-                            </button>
-                        )}
+                        <div className="flex min-h-9 items-center justify-center">
+                            {showStartReview && (
+                                <Link
+                                    to={`/standards/${item.id}/review`}
+                                    className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
+                                >
+                                    Mulai Review ({pendingAuditCount})
+                                </Link>
+                            )}
+                            {showDetailReview && (
+                                <Link
+                                    to={`/standards/${item.id}/review`}
+                                    className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
+                                >
+                                    Detail Review
+                                </Link>
+                            )}
+                            {showSubmit && (
+                                <button
+                                    onClick={() => handleSubmitForApproval(item.id)}
+                                    className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
+                                    title="Ajukan Review ke Pimpinan"
+                                >
+                                    Ajukan
+                                </button>
+                            )}
+                            {!showStartReview && !showDetailReview && !showSubmit && (
+                                <span className="invisible rounded px-2 py-1">Aksi</span>
+                            )}
+                        </div>
 
-                        {canManageStandards && !isPimpinan && (
-                            <>
+                        <div className="flex min-h-9 max-w-[10rem] flex-wrap items-center justify-center gap-2">
+                            {canManageStandards && !isPimpinan && !isLockedForAdmin && (
+                                <button
+                                    onClick={() => handleOpenCloneModal(item)}
+                                    className="rounded px-2 py-1 text-teal-600 transition hover:bg-teal-50 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
+                                    title="Salin ke periode baru"
+                                >
+                                    Salin
+                                </button>
+                            )}
+                            {canManageStandards && !isPimpinan && (
                                 <button
                                     onClick={() => handleOpenModal(item)}
                                     disabled={isLockedForAdmin}
-                                    className={`transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300'}`}
+                                    className={`rounded px-2 py-1 transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-blue-600 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-400 dark:hover:bg-blue-950/40 dark:hover:text-blue-300'}`}
                                 >
                                     Edit
                                 </button>
+                            )}
+                            {canManageStandards && !isPimpinan && (
                                 <button
                                     onClick={() => handleDelete(item.id)}
                                     disabled={isLockedForAdmin}
-                                    className={`transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300'}`}
+                                    className={`rounded px-2 py-1 transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-red-600 hover:bg-red-50 hover:text-red-900 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300'}`}
                                 >
                                     Hapus
                                 </button>
-                            </>
-                        )}
-
-                        {canReviewStandards && item.status === 'WAITING_APPROVAL' && (
-                            <Link
-                                to={`/standards/${item.id}/review`}
-                                className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
-                            >
-                                Detail Review
-                            </Link>
-                        )}
+                            )}
+                            {!(canManageStandards && !isPimpinan) && (
+                                <span className="invisible rounded px-2 py-1">Kelola</span>
+                            )}
+                        </div>
                     </div>
                 );
             }

@@ -1,4 +1,4 @@
-# E-SPMI Enterprise
+# E-SPMI - Universitas Islam Madura
 
 > **Sistem Penjaminan Mutu Internal** - Internal Quality Assurance System untuk institusi pendidikan tinggi.
 
