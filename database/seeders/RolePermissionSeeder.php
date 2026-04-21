@@ -81,6 +81,10 @@ class RolePermissionSeeder extends Seeder
             'report.view',
         ]);
 
+        // Lead Auditor — same capabilities as Auditor, different role label only
+        $leadAuditor = Role::firstOrCreate(['name' => 'Lead Auditor', 'guard_name' => 'web']);
+        $leadAuditor->syncPermissions($auditor->permissions);
+
         // Auditee (Kaprodi) — upload evidence, respond to PTK
         $auditee = Role::firstOrCreate(['name' => 'Auditee', 'guard_name' => 'web']);
         $auditee->syncPermissions([

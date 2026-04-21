@@ -52,6 +52,14 @@ class UnitSeeder extends Seeder
             ['name' => 'S1 Sistem Informasi', 'level' => 'department', 'parent_id' => $fti->id, 'is_active' => true]
         );
         Unit::firstOrCreate(
+            ['code' => 'TEKOM-S1'],
+            ['name' => 'S1 Teknologi Komputer', 'level' => 'department', 'parent_id' => $fti->id, 'is_active' => true]
+        );
+        Unit::firstOrCreate(
+            ['code' => 'BD-S1'],
+            ['name' => 'S1 Bisnis Digital', 'level' => 'department', 'parent_id' => $fti->id, 'is_active' => true]
+        );
+        Unit::firstOrCreate(
             ['code' => 'MNJ-S1'],
             ['name' => 'S1 Manajemen', 'level' => 'department', 'parent_id' => $fe->id, 'is_active' => true]
         );
@@ -60,8 +68,28 @@ class UnitSeeder extends Seeder
             ['name' => 'S1 Akuntansi', 'level' => 'department', 'parent_id' => $fe->id, 'is_active' => true]
         );
         Unit::firstOrCreate(
+            ['code' => 'EKO-S1'],
+            ['name' => 'S1 Ekonomi Pembangunan', 'level' => 'department', 'parent_id' => $fe->id, 'is_active' => true]
+        );
+        Unit::firstOrCreate(
+            ['code' => 'KWB-S1'],
+            ['name' => 'S1 Kewirausahaan', 'level' => 'department', 'parent_id' => $fe->id, 'is_active' => true]
+        );
+        Unit::firstOrCreate(
             ['code' => 'PGSD-S1'],
             ['name' => 'S1 PGSD', 'level' => 'department', 'parent_id' => $fk->id, 'is_active' => true]
+        );
+        Unit::firstOrCreate(
+            ['code' => 'PBI-S1'],
+            ['name' => 'S1 Pendidikan Bahasa Inggris', 'level' => 'department', 'parent_id' => $fk->id, 'is_active' => true]
+        );
+        Unit::firstOrCreate(
+            ['code' => 'PMTK-S1'],
+            ['name' => 'S1 Pendidikan Matematika', 'level' => 'department', 'parent_id' => $fk->id, 'is_active' => true]
+        );
+        Unit::firstOrCreate(
+            ['code' => 'PBIO-S1'],
+            ['name' => 'S1 Pendidikan Biologi', 'level' => 'department', 'parent_id' => $fk->id, 'is_active' => true]
         );
 
         // ------------------------------------------------------------------

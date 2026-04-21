@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
@@ -47,6 +48,7 @@ function reviewBadge(reviewStatus) {
 }
 
 export default function ExecutionRepositoryPage() {
+    const { id: routeStandardId } = useParams();
     const user = useSelector((state) => state.auth.user);
     const [standards, setStandards] = useState([]);
     const [selectedStandardId, setSelectedStandardId] = useState('');
@@ -74,7 +76,9 @@ export default function ExecutionRepositoryPage() {
                 const activeStandards = response.data.data || [];
                 setStandards(activeStandards);
 
-                if (activeStandards.length > 0) {
+                if (routeStandardId) {
+                    setSelectedStandardId(String(routeStandardId));
+                } else if (activeStandards.length > 0) {
                     setSelectedStandardId(String(activeStandards[0].id));
                 }
             } catch (error) {
@@ -83,7 +87,7 @@ export default function ExecutionRepositoryPage() {
         };
 
         fetchStandards();
-    }, []);
+    }, [routeStandardId]);
 
     useEffect(() => {
         if (!selectedStandardId) {
@@ -261,32 +265,34 @@ export default function ExecutionRepositoryPage() {
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-sky-700">
                     <Icon icon={Icons.execution} width={14} />
-                    Sprint 6
+                    Dokumen Auditee
                 </div>
                 <h1 className="mt-4 text-2xl font-semibold text-gray-900">Repository Bukti</h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                    Kelola bukti indikator dengan upload file, tautan dokumen, dan preview PDF langsung di browser.
+                    Upload bukti auditee mengikuti indikator yang sudah ditetapkan LPMI pada standar terkait, dengan pilihan file atau tautan dokumen dan preview PDF langsung di browser.
                 </p>
             </section>
 
             <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
                 <aside className="space-y-4 rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <div>
-                        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
-                            Standar
-                        </label>
-                        <select
-                            value={selectedStandardId}
-                            onChange={(event) => setSelectedStandardId(event.target.value)}
-                            className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                        >
-                            {standards.map((standard) => (
-                                <option key={standard.id} value={standard.id}>
-                                    {standard.name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    {!routeStandardId && (
+                        <div>
+                            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                Standar
+                            </label>
+                            <select
+                                value={selectedStandardId}
+                                onChange={(event) => setSelectedStandardId(event.target.value)}
+                                className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                            >
+                                {standards.map((standard) => (
+                                    <option key={standard.id} value={standard.id}>
+                                        {standard.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     <div>
                         <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
@@ -363,8 +369,8 @@ export default function ExecutionRepositoryPage() {
                                     </div>
                                     <div>
                                         <label className="mb-2 block text-sm font-medium text-gray-700">Catatan</label>
-                                        <input
-                                            type="text"
+                                        <textarea
+                                            rows="3"
                                             value={notes}
                                             onChange={(event) => setNotes(event.target.value)}
                                             className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"

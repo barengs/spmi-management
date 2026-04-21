@@ -1,213 +1,554 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
+import TablePagination from '../../components/ui/TablePagination';
 
-const statusStyles = {
-    ALL: 'bg-gray-100 text-gray-700 border-gray-200',
-    PENDING: 'bg-amber-100 text-amber-800 border-amber-200',
-    REJECTED: 'bg-rose-100 text-rose-800 border-rose-200',
-    ACCEPTED: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+const initialFacultyForm = {
+    name: '',
+    code: '',
 };
 
-const statusLabels = {
-    ALL: 'Semua',
-    PENDING: 'Dipending',
-    REJECTED: 'Ditolak',
-    ACCEPTED: 'Diterima',
-};
+function walkMetrics(nodes, standard, rows = [], ancestors = []) {
+    nodes.forEach((node) => {
+        const nextAncestors = [...ancestors, node];
 
-function formatDate(value) {
-    if (!value) {
-        return '-';
-    }
+        if (node.type === 'Indicator') {
+            const statement = [...ancestors].reverse().find((item) => item.type === 'Statement') || null;
+            rows.push({
+                id: node.id,
+                standard,
+                indicator: node,
+                statement,
+            });
+        }
 
-    return new Date(value).toLocaleString('id-ID', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
+        if (node.children_recursive?.length) {
+            walkMetrics(node.children_recursive, standard, rows, nextAncestors);
+        }
     });
-}
 
-function formatBytes(bytes) {
-    if (!bytes) {
-        return '-';
-    }
-
-    if (bytes < 1024) {
-        return `${bytes} B`;
-    }
-
-    if (bytes < 1024 * 1024) {
-        return `${(bytes / 1024).toFixed(1)} KB`;
-    }
-
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return rows;
 }
 
 export default function EvidenceAuditPage() {
-    const [evidences, setEvidences] = useState([]);
-    const [statusFilter, setStatusFilter] = useState('ALL');
+    const PAGE_SIZE = 10;
+    const [units, setUnits] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [isFacultyModalOpen, setIsFacultyModalOpen] = useState(false);
+    const [facultyForm, setFacultyForm] = useState(initialFacultyForm);
+    const [savingFaculty, setSavingFaculty] = useState(false);
+    const [viewMode, setViewMode] = useState('pairs');
+    const [selectedFaculty, setSelectedFaculty] = useState(null);
+    const [selectedProdi, setSelectedProdi] = useState(null);
+    const [requirementRows, setRequirementRows] = useState([]);
+    const [activeRequirementTab, setActiveRequirementTab] = useState('DEKAN');
+    const [pairsPage, setPairsPage] = useState(1);
+    const [requirementsPage, setRequirementsPage] = useState(1);
+    const [pairsSearch, setPairsSearch] = useState('');
+    const [pairsFacultyFilter, setPairsFacultyFilter] = useState('ALL');
+    const [requirementsSearch, setRequirementsSearch] = useState('');
+    const [requirementsStandardFilter, setRequirementsStandardFilter] = useState('ALL');
 
-    const fetchEvidences = async () => {
+    const fetchPageData = async () => {
         try {
             setLoading(true);
-            const response = await api.get('/evidences/audit');
-            setEvidences(response.data.data || []);
+
+            const [unitsResponse, standardsResponse] = await Promise.all([
+                api.get('/units/flat'),
+                api.get('/standards'),
+            ]);
+
+            const fetchedUnits = unitsResponse.data.data || [];
+            const standards = standardsResponse.data.data || [];
+
+            setUnits(fetchedUnits);
+
+            const treeResponses = await Promise.all(
+                standards.map(async (standard) => {
+                    const treeResponse = await api.get(`/standards/${standard.id}/metrics/tree`);
+                    return {
+                        standard,
+                        tree: treeResponse.data.data || [],
+                    };
+                })
+            );
+
+            const indicatorRows = treeResponses.flatMap(({ standard, tree }) => walkMetrics(tree, standard));
+
+            const targetsByMetricId = new Map();
+
+            await Promise.all(
+                indicatorRows.map(async (row) => {
+                    const targetResponse = await api.get(`/metrics/${row.indicator.id}/targets`);
+                    targetsByMetricId.set(String(row.indicator.id), targetResponse.data.data || []);
+                })
+            );
+
+            const nextRows = indicatorRows.map((row, index) => {
+                const targets = targetsByMetricId.get(String(row.indicator.id)) || [];
+                const targetSummary = targets.length > 0
+                    ? targets
+                        .map((target) => {
+                            const value = [target.target_value, target.measure_unit].filter(Boolean).join(' ');
+                            return value || target.data_source || '-';
+                        })
+                        .join('; ')
+                    : '-';
+
+                return {
+                    no: index + 1,
+                    standardName: row.standard.name,
+                    iku: row.indicator.iku || '-',
+                    ikt: row.indicator.ikt || '-',
+                    sasaranMutu: row.statement?.content || '-',
+                    indikator: row.indicator.content || '-',
+                    targetSasaran: targetSummary,
+                    pj: row.indicator.pj || 'Kaprodi',
+                };
+            });
+
+            setRequirementRows(nextRows);
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Daftar audit bukti gagal dimuat.');
+            toast.error(error.response?.data?.message || 'Halaman audit gagal dimuat.');
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchEvidences();
+        fetchPageData();
     }, []);
 
-    const filteredEvidences = useMemo(() => {
-        if (statusFilter === 'ALL') {
-            return evidences;
+    const facultyRows = useMemo(() => (
+        units
+            .filter((unit) => unit.level === 'faculty')
+            .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'))
+    ), [units]);
+
+    const facultyProdiRows = useMemo(() => (
+        facultyRows.flatMap((faculty) => (
+            units
+                .filter((unit) => unit.level === 'department' && String(unit.parent_id) === String(faculty.id))
+                .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'))
+                .map((prodi) => ({
+                    faculty,
+                    prodi,
+                }))
+        ))
+    ), [facultyRows, units]);
+
+    const openFacultyModal = () => {
+        setFacultyForm(initialFacultyForm);
+        setIsFacultyModalOpen(true);
+    };
+
+    const closeFacultyModal = () => {
+        if (savingFaculty) {
+            return;
         }
 
-        return evidences.filter((evidence) => evidence.review_status === statusFilter);
-    }, [evidences, statusFilter]);
+        setIsFacultyModalOpen(false);
+        setFacultyForm(initialFacultyForm);
+    };
 
-    const counts = useMemo(() => ({
-        ALL: evidences.length,
-        PENDING: evidences.filter((item) => item.review_status === 'PENDING').length,
-        REJECTED: evidences.filter((item) => item.review_status === 'REJECTED').length,
-        ACCEPTED: evidences.filter((item) => item.review_status === 'ACCEPTED').length,
-    }), [evidences]);
+    const handleCreateFaculty = async (event) => {
+        event.preventDefault();
+
+        if (!facultyForm.name.trim()) {
+            toast.warning('Nama fakultas wajib diisi.');
+            return;
+        }
+
+        setSavingFaculty(true);
+
+        try {
+            const response = await api.post('/units', {
+                name: facultyForm.name.trim(),
+                code: facultyForm.code.trim() || null,
+                level: 'faculty',
+                parent_id: null,
+                is_active: true,
+            });
+
+            toast.success(response.data.message || 'Fakultas berhasil ditambahkan.');
+            closeFacultyModal();
+            await fetchPageData();
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Fakultas gagal ditambahkan.');
+        } finally {
+            setSavingFaculty(false);
+        }
+    };
+
+    const openRequirementTable = (faculty, prodi) => {
+        setSelectedFaculty(faculty);
+        setSelectedProdi(prodi);
+        setActiveRequirementTab('DEKAN');
+        setViewMode('requirements');
+    };
+
+    const goBackToPairs = () => {
+        setSelectedFaculty(null);
+        setSelectedProdi(null);
+        setViewMode('pairs');
+    };
+
+    const titleConfig = {
+        pairs: {
+            title: 'Daftar Fakultas dan Prodi',
+            description: 'Tampilan awal audit menampilkan tabel gabungan fakultas dan prodi. Auditor langsung membuka detail borang dari kombinasi fakultas dan prodi yang dipilih.',
+        },
+        requirements: {
+            title: `Daftar Dokumen ${selectedFaculty?.name || '-'} / ${selectedProdi?.name || '-'}`.trim(),
+            description: 'Tabel berikut berisi seluruh indikator dan target sasaran yang harus dipenuhi oleh prodi terpilih.',
+        },
+    };
+
+    const pageMeta = titleConfig[viewMode];
+    const filteredFacultyProdiRows = useMemo(() => (
+        facultyProdiRows.filter(({ faculty, prodi }) => (
+            (pairsFacultyFilter === 'ALL' || String(faculty.id) === pairsFacultyFilter)
+            && `${faculty.name} ${faculty.code || ''} ${prodi.name} ${prodi.code || ''}`.toLowerCase().includes(pairsSearch.trim().toLowerCase())
+        ))
+    ), [facultyProdiRows, pairsFacultyFilter, pairsSearch]);
+
+    const standardOptions = useMemo(() => (
+        Array.from(new Set(requirementRows.map((row) => row.standardName))).sort((left, right) => left.localeCompare(right, 'id-ID'))
+    ), [requirementRows]);
+
+    const filteredRequirementRows = useMemo(() => (
+        requirementRows
+            .filter((row) => row.pj === (activeRequirementTab === 'DEKAN' ? 'Dekan' : 'Kaprodi'))
+            .filter((row) => requirementsStandardFilter === 'ALL' || row.standardName === requirementsStandardFilter)
+            .filter((row) => (
+                `${row.standardName} ${row.iku} ${row.ikt} ${row.sasaranMutu} ${row.indikator} ${row.targetSasaran} ${row.pj}`.toLowerCase().includes(requirementsSearch.trim().toLowerCase())
+            ))
+            .map((row, index) => ({
+                ...row,
+                no: index + 1,
+            }))
+    ), [activeRequirementTab, requirementRows, requirementsSearch, requirementsStandardFilter]);
+
+    const pairTotalPages = Math.max(1, Math.ceil(filteredFacultyProdiRows.length / PAGE_SIZE));
+    const paginatedFacultyProdiRows = useMemo(() => (
+        filteredFacultyProdiRows.slice((pairsPage - 1) * PAGE_SIZE, pairsPage * PAGE_SIZE)
+    ), [filteredFacultyProdiRows, pairsPage]);
+
+    const requirementTotalPages = Math.max(1, Math.ceil(filteredRequirementRows.length / PAGE_SIZE));
+    const paginatedRequirementRows = useMemo(() => (
+        filteredRequirementRows
+            .slice((requirementsPage - 1) * PAGE_SIZE, requirementsPage * PAGE_SIZE)
+            .map((row, index) => ({ ...row, no: (requirementsPage - 1) * PAGE_SIZE + index + 1 }))
+    ), [filteredRequirementRows, requirementsPage]);
+
+    useEffect(() => {
+        setPairsPage((current) => Math.min(current, pairTotalPages));
+    }, [pairTotalPages]);
+
+    useEffect(() => {
+        setPairsPage(1);
+    }, [pairsFacultyFilter, pairsSearch]);
+
+    useEffect(() => {
+        setRequirementsPage(1);
+    }, [activeRequirementTab, requirementsSearch, requirementsStandardFilter, selectedFaculty, selectedProdi]);
+
+    useEffect(() => {
+        setRequirementsPage((current) => Math.min(current, requirementTotalPages));
+    }, [requirementTotalPages]);
 
     return (
-        <div className="p-6 sm:p-8 space-y-6">
+        <div className="space-y-6 p-6 sm:p-8">
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-rose-700">
-                    <Icon icon={Icons.audit} width={14} />
-                    Audit Review
-                </div>
-                <h1 className="mt-4 text-2xl font-semibold text-gray-900">Daftar Review Bukti</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                    Seluruh bukti audit ditampilkan dalam satu tabel agar auditor bisa memfilter status dan masuk ke halaman review detail saat diperlukan.
-                </p>
-            </section>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-rose-700">
+                            <Icon icon={Icons.audit} width={14} />
+                            Audit Dokumen
+                        </div>
+                        <h1 className="mt-4 text-2xl font-semibold text-gray-900">{pageMeta.title}</h1>
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
+                            {pageMeta.description}
+                        </p>
+                    </div>
 
-            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-wrap gap-3">
-                    {['ALL', 'PENDING', 'REJECTED', 'ACCEPTED'].map((status) => {
-                        const isActive = statusFilter === status;
-
-                        return (
+                    <div className="flex flex-wrap gap-3">
+                        {viewMode !== 'pairs' && (
                             <button
-                                key={status}
                                 type="button"
-                                onClick={() => setStatusFilter(status)}
-                                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                                    isActive
-                                        ? statusStyles[status]
-                                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                                }`}
+                                onClick={goBackToPairs}
+                                className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
                             >
-                                <span>{statusLabels[status]}</span>
-                                <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs text-gray-700">
-                                    {counts[status]}
-                                </span>
+                                <Icon icon={Icons.back} width={16} />
+                                Kembali
                             </button>
-                        );
-                    })}
-                </div>
-            </section>
+                        )}
 
-            <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
-                <div className="border-b border-gray-200 px-6 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">
-                            Tabel Bukti Audit
-                        </h2>
-                        <span className="text-sm text-gray-500">
-                            {filteredEvidences.length} data
-                        </span>
+                        {viewMode === 'pairs' && (
+                            <button
+                                type="button"
+                                onClick={openFacultyModal}
+                                className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700"
+                            >
+                                <Icon icon={Icons.add} width={16} />
+                                Tambah Fakultas
+                            </button>
+                        )}
                     </div>
                 </div>
+            </section>
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Dokumen</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Standar</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Indicator</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Uploader</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Jenis</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Review Terakhir</th>
-                                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                            {loading ? (
+            {viewMode === 'pairs' && (
+                <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                    <div className="border-b border-gray-200 px-6 py-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Fakultas dan Prodi</h2>
+                            <span className="text-sm text-gray-500">{filteredFacultyProdiRows.length} baris</span>
+                        </div>
+                    </div>
+                    <div className="grid gap-4 border-b border-gray-200 px-6 py-4 md:grid-cols-[220px_minmax(0,1fr)]">
+                        <select
+                            value={pairsFacultyFilter}
+                            onChange={(event) => setPairsFacultyFilter(event.target.value)}
+                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
+                        >
+                            <option value="ALL">Semua Fakultas</option>
+                            {facultyRows.map((faculty) => (
+                                <option key={faculty.id} value={String(faculty.id)}>
+                                    {faculty.name}
+                                </option>
+                            ))}
+                        </select>
+                        <input
+                            type="text"
+                            value={pairsSearch}
+                            onChange={(event) => setPairsSearch(event.target.value)}
+                            placeholder="Filter faculty name, prodi name, atau kode..."
+                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
+                        />
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Memuat data audit...
-                                    </td>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Faculty Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Prodi Name</th>
+                                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Action</th>
                                 </tr>
-                            ) : filteredEvidences.length === 0 ? (
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-500">Memuat data fakultas dan prodi...</td>
+                                    </tr>
+                                ) : filteredFacultyProdiRows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-500">Belum ada data fakultas dan prodi.</td>
+                                    </tr>
+                                ) : (
+                                    paginatedFacultyProdiRows.map(({ faculty, prodi }) => (
+                                        <tr key={`${faculty.id}-${prodi.id}`} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{faculty.name}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-700">{prodi.name}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openRequirementTable(faculty, prodi)}
+                                                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                                                >
+                                                    <Icon icon={Icons.eye} width={16} />
+                                                    Lihat Detail
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
+            {viewMode === 'pairs' && (
+                <section className="-mt-4 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                    <TablePagination
+                        page={pairsPage}
+                        totalPages={pairTotalPages}
+                        totalItems={filteredFacultyProdiRows.length}
+                        pageSize={PAGE_SIZE}
+                        onPageChange={setPairsPage}
+                    />
+                </section>
+            )}
+
+            {viewMode === 'requirements' && (
+                <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                    <div className="border-b border-gray-200 px-6 py-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Kewajiban Indikator</h2>
+                            <span className="text-sm text-gray-500">{filteredRequirementRows.length} baris</span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setActiveRequirementTab('DEKAN')}
+                                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                    activeRequirementTab === 'DEKAN'
+                                        ? 'bg-rose-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                            >
+                                PJ Dekan
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveRequirementTab('KAPRODI')}
+                                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                    activeRequirementTab === 'KAPRODI'
+                                        ? 'bg-rose-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                            >
+                                PJ Kaprodi
+                            </button>
+                        </div>
+                    </div>
+                    <div className="grid gap-4 border-b border-gray-200 px-6 py-4 md:grid-cols-[260px_minmax(0,1fr)]">
+                        <select
+                            value={requirementsStandardFilter}
+                            onChange={(event) => setRequirementsStandardFilter(event.target.value)}
+                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
+                        >
+                            <option value="ALL">Semua Standar</option>
+                            {standardOptions.map((standardName) => (
+                                <option key={standardName} value={standardName}>
+                                    {standardName}
+                                </option>
+                            ))}
+                        </select>
+                        <input
+                            type="text"
+                            value={requirementsSearch}
+                            onChange={(event) => setRequirementsSearch(event.target.value)}
+                            placeholder="Filter standar, IKU, IKT, sasaran mutu, indikator, target..."
+                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
+                        />
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Tidak ada bukti audit untuk filter status ini.
-                                    </td>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">NO.</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Standar Mutu</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">IKU</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">IKT</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Sasaran Mutu</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Indikator</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Target Sasaran</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">PJ</th>
                                 </tr>
-                            ) : (
-                                filteredEvidences.map((evidence) => (
-                                    <tr key={evidence.id} className="align-top hover:bg-gray-50">
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm font-semibold text-gray-900">
-                                                {evidence.title || evidence.original_name || evidence.link_url}
-                                            </div>
-                                            <div className="mt-1 text-xs leading-5 text-gray-500">
-                                                {evidence.notes || '-'}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">
-                                            {evidence.metric?.standard?.name || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">
-                                            {evidence.metric?.content || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">
-                                            {evidence.uploader?.name || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">
-                                            {evidence.source_type === 'file'
-                                                ? `${evidence.original_name || 'File'} • ${formatBytes(evidence.size_bytes)}`
-                                                : 'Link Dokumen'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusStyles[evidence.review_status] || statusStyles.PENDING}`}>
-                                                {statusLabels[evidence.review_status] || evidence.review_status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">
-                                            {formatDate(evidence.reviewed_at)}
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <Link
-                                                to={`/audit/standards/${evidence.metric?.standard?.id}/review`}
-                                                className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700"
-                                            >
-                                                <Icon icon={Icons.audit} width={16} />
-                                                Review
-                                            </Link>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500">Memuat daftar kewajiban indikator...</td>
+                                    </tr>
+                                ) : filteredRequirementRows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500">
+                                            Belum ada indikator untuk tab {activeRequirementTab === 'DEKAN' ? 'PJ Dekan' : 'PJ Kaprodi'}.
                                         </td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                                ) : (
+                                    paginatedRequirementRows.map((row) => (
+                                        <tr key={`${row.standardName}-${row.no}`} className="align-top hover:bg-gray-50">
+                                            <td className="px-4 py-4 text-sm text-gray-700">{row.no}</td>
+                                            <td className="px-4 py-4 text-sm font-semibold text-gray-900">{row.standardName}</td>
+                                            <td className="px-4 py-4 text-sm text-gray-700">{row.iku}</td>
+                                            <td className="px-4 py-4 text-sm text-gray-700">{row.ikt}</td>
+                                            <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.sasaranMutu}</td>
+                                            <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.indikator}</td>
+                                            <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.targetSasaran}</td>
+                                            <td className="px-4 py-4 text-sm font-medium text-gray-700">{row.pj}</td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    <TablePagination
+                        page={requirementsPage}
+                        totalPages={requirementTotalPages}
+                        totalItems={filteredRequirementRows.length}
+                        pageSize={PAGE_SIZE}
+                        onPageChange={setRequirementsPage}
+                    />
+                </section>
+            )}
+
+            {isFacultyModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 px-4">
+                    <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Master Data</div>
+                                <h2 className="mt-2 text-xl font-semibold text-gray-900">Tambah Fakultas</h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeFacultyModal}
+                                className="rounded-full border border-gray-200 p-2 text-gray-500 transition hover:border-gray-300 hover:bg-gray-50"
+                            >
+                                <Icon icon={Icons.close} width={16} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateFaculty} className="mt-6 space-y-4">
+                            <label className="block space-y-2">
+                                <span className="text-sm font-medium text-gray-700">Nama Fakultas</span>
+                                <input
+                                    type="text"
+                                    value={facultyForm.name}
+                                    onChange={(event) => setFacultyForm((current) => ({ ...current, name: event.target.value }))}
+                                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-800 outline-none transition focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
+                                    placeholder="Contoh: Fakultas Teknik"
+                                />
+                            </label>
+
+                            <label className="block space-y-2">
+                                <span className="text-sm font-medium text-gray-700">Kode Fakultas</span>
+                                <input
+                                    type="text"
+                                    value={facultyForm.code}
+                                    onChange={(event) => setFacultyForm((current) => ({ ...current, code: event.target.value }))}
+                                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-800 outline-none transition focus:border-rose-300 focus:ring-4 focus:ring-rose-100"
+                                    placeholder="Contoh: FT"
+                                />
+                            </label>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={closeFacultyModal}
+                                    className="rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={savingFaculty}
+                                    className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <Icon icon={Icons.save} width={16} />
+                                    {savingFaculty ? 'Menyimpan...' : 'Simpan Fakultas'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-            </section>
+            )}
         </div>
     );
 }

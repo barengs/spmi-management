@@ -226,7 +226,16 @@ export default function StandardAuditReviewPage() {
                 <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm xl:col-span-2">
                     <div className="mb-4 flex items-center justify-between">
                         <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Dokumen</h2>
-                        <span className="text-xs text-gray-400">{evidences.length} item</span>
+                        <div className="flex items-center gap-3">
+                            <span className="text-xs text-gray-400">{evidences.length} item</span>
+                            <Link
+                                to="/audit"
+                                className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                            >
+                                <Icon icon={Icons.back} width={14} />
+                                Semua Dokumen
+                            </Link>
+                        </div>
                     </div>
 
                     {evidences.length === 0 ? (

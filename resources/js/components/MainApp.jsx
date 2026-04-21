@@ -6,13 +6,17 @@ import AppLayout from './layout/AppLayout';
 import LoginPage from '../pages/auth/LoginPage';
 import Dashboard from '../pages/Dashboard';
 import EvidenceAuditPage from '../pages/audit/EvidenceAuditPage';
+import AuditSchedulePage from '../pages/audit/AuditSchedulePage';
 import StandardAuditReviewPage from '../pages/audit/StandardAuditReviewPage';
+import BorangManagementPage from '../pages/borang/BorangManagementPage';
 import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
 import StandardReviewPage from '../pages/standards/StandardReviewPage';
 import PermissionMatrixPage from '../pages/settings/PermissionMatrixPage';
 import UserManagementPage from '../pages/settings/UserManagementPage';
+import FacultyMasterPage from '../pages/settings/FacultyMasterPage';
+import ProdiMasterPage from '../pages/settings/ProdiMasterPage';
 import PtkPage from '../pages/ptk/PtkPage';
 import ReportPage from '../pages/report/ReportPage';
 import { ToastContainer } from 'react-toastify';
@@ -73,14 +77,30 @@ export default function MainApp() {
                         }
                     >
                         <Route index element={<Dashboard />} />
+                        <Route
+                            path="borang"
+                            element={
+                                <PermissionRoute permission="standard.update">
+                                    <BorangManagementPage />
+                                </PermissionRoute>
+                            }
+                        />
                         <Route path="standards" element={<StandardIndex />} />
                         <Route path="standards/:id/builder" element={<StandardBuilder />} />
                         <Route path="standards/:id/review" element={<StandardReviewPage />} />
                         <Route
-                            path="execution"
+                            path="standards/:id/execution"
                             element={
                                 <PermissionRoute permission="evidence.upload">
                                     <ExecutionRepositoryPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="audit/schedules"
+                            element={
+                                <PermissionRoute permission="audit.view">
+                                    <AuditSchedulePage />
                                 </PermissionRoute>
                             }
                         />
@@ -121,6 +141,22 @@ export default function MainApp() {
                             element={
                                 <PermissionRoute permission="user.view">
                                     <UserManagementPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="settings/master/faculties"
+                            element={
+                                <PermissionRoute permission="user.view">
+                                    <FacultyMasterPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="settings/master/prodis"
+                            element={
+                                <PermissionRoute permission="user.view">
+                                    <ProdiMasterPage />
                                 </PermissionRoute>
                             }
                         />

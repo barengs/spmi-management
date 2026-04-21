@@ -70,6 +70,10 @@ class UnitController extends Controller
             }
         }
 
+        if ($response = $this->validateHierarchy($validated['level'], $validated['parent_id'] ?? null)) {
+            return $response;
+        }
+
         $unit = Unit::create($validated);
 
         return response()->json([
@@ -120,6 +124,13 @@ class UnitController extends Controller
             }
         }
 
+        $nextLevel = $validated['level'] ?? $unit->level;
+        $nextParentId = array_key_exists('parent_id', $validated) ? $validated['parent_id'] : $unit->parent_id;
+
+        if ($response = $this->validateHierarchy($nextLevel, $nextParentId)) {
+            return $response;
+        }
+
         $unit->update($validated);
 
         return response()->json([
@@ -152,5 +163,38 @@ class UnitController extends Controller
             'message' => 'Unit berhasil dihapus.',
             'data'    => null,
         ]);
+    }
+
+    private function validateHierarchy(string $level, ?int $parentId): ?JsonResponse
+    {
+        if ($level === 'faculty' && $parentId !== null) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Fakultas tidak boleh memiliki unit induk.',
+                'errors' => ['parent_id' => ['Fakultas harus berada di level root.']],
+            ], 422);
+        }
+
+        if ($level === 'department') {
+            if ($parentId === null) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Prodi wajib terhubung ke fakultas.',
+                    'errors' => ['parent_id' => ['Prodi harus memilih fakultas induk.']],
+                ], 422);
+            }
+
+            $parent = Unit::find($parentId);
+
+            if (! $parent || $parent->level !== 'faculty') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Prodi hanya dapat ditempatkan di bawah fakultas.',
+                    'errors' => ['parent_id' => ['Unit induk prodi harus berupa fakultas.']],
+                ], 422);
+            }
+        }
+
+        return null;
     }
 }

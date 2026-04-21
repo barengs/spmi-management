@@ -4,6 +4,7 @@ use App\Modules\Core\Controllers\AuthController;
 use App\Modules\Core\Controllers\RolePermissionController;
 use App\Modules\Core\Controllers\UnitController;
 use App\Modules\Core\Controllers\UserController;
+use App\Modules\Audit\Controllers\AuditScheduleController;
 use App\Modules\Evidence\Controllers\EvidenceController;
 use Illuminate\Support\Facades\Route;
 
@@ -101,6 +102,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/{id}/download',       [EvidenceController::class, 'download']);
             Route::delete('/{id}',             [EvidenceController::class, 'destroy']);
             Route::patch('/{id}/review',       [EvidenceController::class, 'review']);
+        });
+
+        Route::prefix('audit-schedules')->group(function () {
+            Route::get('/',                    [AuditScheduleController::class, 'index']);
+            Route::get('/metadata',            [AuditScheduleController::class, 'metadata']);
+            Route::post('/',                   [AuditScheduleController::class, 'store']);
+            Route::put('/{auditSchedule}',     [AuditScheduleController::class, 'update']);
+            Route::delete('/{auditSchedule}',  [AuditScheduleController::class, 'destroy']);
+            Route::patch('/{auditSchedule}/respond', [AuditScheduleController::class, 'respond']);
         });
 
     });

@@ -7,6 +7,12 @@ import Icon, { Icons } from '../../components/ui/Icon';
 
 import StandardTargetConfig from './StandardTargetConfig';
 
+const getNodeTypeLabel = (type) => {
+    if (type === 'Header') return 'Bab';
+    if (type === 'Statement') return 'Pasal';
+    return 'Indicator';
+};
+
 function highlightText(text, query) {
     const normalizedQuery = query.trim();
 
@@ -146,7 +152,7 @@ const MetricNode = ({
                     <div className="flex items-center gap-2 mb-1">
                         <Icon icon={getIcon()} width={20} />
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getTypeColor()}`}>
-                            {node.type}
+                            {getNodeTypeLabel(node.type)}
                         </span>
                         <span className="text-xs text-gray-400 dark:text-gray-500">ID: {node.id}</span>
                         <span className="text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ml-2 hidden sm:inline-block">Lihat Detail →</span>
@@ -154,6 +160,19 @@ const MetricNode = ({
                     <div className="text-sm font-medium text-gray-900 dark:text-white mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         {highlightText(node.content, searchQuery)}
                     </div>
+                    {node.type === 'Indicator' && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-semibold text-sky-700">
+                                IKU: {node.iku || '-'}
+                            </span>
+                            <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 font-semibold text-violet-700">
+                                IKT: {node.ikt || '-'}
+                            </span>
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
+                                PJ: {node.pj || '-'}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {!isTerbit && (
@@ -240,6 +259,9 @@ export default function StandardBuilder() {
         standard_id: id,
         parent_id: '',
         content: '',
+        iku: '',
+        ikt: '',
+        pj: '',
         type: 'Header',
     });
 
@@ -384,6 +406,9 @@ export default function StandardBuilder() {
             standard_id: id,
             parent_id: '',
             content: '',
+            iku: '',
+            ikt: '',
+            pj: '',
             type: 'Header',
         });
         setIsModalOpen(true);
@@ -401,6 +426,9 @@ export default function StandardBuilder() {
             standard_id: id,
             parent_id: parent.id,
             content: '',
+            iku: '',
+            ikt: '',
+            pj: nextType === 'Indicator' ? 'Kaprodi' : '',
             type: nextType,
         });
         setIsModalOpen(true);
@@ -413,6 +441,9 @@ export default function StandardBuilder() {
             standard_id: id,
             parent_id: node.parent_id || '',
             content: node.content,
+            iku: node.iku || '',
+            ikt: node.ikt || '',
+            pj: node.pj || '',
             type: node.type,
         });
         setIsModalOpen(true);
@@ -435,6 +466,11 @@ export default function StandardBuilder() {
         try {
             const payload = { ...formData };
             if (!payload.parent_id) payload.parent_id = null;
+            if (payload.type !== 'Indicator') {
+                payload.iku = null;
+                payload.ikt = null;
+                payload.pj = null;
+            }
 
             if (editingNode) {
                 await api.put(`/metrics/${editingNode.id}`, payload);
@@ -623,7 +659,7 @@ export default function StandardBuilder() {
                                         selectedIndicatorView.type === 'Statement' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200' :
                                             'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
                                         }`}>
-                                        {selectedIndicatorView.type}
+                                        {getNodeTypeLabel(selectedIndicatorView.type)}
                                     </span>
                                     <span className="ml-2 text-xs text-gray-500">ID: #{selectedIndicatorView.id}</span>
                                 </div>
@@ -633,6 +669,20 @@ export default function StandardBuilder() {
 
                                 {selectedIndicatorView.type === 'Indicator' && (
                                     <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                                        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                                            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">IKU</div>
+                                                <div className="mt-1 text-sm font-semibold text-sky-900">{selectedIndicatorView.iku || '-'}</div>
+                                            </div>
+                                            <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3">
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-700">IKT</div>
+                                                <div className="mt-1 text-sm font-semibold text-violet-900">{selectedIndicatorView.ikt || '-'}</div>
+                                            </div>
+                                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:col-span-2">
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">PJ</div>
+                                                <div className="mt-1 text-sm font-semibold text-emerald-900">{selectedIndicatorView.pj || '-'}</div>
+                                            </div>
+                                        </div>
                                         <div className="flex justify-between items-center mb-3">
                                             <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Target Jenjang</h4>
                                             <button
@@ -671,8 +721,8 @@ export default function StandardBuilder() {
                                         onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                     >
-                                        <option value="Header">Header (Folder/Kategori)</option>
-                                        <option value="Statement">Statement (Pernyataan Kinerja)</option>
+                                        <option value="Header">Bab (Folder/Kategori)</option>
+                                        <option value="Statement">Pasal (Pernyataan Kinerja)</option>
                                         <option value="Indicator">Indicator (Tolak Ukur Target)</option>
                                     </select>
                                 </div>
@@ -687,6 +737,42 @@ export default function StandardBuilder() {
                                         placeholder="Masukkan isi uraian di sini..."
                                     ></textarea>
                                 </div>
+                                {formData.type === 'Indicator' && (
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">IKU</label>
+                                            <input
+                                                type="text"
+                                                value={formData.iku}
+                                                onChange={(e) => setFormData({ ...formData, iku: e.target.value })}
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                placeholder="Contoh: IKU 1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">IKT</label>
+                                            <input
+                                                type="text"
+                                                value={formData.ikt}
+                                                onChange={(e) => setFormData({ ...formData, ikt: e.target.value })}
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                placeholder="Contoh: IKT 1.1"
+                                            />
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">PJ</label>
+                                            <select
+                                                value={formData.pj}
+                                                onChange={(e) => setFormData({ ...formData, pj: e.target.value })}
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                            >
+                                                <option value="">Pilih PJ</option>
+                                                <option value="Dekan">Dekan</option>
+                                                <option value="Kaprodi">Kaprodi</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="mt-5 sm:mt-6 flex space-x-3">
                                     <button
                                         type="submit"

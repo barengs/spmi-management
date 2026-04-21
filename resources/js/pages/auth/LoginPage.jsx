@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { setCredentials } from '../../store/authSlice';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
@@ -9,12 +9,19 @@ import Icon, { Icons } from '../../components/ui/Icon';
 export default function LoginPage() {
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const token = useSelector((state) => state.auth.token);
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    useEffect(() => {
+        if (token) {
+            navigate('/', { replace: true });
+        }
+    }, [navigate, token]);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -30,7 +37,6 @@ export default function LoginPage() {
 
             dispatch(setCredentials({ token, user }));
             toast.success('Login berhasil! Selamat datang kembali.');
-            navigate('/', { replace: true });
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
         } finally {

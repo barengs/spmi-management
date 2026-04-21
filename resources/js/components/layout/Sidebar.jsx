@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import Icon, { Icons } from '../ui/Icon';
@@ -9,15 +9,22 @@ export default function Sidebar({ isOpen, setIsOpen }) {
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
 
     // Menu items based on capabilities/roles
+    const [masterOpen, setMasterOpen] = useState(true);
+
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: Icons.dashboard },
+        { label: 'Borang', path: '/borang', icon: Icons.document, roles: ['LPM-Admin', 'SuperAdmin'], permissions: ['standard.update'] },
         { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view'] },
-        { label: 'Pelaksanaan', path: '/execution', icon: Icons.execution, permissions: ['evidence.upload'] },
+        { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'] },
         { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, permissions: ['audit.score.update'] },
         { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, permissions: ['ptk.view'] },
-        { label: 'Report Eksekutif', path: '/report', icon: Icons.report, permissions: ['report.view'] },
+        { label: 'Laporan Audit', path: '/report', icon: Icons.report, permissions: ['report.view'] },
         { label: 'Manajemen Pengguna', path: '/settings/users', icon: Icons.shield, roles: ['SuperAdmin'], permissions: ['user.view'] },
-        { label: 'Pengaturan Sistem', path: '/settings', icon: Icons.settings, permissions: ['role.manage'] },
+    ];
+
+    const masterItems = [
+        { label: 'Fakultas', path: '/settings/master/faculties', icon: Icons.folder, roles: ['SuperAdmin'], permissions: ['user.view'] },
+        { label: 'Prodi', path: '/settings/master/prodis', icon: Icons.document, roles: ['SuperAdmin'], permissions: ['user.view'] },
     ];
 
     // Filter menu items based on user role
@@ -29,6 +36,17 @@ export default function Sidebar({ isOpen, setIsOpen }) {
 
         return hasRoleAccess && hasPermissionAccess;
     });
+
+    const authorizedMasterItems = useMemo(() => (
+        masterItems.filter((item) => {
+            const hasRoleAccess = !item.roles || item.roles.some((role) => hasRole(role));
+            const hasPermissionAccess = hasRole('SuperAdmin')
+                || !item.permissions
+                || item.permissions.some((permission) => permissions.includes(permission));
+
+            return hasRoleAccess && hasPermissionAccess;
+        })
+    ), [permissions, roles]);
 
     return (
         <>
@@ -54,7 +72,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                             <NavLink
                                 key={index}
                                 to={item.path}
-                                end={item.path === '/'}
+                                end={item.path === '/' || item.path === '/audit'}
                                 onClick={() => setIsOpen(false)}
                                 className={({ isActive }) =>
                                     `flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-colors ${isActive
@@ -67,6 +85,43 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                                 {item.label}
                             </NavLink>
                         ))}
+
+                        {authorizedMasterItems.length > 0 && (
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setMasterOpen((current) => !current)}
+                                    className="flex w-full items-center justify-between rounded-lg px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                                >
+                                    <span className="flex items-center">
+                                        <Icon icon={Icons.settings} width={20} className="mr-3" />
+                                        Master
+                                    </span>
+                                    <Icon icon={masterOpen ? Icons.expand : Icons.collapse} width={18} />
+                                </button>
+
+                                {masterOpen && (
+                                    <div className="mt-1 space-y-1 pl-4">
+                                        {authorizedMasterItems.map((item) => (
+                                            <NavLink
+                                                key={item.path}
+                                                to={item.path}
+                                                onClick={() => setIsOpen(false)}
+                                                className={({ isActive }) =>
+                                                    `flex items-center rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${isActive
+                                                        ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700/50'
+                                                    }`
+                                                }
+                                            >
+                                                <Icon icon={item.icon} width={18} className="mr-3" />
+                                                {item.label}
+                                            </NavLink>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </nav>
                 </div>
             </div>

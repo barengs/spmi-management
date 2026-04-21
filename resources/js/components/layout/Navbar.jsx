@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../store/authSlice';
 import api from '../../services/api';
@@ -9,8 +9,77 @@ import Icon, { Icons } from '../ui/Icon';
 export default function Navbar({ toggleSidebar }) {
     const dispatch = useDispatch();
     const user = useSelector((state) => state.auth.user);
+    const location = useLocation();
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
+
+    const getBreadcrumbs = () => {
+        const path = location.pathname;
+
+        if (path === '/') {
+            return ['Dashboard'];
+        }
+
+        if (path === '/standards') {
+            return ['Standar Mutu'];
+        }
+
+        if (path === '/borang') {
+            return ['Borang'];
+        }
+
+        if (/^\/standards\/[^/]+\/builder$/.test(path)) {
+            return ['Standar Mutu', 'Builder Struktur'];
+        }
+
+        if (/^\/standards\/[^/]+\/review$/.test(path)) {
+            return ['Standar Mutu', 'Review Standar'];
+        }
+
+        if (/^\/standards\/[^/]+\/execution$/.test(path)) {
+            return ['Standar Mutu', 'Dokumen Auditee'];
+        }
+
+        if (path === '/audit') {
+            return ['Audit', 'Daftar Fakultas'];
+        }
+
+        if (path === '/audit/schedules') {
+            return ['Audit', 'Jadwal Audit'];
+        }
+
+        if (/^\/audit\/standards\/[^/]+\/review$/.test(path)) {
+            return ['Audit', 'Review Dokumen'];
+        }
+
+        if (path === '/ptk') {
+            return ['PTK'];
+        }
+
+        if (path === '/report') {
+            return ['Laporan Audit'];
+        }
+
+        if (path === '/settings/users') {
+            return ['Pengaturan', 'Manajemen Pengguna'];
+        }
+
+        if (path === '/settings/master/faculties') {
+            return ['Master', 'Fakultas'];
+        }
+
+        if (path === '/settings/master/prodis') {
+            return ['Master', 'Prodi'];
+        }
+
+        if (path === '/settings') {
+            return ['Pengaturan', 'Hak Akses'];
+        }
+
+        return ['Halaman'];
+    };
+
+    const breadcrumbs = getBreadcrumbs();
 
     // Initialize dark mode
     useEffect(() => {
@@ -58,9 +127,16 @@ export default function Navbar({ toggleSidebar }) {
                     <Icon icon={Icons.menu} width={24} className="text-gray-600 dark:text-gray-300" />
                 </button>
 
-                {/* Breadcrumbs Placeholder for future */}
+                {/* Breadcrumbs */}
                 <div className="hidden sm:flex ml-4 text-sm font-medium text-gray-500 dark:text-gray-400">
-                    Sprint 1 <span className="mx-2">&gt;</span> Frontend Base
+                    {breadcrumbs.map((item, index) => (
+                        <React.Fragment key={`${item}-${index}`}>
+                            {index > 0 && <span className="mx-2">&gt;</span>}
+                            <span className={index === breadcrumbs.length - 1 ? 'text-gray-700 dark:text-gray-200' : ''}>
+                                {item}
+                            </span>
+                        </React.Fragment>
+                    ))}
                 </div>
             </div>
 

@@ -3,8 +3,10 @@
 namespace App\Modules\Standard\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Evidence\Models\TrxEvidence;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
+use App\Modules\Standard\Models\MetricTarget;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -175,8 +177,17 @@ class MetricController extends Controller
             'parent_id'   => 'nullable|exists:mst_metrics,id',
             'content'     => 'required|string',
             'type'        => 'required|in:Header,Statement,Indicator',
+            'iku'         => 'nullable|string|max:255',
+            'ikt'         => 'nullable|string|max:255',
+            'pj'          => 'nullable|in:Dekan,Kaprodi',
             'order'       => 'nullable|integer',
         ]);
+
+        if ($validated['type'] !== 'Indicator') {
+            $validated['iku'] = null;
+            $validated['ikt'] = null;
+            $validated['pj'] = null;
+        }
 
         if (empty($validated['order'])) {
             $validated['order'] = MstMetric::where('standard_id', $validated['standard_id'])
@@ -227,6 +238,9 @@ class MetricController extends Controller
             'parent_id' => 'nullable|exists:mst_metrics,id',
             'content'   => 'sometimes|required|string',
             'type'      => 'sometimes|required|in:Header,Statement,Indicator',
+            'iku'       => 'nullable|string|max:255',
+            'ikt'       => 'nullable|string|max:255',
+            'pj'        => 'nullable|in:Dekan,Kaprodi',
             'order'     => 'nullable|integer',
         ]);
 
@@ -248,6 +262,13 @@ class MetricController extends Controller
 
         if ($error = $this->hierarchyValidationError($validated, $metric)) {
             return $error;
+        }
+
+        $resolvedType = $validated['type'] ?? $metric->type;
+        if ($resolvedType !== 'Indicator') {
+            $validated['iku'] = null;
+            $validated['ikt'] = null;
+            $validated['pj'] = null;
         }
 
         $metric->update($validated);
@@ -277,6 +298,13 @@ class MetricController extends Controller
             ], 403);
         }
 
+        if ($this->hasAppliedIndicator($metric)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Node tidak dapat dihapus karena terdapat indikator yang sudah diterapkan melalui target atau bukti audit.',
+            ], 422);
+        }
+
         // Menghapus node ini akan secara otomatis menghapus anak-anaknya berkat `cascadeOnDelete` foreign key pada DB, 
         // namun untuk softdeletes Eloquent kita harus menginisiasinya secara eksplisit jika parent_id dan standard_id tidak null
         $this->deleteMetricAndChildren($metric);
@@ -294,6 +322,24 @@ class MetricController extends Controller
             $this->deleteMetricAndChildren($child);
         }
         $metric->delete();
+    }
+
+    private function hasAppliedIndicator(MstMetric $metric): bool
+    {
+        $metric->loadMissing('children');
+
+        if ($metric->type === 'Indicator') {
+            return MetricTarget::where('metric_id', $metric->id)->exists()
+                || TrxEvidence::where('metric_id', $metric->id)->exists();
+        }
+
+        foreach ($metric->children as $child) {
+            if ($this->hasAppliedIndicator($child)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function review(Request $request, $id): JsonResponse

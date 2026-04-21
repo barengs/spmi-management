@@ -27,7 +27,8 @@ class EvidenceController extends Controller
             ->with([
                 'metric:id,standard_id,content',
                 'metric.standard:id,name,category,periode_tahun',
-                'uploader:id,name,email',
+                'uploader:id,name,email,unit_id',
+                'uploader.unit:id,parent_id,name,code,level',
                 'reviewer:id,name,email',
             ])
             ->latest()
@@ -251,6 +252,14 @@ class EvidenceController extends Controller
                 'id' => $evidence->uploader->id,
                 'name' => $evidence->uploader->name,
                 'email' => $evidence->uploader->email,
+                'unit_id' => $evidence->uploader->unit_id,
+                'unit' => $evidence->uploader->relationLoaded('unit') && $evidence->uploader->unit ? [
+                    'id' => $evidence->uploader->unit->id,
+                    'parent_id' => $evidence->uploader->unit->parent_id,
+                    'name' => $evidence->uploader->unit->name,
+                    'code' => $evidence->uploader->unit->code,
+                    'level' => $evidence->uploader->unit->level,
+                ] : null,
             ] : null,
             'reviewer' => $evidence->reviewer ? [
                 'id' => $evidence->reviewer->id,

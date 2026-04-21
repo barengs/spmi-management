@@ -54,6 +54,7 @@ export const Icons = {
     ptk: 'material-symbols:build',
     report: 'material-symbols:insert-chart',
     settings: 'material-symbols:settings',
+    schedule: 'material-symbols:calendar-month',
     
     // Node Types (Standard Builder)
     folder: 'material-symbols:folder',

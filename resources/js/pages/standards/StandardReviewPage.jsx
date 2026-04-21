@@ -5,6 +5,12 @@ import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 
+const getNodeTypeLabel = (type) => {
+    if (type === 'Header') return 'Bab';
+    if (type === 'Statement') return 'Pasal';
+    return 'Indicator';
+};
+
 function normalizeContent(value) {
     return String(value || '')
         .replace(/\s+/g, ' ')
@@ -147,7 +153,7 @@ function MetricNodeCard({
             >
                 <div className="mb-2 flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
-                        <span>{node.type}</span>
+                        <span>{getNodeTypeLabel(node.type)}</span>
                         <span>ID {node.id}</span>
                         <span className={`rounded-full border px-2 py-0.5 ${reviewNodeBadge(node.review_status)}`}>
                             {node.review_status === 'REJECTED'
@@ -237,7 +243,7 @@ function MetricNodeCard({
 
                         {node.type === 'Header' && (
                             <div className="text-xs leading-5 text-gray-500">
-                                Jika header ditolak, seluruh child node di bawah header ini akan ikut ditandai revisi.
+                                Jika bab ditolak, seluruh child node di bawah bab ini akan ikut ditandai revisi.
                             </div>
                         )}
                     </div>
@@ -325,6 +331,14 @@ export default function StandardReviewPage() {
         () => flattenTree(currentTree).filter((node) => node.review_status === 'PENDING'),
         [currentTree]
     );
+    const totalCurrentNodes = useMemo(() => flattenTree(currentTree).length, [currentTree]);
+    const matchPercentage = useMemo(() => {
+        if (totalCurrentNodes === 0) {
+            return 0;
+        }
+
+        return Math.round((comparison.totalMatchedNodes / totalCurrentNodes) * 100);
+    }, [comparison.totalMatchedNodes, totalCurrentNodes]);
 
     const canShowAuditControls = userAccess.canAuditReview && standard?.status === 'WAITING_APPROVAL' && !standard?.review_submitted_at;
 
@@ -695,8 +709,7 @@ export default function StandardReviewPage() {
                 </section>
             </div>
 
-            {(userAccess.canAuditReview || userAccess.canFinalizeReview || rejectedNodes.length > 0 || standard?.reject_reason) && (
-                <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Keputusan Review</div>
                     <h2 className="mt-2 text-xl font-semibold text-gray-900">Tinjauan Pimpinan</h2>
                     <p className="mt-2 text-sm leading-6 text-gray-600">
@@ -708,6 +721,7 @@ export default function StandardReviewPage() {
                         <div className="mt-2">Node revisi aktif: {rejectedNodes.length}</div>
                         <div className="mt-1">Node belum dicek auditor: {pendingNodes.length}</div>
                         <div className="mt-1">Node cocok dengan periode sebelumnya: {comparison.totalMatchedNodes}</div>
+                        <div className="mt-1">Persentase kecocokan: {matchPercentage}%</div>
                         <div className="mt-1">
                             Status kirim ke pimpinan: {standard?.review_submitted_at ? 'Sudah dikirim' : 'Belum dikirim'}
                         </div>
@@ -763,8 +777,13 @@ export default function StandardReviewPage() {
                             </button>
                         </div>
                     )}
-                </section>
-            )}
+                {standard?.reject_reason && (
+                    <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-800">
+                        <div className="font-semibold">Catatan Revisi Terakhir</div>
+                        <div className="mt-2 leading-6">{standard.reject_reason}</div>
+                    </div>
+                )}
+            </section>
         </div>
     );
 }
