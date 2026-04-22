@@ -497,19 +497,6 @@ export default function StandardIndex() {
                     );
                 }
 
-                if (canManageStandards && !isPimpinan && !isLockedForAdmin) {
-                    actionButtons.push(
-                        <button
-                            key="clone"
-                            onClick={() => handleOpenCloneModal(item)}
-                            className="rounded px-2 py-1 text-teal-600 transition hover:bg-teal-50 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
-                            title="Salin ke periode baru"
-                        >
-                            Salin
-                        </button>
-                    );
-                }
-
                 if (canManageStandards && !isPimpinan) {
                     actionButtons.push(
                         <button
