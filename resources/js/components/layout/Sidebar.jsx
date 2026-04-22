@@ -16,10 +16,10 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         { label: 'Notifikasi', path: '/notifications', icon: Icons.bell },
         { label: 'Borang', path: '/borang', icon: Icons.document, roles: ['LPM-Admin', 'SuperAdmin'], permissions: ['standard.update'] },
         { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view'] },
-        { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'] },
+        { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'], hideRoles: ['Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor'] },
         { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, permissions: ['audit.score.update'] },
         { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, permissions: ['ptk.view'] },
-        { label: 'Laporan Audit', path: '/report', icon: Icons.report, permissions: ['report.view'] },
+        { label: 'Laporan Audit', path: '/report', icon: Icons.report, permissions: ['report.view'], hideRoles: ['Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor'] },
         { label: 'Manajemen Pengguna', path: '/settings/users', icon: Icons.shield, roles: ['SuperAdmin'], permissions: ['user.view'] },
     ];
 
@@ -30,12 +30,13 @@ export default function Sidebar({ isOpen, setIsOpen }) {
 
     // Filter menu items based on user role
     const authorizedMenu = menuItems.filter(item => {
+        const isHiddenForRole = item.hideRoles?.some(role => hasRole(role));
         const hasRoleAccess = !item.roles || item.roles.some(role => hasRole(role));
         const hasPermissionAccess = hasRole('SuperAdmin')
             || !item.permissions
             || item.permissions.some(permission => permissions.includes(permission));
 
-        return hasRoleAccess && hasPermissionAccess;
+        return !isHiddenForRole && hasRoleAccess && hasPermissionAccess;
     });
 
     const authorizedMasterItems = useMemo(() => (
