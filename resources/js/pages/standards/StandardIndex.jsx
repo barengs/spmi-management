@@ -11,6 +11,7 @@ import {
     flexRender,
     getCoreRowModel,
     useReactTable,
+    getFacetedRowModel,
     getSortedRowModel,
     getFilteredRowModel,
     getPaginationRowModel
@@ -24,6 +25,7 @@ export default function StandardIndex() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [globalFilter, setGlobalFilter] = useState('');
     const [selectedPeriod, setSelectedPeriod] = useState(null);
+    const [sorting, setSorting] = useState([{ id: 'created_at', desc: true }]);
 
     const user = useSelector(state => state.auth.user);
     const roles = user?.roles || [];
@@ -374,6 +376,16 @@ export default function StandardIndex() {
         }),
         columnHelper.accessor('status', {
             header: 'Status',
+            sortingFn: (rowA, rowB, columnId) => {
+                const rank = {
+                    DRAFT: 1,
+                    REVISI: 2,
+                    WAITING_APPROVAL: 3,
+                    TERBIT: 4,
+                };
+
+                return (rank[rowA.getValue(columnId)] || 0) - (rank[rowB.getValue(columnId)] || 0);
+            },
             cell: info => {
                 const status = info.getValue() || 'DRAFT';
                 if (status === 'TERBIT') {
@@ -421,6 +433,7 @@ export default function StandardIndex() {
         }),
         columnHelper.accessor('is_active', {
             header: 'Visibilitas',
+            sortingFn: (rowA, rowB, columnId) => Number(rowA.getValue(columnId)) - Number(rowB.getValue(columnId)),
             cell: info => {
                 const isActive = info.getValue();
                 return isActive ? (
@@ -430,9 +443,28 @@ export default function StandardIndex() {
                 );
             }
         }),
+        columnHelper.accessor('created_at', {
+            header: 'Dibuat',
+            cell: info => {
+                const value = info.getValue();
+                if (!value) {
+                    return <span className="text-gray-600 dark:text-gray-300">-</span>;
+                }
+
+                return (
+                    <span className="text-gray-600 dark:text-gray-300">
+                        {new Date(value).toLocaleString('id-ID', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                        })}
+                    </span>
+                );
+            }
+        }),
         columnHelper.display({
             id: 'actions',
             header: 'Aksi',
+            enableSorting: false,
             cell: info => {
                 const item = info.row.original;
                 const isLockedForAdmin = item.status === 'WAITING_APPROVAL' || item.status === 'TERBIT';
@@ -534,13 +566,16 @@ export default function StandardIndex() {
         data: filteredStandards,
         columns,
         getCoreRowModel: getCoreRowModel(),
+        getFacetedRowModel: getFacetedRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         getPaginationRowModel: getPaginationRowModel(),
         state: {
             globalFilter,
+            sorting,
         },
         onGlobalFilterChange: setGlobalFilter,
+        onSortingChange: setSorting,
         initialState: {
             pagination: {
                 pageSize: 10,
@@ -650,20 +685,25 @@ export default function StandardIndex() {
                                             {headerGroup.headers.map(header => (
                                                 <th
                                                     key={header.id}
-                                                    className={`px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400 group cursor-pointer ${
+                                                    className={`px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400 group ${
+                                                        header.column.getCanSort() ? 'cursor-pointer' : ''
+                                                    } ${
                                                         header.id === 'actions' ? 'w-1 whitespace-nowrap' : ''
                                                     }`}
-                                                    onClick={header.column.getToggleSortingHandler()}
+                                                    onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
                                                 >
                                                     <div className="flex items-center gap-2">
                                                         {flexRender(
                                                             header.column.columnDef.header,
                                                             header.getContext()
                                                         )}
-                                                        {{
-                                                            asc: <Icon icon={Icons.sortAsc} width={14} />,
-                                                            desc: <Icon icon={Icons.sortDesc} width={14} />,
-                                                        }[header.column.getIsSorted()] ?? <Icon icon={Icons.sort} width={14} className="opacity-0 group-hover:opacity-100 text-gray-300" />}
+                                                        {header.column.getCanSort() && (
+                                                            header.column.getIsSorted() === 'asc'
+                                                                ? <Icon icon={Icons.sortAsc} width={14} />
+                                                                : header.column.getIsSorted() === 'desc'
+                                                                    ? <Icon icon={Icons.sortDesc} width={14} />
+                                                                    : <Icon icon={Icons.sort} width={14} className="opacity-0 group-hover:opacity-100 text-gray-300" />
+                                                        )}
                                                     </div>
                                                 </th>
                                             ))}

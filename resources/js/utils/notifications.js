@@ -1,3 +1,5 @@
+import { getPendingWrLabels } from './standardStatus';
+
 export function buildScheduleNotifications(user, schedules = []) {
     const userId = user?.id ? String(user.id) : null;
     const userUnitId = user?.unit?.id ? String(user.unit.id) : null;
@@ -117,7 +119,7 @@ export function buildStandardNotifications(user, standards = []) {
                 id: `standard-${standard.id}-wr`,
                 type: 'standard_approval',
                 title: 'Approval Standar Menunggu Anda',
-                message: `${label} menunggu persetujuan Anda pada tahap Wakil Rektor.`,
+                message: `${label} menunggu persetujuan ${getPendingWrLabels(standard).join(', ')}.`,
                 href,
                 created_at: createdAt,
                 tone: 'warning',

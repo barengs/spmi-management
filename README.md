@@ -287,6 +287,7 @@ Setelah menjalankan `php artisan db:seed`, login dengan:
 | `wareg1@espmi.dev` | `Password@123` | Wakil Rektor 1 |
 | `wareg2@espmi.dev` | `Password@123` | Wakil Rektor 2 |
 | `wareg3@espmi.dev` | `Password@123` | Wakil Rektor 3 |
+| `rektor@espmi.dev` | `Password@123` | Rektor |
 
 ### Dummy Auditee per Prodi
 
@@ -313,6 +314,7 @@ Setelah menjalankan `php artisan db:seed`, login dengan:
 - `kepala.lpmi@espmi.dev` dipakai pada tahap persetujuan awal sebelum masuk ke Wakil Rektor 1, 2, dan 3.
 - `pimpinan@espmi.dev` digunakan untuk keputusan final standar: terbitkan atau kembalikan untuk revisi.
 - `wareg1@espmi.dev`, `wareg2@espmi.dev`, dan `wareg3@espmi.dev` dipakai pada tahap persetujuan Wakil Rektor 1, 2, dan 3.
+- `rektor@espmi.dev` dipakai pada tahap persetujuan final setelah seluruh Wakil Rektor selesai menyetujui.
 - Seeder demo juga menyiapkan contoh standar `WAITING_APPROVAL` yang belum direview auditor.
 
 ---

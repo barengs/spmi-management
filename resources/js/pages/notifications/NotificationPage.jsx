@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
@@ -24,6 +24,7 @@ const toneStyles = {
 };
 
 export default function NotificationPage() {
+    const navigate = useNavigate();
     const user = useSelector((state) => state.auth.user);
     const [schedules, setSchedules] = useState([]);
     const [standards, setStandards] = useState([]);
@@ -102,7 +103,8 @@ export default function NotificationPage() {
                     filteredNotifications.map((item) => (
                         <article
                             key={item.id}
-                            className={`rounded-3xl border px-6 py-5 shadow-sm ${toneStyles[item.tone] || 'border-gray-200 bg-white text-gray-900'}`}
+                            onClick={() => navigate(item.href)}
+                            className={`cursor-pointer rounded-3xl border px-6 py-5 shadow-sm transition hover:opacity-95 ${toneStyles[item.tone] || 'border-gray-200 bg-white text-gray-900'}`}
                         >
                             <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div>
@@ -114,6 +116,7 @@ export default function NotificationPage() {
                                 </div>
                                 <Link
                                     to={item.href}
+                                    onClick={(event) => event.stopPropagation()}
                                     className="inline-flex items-center gap-2 rounded-full border border-current/20 px-4 py-2 text-sm font-semibold transition hover:bg-white/60"
                                 >
                                     <Icon icon={Icons.eye} width={16} />

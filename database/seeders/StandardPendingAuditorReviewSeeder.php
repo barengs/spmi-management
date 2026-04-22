@@ -53,6 +53,54 @@ class StandardPendingAuditorReviewSeeder extends Seeder
         );
         $kepalaLpmi->syncRoles(['Kepala LPMI']);
 
+        $wareg1 = User::updateOrCreate(
+            ['email' => 'wareg1@espmi.dev'],
+            [
+                'nidn_npk' => 'WR1001',
+                'name' => 'Wakil Rektor 1',
+                'password' => Hash::make('Password@123'),
+                'unit_id' => $lpmUnit?->id,
+                'is_active' => true,
+            ]
+        );
+        $wareg1->syncRoles(['Wakil Rektor 1']);
+
+        $wareg2 = User::updateOrCreate(
+            ['email' => 'wareg2@espmi.dev'],
+            [
+                'nidn_npk' => 'WR2001',
+                'name' => 'Wakil Rektor 2',
+                'password' => Hash::make('Password@123'),
+                'unit_id' => $lpmUnit?->id,
+                'is_active' => true,
+            ]
+        );
+        $wareg2->syncRoles(['Wakil Rektor 2']);
+
+        $wareg3 = User::updateOrCreate(
+            ['email' => 'wareg3@espmi.dev'],
+            [
+                'nidn_npk' => 'WR3001',
+                'name' => 'Wakil Rektor 3',
+                'password' => Hash::make('Password@123'),
+                'unit_id' => $lpmUnit?->id,
+                'is_active' => true,
+            ]
+        );
+        $wareg3->syncRoles(['Wakil Rektor 3']);
+
+        $rektor = User::updateOrCreate(
+            ['email' => 'rektor@espmi.dev'],
+            [
+                'nidn_npk' => 'RKT001',
+                'name' => 'Rektor',
+                'password' => Hash::make('Password@123'),
+                'unit_id' => $lpmUnit?->id,
+                'is_active' => true,
+            ]
+        );
+        $rektor->syncRoles(['Rektor']);
+
         $admin = User::query()->where('email', 'admin@espmi.dev')->first();
 
         $publishedStandard = MstStandard::withTrashed()->updateOrCreate(

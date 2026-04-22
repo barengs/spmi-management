@@ -107,6 +107,18 @@ function reviewNodeBadge(status) {
     return 'bg-gray-100 text-gray-700 border-gray-200';
 }
 
+function approvalProgressLabel(approvedAt, currentStage, nextStageLabel) {
+    if (!approvedAt) {
+        return 'Belum setuju';
+    }
+
+    if (currentStage === nextStageLabel) {
+        return `Sudah setuju, dilanjutkan ke ${nextStageLabel === 'RECTOR' ? 'Rektor' : nextStageLabel}`;
+    }
+
+    return 'Sudah setuju';
+}
+
 function InfoCard({ label, value, hint, accent = 'gray' }) {
     const accentStyles = {
         blue: 'bg-blue-50 border-blue-100',
@@ -595,7 +607,7 @@ export default function StandardReviewPage() {
                         </span>
                     </div>
                     <div className="mt-2 text-xs leading-5 text-gray-500">
-                        Tahap aktif: {getApprovalStageLabel(standard?.approval_stage)}
+                        Tahap aktif: {getApprovalStageLabel(standard?.approval_stage, standard)}
                     </div>
                 </div>
                 <InfoCard
@@ -729,11 +741,11 @@ export default function StandardReviewPage() {
                         <div className="mt-1">Node belum dicek auditor: {pendingNodes.length}</div>
                         <div className="mt-1">Node cocok dengan periode sebelumnya: {comparison.totalMatchedNodes}</div>
                         <div className="mt-1">Persentase kecocokan: {matchPercentage}%</div>
-                        <div className="mt-1">Tahap persetujuan aktif: {getApprovalStageLabel(standard?.approval_stage)}</div>
-                        <div className="mt-1">Kepala LPMI: {standard?.head_lpmi_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
-                        <div className="mt-1">Wakil Rektor 1: {standard?.wr1_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
-                        <div className="mt-1">Wakil Rektor 2: {standard?.wr2_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
-                        <div className="mt-1">Wakil Rektor 3: {standard?.wr3_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
+                        <div className="mt-1">Tahap persetujuan aktif: {getApprovalStageLabel(standard?.approval_stage, standard)}</div>
+                        <div className="mt-1">Kepala LPMI: {approvalProgressLabel(standard?.head_lpmi_approved_at, standard?.approval_stage, 'WR')}</div>
+                        <div className="mt-1">Wakil Rektor 1: {approvalProgressLabel(standard?.wr1_approved_at, standard?.approval_stage, 'RECTOR')}</div>
+                        <div className="mt-1">Wakil Rektor 2: {approvalProgressLabel(standard?.wr2_approved_at, standard?.approval_stage, 'RECTOR')}</div>
+                        <div className="mt-1">Wakil Rektor 3: {approvalProgressLabel(standard?.wr3_approved_at, standard?.approval_stage, 'RECTOR')}</div>
                         <div className="mt-1">Rektor: {standard?.rector_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
                     </div>
 
@@ -745,7 +757,7 @@ export default function StandardReviewPage() {
                             rows="4"
                             value={rejectReason}
                             onChange={(event) => setRejectReason(event.target.value)}
-                            disabled={!userAccess.canFinalizeReview || standard?.status !== 'WAITING_APPROVAL' || !standard?.review_submitted_at}
+                            disabled={!userAccess.canFinalizeReview || standard?.status !== 'WAITING_APPROVAL' || submittingAction !== ''}
                             className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-gray-50"
                             placeholder="Rangkum konteks revisi umum yang perlu diperhatikan admin."
                         />
@@ -756,7 +768,7 @@ export default function StandardReviewPage() {
                             <button
                                 type="button"
                                 onClick={handleReject}
-                                disabled={submittingAction !== ''}
+                                disabled={submittingAction !== '' || !rejectReason.trim()}
                                 className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Icon icon={submittingAction === 'reject' ? Icons.refresh : Icons.close} width={16} className={submittingAction === 'reject' ? 'animate-spin' : ''} />
@@ -765,7 +777,7 @@ export default function StandardReviewPage() {
                             <button
                                 type="button"
                                 onClick={handleApprove}
-                                disabled={submittingAction !== '' || rejectedNodes.length > 0 || pendingNodes.length > 0}
+                                disabled={submittingAction !== ''}
                                 className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Icon icon={submittingAction === 'approve' ? Icons.refresh : Icons.check} width={16} className={submittingAction === 'approve' ? 'animate-spin' : ''} />
