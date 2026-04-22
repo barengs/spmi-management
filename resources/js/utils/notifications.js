@@ -64,5 +64,89 @@ export function buildScheduleNotifications(user, schedules = []) {
         }
 
         return items;
-    }).sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
+    });
+}
+
+function getRoleNames(user) {
+    return (user?.roles || [])
+        .map((role) => (typeof role === 'string' ? role : role?.name))
+        .filter(Boolean);
+}
+
+function hasRole(user, roleName) {
+    return getRoleNames(user).includes(roleName);
+}
+
+export function buildStandardNotifications(user, standards = []) {
+    if (!user?.id) {
+        return [];
+    }
+
+    return standards.flatMap((standard) => {
+        const items = [];
+
+        if (standard?.status !== 'WAITING_APPROVAL') {
+            return items;
+        }
+
+        const href = `/standards/${standard.id}/review`;
+        const createdAt = standard.updated_at || standard.created_at;
+        const label = `${standard.name || 'Standar Mutu'} (${standard.periode_tahun || '-'})`;
+
+        if (standard.approval_stage === 'HEAD_LPMI' && hasRole(user, 'Kepala LPMI')) {
+            items.push({
+                id: `standard-${standard.id}-head-lpmi`,
+                type: 'standard_approval',
+                title: 'Approval Standar Menunggu Anda',
+                message: `${label} menunggu persetujuan Anda sebagai Kepala LPMI.`,
+                href,
+                created_at: createdAt,
+                tone: 'warning',
+            });
+        }
+
+        if (
+            standard.approval_stage === 'WR'
+            && (
+                (hasRole(user, 'Wakil Rektor 1') && !standard.wr1_approved_at)
+                || (hasRole(user, 'Wakil Rektor 2') && !standard.wr2_approved_at)
+                || (hasRole(user, 'Wakil Rektor 3') && !standard.wr3_approved_at)
+            )
+        ) {
+            items.push({
+                id: `standard-${standard.id}-wr`,
+                type: 'standard_approval',
+                title: 'Approval Standar Menunggu Anda',
+                message: `${label} menunggu persetujuan Anda pada tahap Wakil Rektor.`,
+                href,
+                created_at: createdAt,
+                tone: 'warning',
+            });
+        }
+
+        if (
+            standard.approval_stage === 'RECTOR'
+            && !standard.rector_approved_at
+            && (hasRole(user, 'Pimpinan') || hasRole(user, 'Rektor') || hasRole(user, 'SuperAdmin'))
+        ) {
+            items.push({
+                id: `standard-${standard.id}-rector`,
+                type: 'standard_approval',
+                title: 'Approval Final Standar Menunggu Anda',
+                message: `${label} sudah melewati Kepala LPMI dan Wakil Rektor 1, 2, 3, lalu menunggu keputusan final pimpinan.`,
+                href,
+                created_at: createdAt,
+                tone: 'warning',
+            });
+        }
+
+        return items;
+    });
+}
+
+export function buildNotifications(user, schedules = [], standards = []) {
+    return [
+        ...buildScheduleNotifications(user, schedules),
+        ...buildStandardNotifications(user, standards),
+    ].sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
 }

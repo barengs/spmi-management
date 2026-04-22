@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
-import { buildScheduleNotifications } from '../../utils/notifications';
+import { buildNotifications } from '../../utils/notifications';
 
 function formatDateTime(value) {
     if (!value) {
@@ -26,6 +26,7 @@ const toneStyles = {
 export default function NotificationPage() {
     const user = useSelector((state) => state.auth.user);
     const [schedules, setSchedules] = useState([]);
+    const [standards, setStandards] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
@@ -33,9 +34,16 @@ export default function NotificationPage() {
         const fetchNotifications = async () => {
             try {
                 setLoading(true);
-                const response = await api.get('/audit-schedules');
-                setSchedules(response.data.data || []);
+                const [scheduleResponse, standardResponse] = await Promise.all([
+                    api.get('/audit-schedules'),
+                    api.get('/standards'),
+                ]);
+
+                setSchedules(scheduleResponse.data.data || []);
+                setStandards(standardResponse.data.data || []);
             } catch (error) {
+                setSchedules([]);
+                setStandards([]);
                 toast.error(error.response?.data?.message || 'Notifikasi gagal dimuat.');
             } finally {
                 setLoading(false);
@@ -45,7 +53,10 @@ export default function NotificationPage() {
         fetchNotifications();
     }, []);
 
-    const notifications = useMemo(() => buildScheduleNotifications(user, schedules), [schedules, user]);
+    const notifications = useMemo(
+        () => buildNotifications(user, schedules, standards),
+        [schedules, standards, user]
+    );
     const filteredNotifications = useMemo(() => (
         notifications.filter((item) => (
             `${item.title} ${item.message}`.toLowerCase().includes(search.trim().toLowerCase())

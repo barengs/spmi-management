@@ -5,7 +5,7 @@ import { logout } from '../../store/authSlice';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import Icon, { Icons } from '../ui/Icon';
-import { buildScheduleNotifications } from '../../utils/notifications';
+import { buildNotifications } from '../../utils/notifications';
 
 export default function Navbar({ toggleSidebar }) {
     const dispatch = useDispatch();
@@ -15,6 +15,7 @@ export default function Navbar({ toggleSidebar }) {
     const [notificationOpen, setNotificationOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
     const [notificationSchedules, setNotificationSchedules] = useState([]);
+    const [notificationStandards, setNotificationStandards] = useState([]);
 
     const getBreadcrumbs = () => {
         const path = location.pathname;
@@ -87,19 +88,40 @@ export default function Navbar({ toggleSidebar }) {
     };
 
     const breadcrumbs = getBreadcrumbs();
-    const notifications = useMemo(() => buildScheduleNotifications(user, notificationSchedules).slice(0, 5), [notificationSchedules, user]);
+    const notifications = useMemo(
+        () => buildNotifications(user, notificationSchedules, notificationStandards).slice(0, 5),
+        [notificationSchedules, notificationStandards, user]
+    );
 
     useEffect(() => {
         const fetchNotifications = async () => {
             try {
-                const response = await api.get('/audit-schedules');
-                setNotificationSchedules(response.data.data || []);
+                const [scheduleResponse, standardResponse] = await Promise.all([
+                    api.get('/audit-schedules'),
+                    api.get('/standards'),
+                ]);
+
+                setNotificationSchedules(scheduleResponse.data.data || []);
+                setNotificationStandards(standardResponse.data.data || []);
             } catch (error) {
                 setNotificationSchedules([]);
+                setNotificationStandards([]);
             }
         };
 
         fetchNotifications();
+
+        const intervalId = window.setInterval(fetchNotifications, 30000);
+        const handleFocus = () => {
+            fetchNotifications();
+        };
+
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            window.clearInterval(intervalId);
+            window.removeEventListener('focus', handleFocus);
+        };
     }, [location.pathname]);
 
     // Initialize dark mode

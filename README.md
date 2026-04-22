@@ -283,6 +283,9 @@ Setelah menjalankan `php artisan db:seed`, login dengan:
 | `andi.pratama@espmi.dev` | `Password@123` | Auditor |
 | `auditee@espmi.dev` | `Password@123` | Auditee |
 | `pimpinan@espmi.dev` | `Password@123` | Pimpinan |
+| `wareg1@espmi.dev` | `Password@123` | Wakil Rektor 1 |
+| `wareg2@espmi.dev` | `Password@123` | Wakil Rektor 2 |
+| `wareg3@espmi.dev` | `Password@123` | Wakil Rektor 3 |
 
 ### Dummy Auditee per Prodi
 
@@ -307,6 +310,7 @@ Setelah menjalankan `php artisan db:seed`, login dengan:
 - `auditor@espmi.dev`, `sari.wulandari@espmi.dev`, dan `andi.pratama@espmi.dev` digunakan sebagai contoh Auditor.
 - akun auditee personal per prodi dipakai untuk assignment otomatis saat prodi dipilih di jadwal audit.
 - `pimpinan@espmi.dev` digunakan untuk keputusan final standar: terbitkan atau kembalikan untuk revisi.
+- `wareg1@espmi.dev`, `wareg2@espmi.dev`, dan `wareg3@espmi.dev` dipakai pada tahap persetujuan Wakil Rektor 1, 2, dan 3.
 - Seeder demo juga menyiapkan contoh standar `WAITING_APPROVAL` yang belum direview auditor.
 
 ---
