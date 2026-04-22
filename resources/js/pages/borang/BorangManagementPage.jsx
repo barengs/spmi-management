@@ -26,6 +26,7 @@ import {
     setSelectedFaculty,
     setSelectedIndicatorId,
     setSelectedPj,
+    setSelectedTargetSasaran,
     setSelectedProdi,
     setUnits,
     setViewMode,
@@ -77,6 +78,7 @@ export default function BorangManagementPage() {
         indicatorSearch,
         selectedIndicatorId,
         selectedPj,
+        selectedTargetSasaran,
     } = useSelector((state) => state.borang);
 
     const fetchPageData = async () => {
@@ -290,6 +292,7 @@ export default function BorangManagementPage() {
                 prodi_id: selectedProdi.id,
                 metric_id: selectedIndicator.id,
                 pj: selectedPj,
+                target_sasaran: selectedTargetSasaran.trim(),
             });
 
             const createdRow = response.data.data;
@@ -586,7 +589,7 @@ export default function BorangManagementPage() {
                             <div>
                                 <h2 className="text-xl font-semibold text-gray-900">Tambah Borang</h2>
                                 <p className="mt-1 text-sm text-gray-500">
-                                    Pilih indikator dari standar yang sudah disusun untuk mulai mengelola borang.
+                                    Pilih indikator dari standar yang sudah disusun lalu isi target sasaran khusus untuk prodi ini.
                                 </p>
                             </div>
                             <button
@@ -654,6 +657,17 @@ export default function BorangManagementPage() {
                                     <option value="Dekan">Dekan</option>
                                 </select>
                             </div>
+
+                            <div className="grid gap-2">
+                                <label className="text-sm font-semibold text-gray-700">Target Sasaran Prodi</label>
+                                <textarea
+                                    rows={4}
+                                    value={selectedTargetSasaran}
+                                    onChange={(event) => dispatch(setSelectedTargetSasaran(event.target.value))}
+                                    placeholder="Contoh: Minimal 80% lulusan memperoleh IPK di atas 3,25 pada prodi ini."
+                                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+                                />
+                            </div>
                         </div>
 
                         <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-5">
@@ -667,7 +681,7 @@ export default function BorangManagementPage() {
                             <button
                                 type="button"
                                 onClick={handleTambahBorang}
-                                disabled={!selectedIndicator}
+                                disabled={!selectedIndicator || !selectedTargetSasaran.trim()}
                                 className="inline-flex items-center gap-2 rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Icon icon={Icons.add} width={16} />

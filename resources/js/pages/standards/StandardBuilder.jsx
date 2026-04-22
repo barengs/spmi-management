@@ -5,13 +5,83 @@ import api from '../../services/api';
 import { toast } from 'react-toastify';
 import Icon, { Icons } from '../../components/ui/Icon';
 
-import StandardTargetConfig from './StandardTargetConfig';
 
 const getNodeTypeLabel = (type) => {
     if (type === 'Header') return 'Bab';
     if (type === 'Statement') return 'Pasal';
     return 'Indicator';
 };
+
+const getNextChildType = (parentType) => {
+    if (parentType === 'Header') return 'Statement';
+    if (parentType === 'Statement') return 'Indicator';
+    return null;
+};
+
+const getAddChildLabel = (nodeType) => {
+    if (nodeType === 'Header') return 'Tambah Pasal';
+    if (nodeType === 'Statement') return 'Tambah Indicator';
+    return 'Tambah';
+};
+
+function insertNodeIntoTree(nodes, newNode) {
+    if (!newNode.parent_id) {
+        return [...nodes, { ...newNode, children_recursive: [] }];
+    }
+
+    return nodes.map((node) => {
+        if (node.id === newNode.parent_id) {
+            const nextChildren = [...(node.children_recursive || []), { ...newNode, children_recursive: [] }]
+                .sort((left, right) => (left.order || 0) - (right.order || 0));
+
+            return {
+                ...node,
+                children_recursive: nextChildren,
+            };
+        }
+
+        if (node.children_recursive?.length) {
+            return {
+                ...node,
+                children_recursive: insertNodeIntoTree(node.children_recursive, newNode),
+            };
+        }
+
+        return node;
+    });
+}
+
+function updateNodeInTree(nodes, updatedNode) {
+    return nodes.map((node) => {
+        if (node.id === updatedNode.id) {
+            return {
+                ...node,
+                ...updatedNode,
+                children_recursive: node.children_recursive || [],
+            };
+        }
+
+        if (node.children_recursive?.length) {
+            return {
+                ...node,
+                children_recursive: updateNodeInTree(node.children_recursive, updatedNode),
+            };
+        }
+
+        return node;
+    });
+}
+
+function removeNodeFromTree(nodes, nodeId) {
+    return nodes
+        .filter((node) => node.id !== nodeId)
+        .map((node) => ({
+            ...node,
+            children_recursive: node.children_recursive?.length
+                ? removeNodeFromTree(node.children_recursive, nodeId)
+                : [],
+        }));
+}
 
 function highlightText(text, query) {
     const normalizedQuery = query.trim();
@@ -40,61 +110,6 @@ function highlightText(text, query) {
 }
 
 // Sub Component to display read-only targets
-const NodeTargetViewer = ({ metricId }) => {
-    const [targets, setTargets] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        if (!metricId) return;
-        const fetchTargets = async () => {
-            try {
-                setLoading(true);
-                const [targetRes, levelRes] = await Promise.all([
-                    api.get(`/metrics/${metricId}/targets`),
-                    api.get(`/education-levels`)
-                ]);
-
-                const activeTargets = targetRes.data.data;
-                const levels = levelRes.data.data;
-
-                const mapped = activeTargets.map(t => {
-                    const l = levels.find(lv => lv.id === t.level_id);
-                    return { ...t, level_name: l ? l.name : 'Unknown' };
-                });
-                setTargets(mapped);
-            } catch (err) {
-                console.error("Gagal load target untuk viewer:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchTargets();
-    }, [metricId]);
-
-    if (loading) return <div className="text-sm text-gray-500 py-2 animate-pulse">Memuat target matriks...</div>;
-
-    if (targets.length === 0) {
-        return <div className="text-sm text-gray-500 py-2 italic">Belum ada target spesifik untuk jenjang manapun.</div>;
-    }
-
-    return (
-        <div className="space-y-3">
-            {targets.map(t => (
-                <div key={t.id} className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-lg border border-gray-200 dark:border-gray-700 text-sm">
-                    <div className="font-semibold text-gray-900 dark:text-gray-100 flex justify-between items-center mb-1">
-                        <span>{t.level_name}</span>
-                        <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full">{t.data_source}</span>
-                    </div>
-                    <div className="text-gray-600 dark:text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
-                        <div><span className="text-gray-400 dark:text-gray-500 font-medium text-xs uppercase">Target:</span> <span className="font-medium text-gray-800 dark:text-gray-200">{t.target_value}</span> {t.measure_unit}</div>
-                        <div><span className="text-gray-400 dark:text-gray-500 font-medium text-xs uppercase">Bukti:</span> {t.evidence_type}</div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-};
-
 const IndicatorTimeline = ({ metricId }) => {
     const [timeline, setTimeline] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -172,7 +187,6 @@ const MetricNode = ({
     onAddChild,
     onEdit,
     onDelete,
-    onConfigTarget,
     onViewNode,
     isTerbit,
     expandedIds,
@@ -252,20 +266,10 @@ const MetricNode = ({
                             <button
                                 onClick={() => onAddChild(node)}
                                 className="p-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/50 flex items-center gap-1"
-                                title="Tambah Sub-Butir"
+                                title={getAddChildLabel(node.type)}
                             >
                                 <Icon icon={Icons.add} width={14} />
-                                Tambah
-                            </button>
-                        )}
-                        {node.type === 'Indicator' && (
-                            <button
-                                onClick={() => onConfigTarget(node)}
-                                className="p-1 px-2 font-medium text-xs text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 flex items-center gap-1"
-                                title="Konfigurasi Target Per Jenjang"
-                            >
-                                <Icon icon={Icons.target} width={14} />
-                                Target Indikator
+                                {getAddChildLabel(node.type)}
                             </button>
                         )}
                         <button
@@ -296,7 +300,6 @@ const MetricNode = ({
                             onAddChild={onAddChild}
                             onEdit={onEdit}
                             onDelete={onDelete}
-                            onConfigTarget={onConfigTarget}
                             onViewNode={onViewNode}
                             isTerbit={isTerbit}
                             expandedIds={expandedIds}
@@ -336,9 +339,6 @@ export default function StandardBuilder() {
         type: 'Header',
     });
 
-    // Target Config Modal state
-    const [isTargetConfigOpen, setIsTargetConfigOpen] = useState(false);
-    const [selectedIndicator, setSelectedIndicator] = useState(null);
     const [selectedIndicatorView, setSelectedIndicatorView] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedIds, setExpandedIds] = useState(new Set());
@@ -389,15 +389,18 @@ export default function StandardBuilder() {
         fetchData();
     }, [id]);
 
-    const fetchData = async () => {
+    const fetchData = async (showLoader = true) => {
         try {
-            setLoading(true);
+            if (showLoader) {
+                setLoading(true);
+            }
             const [stdRes, treeRes] = await Promise.all([
                 api.get(`/standards/${id}`),
                 api.get(`/standards/${id}/metrics/tree`)
             ]);
             setStandard(stdRes.data.data);
             setTree(treeRes.data.data);
+            setSelectedIndicatorView(null);
             setExpandedIds(new Set(
                 (function collectExpandable(nodes, carry = []) {
                     nodes.forEach((node) => {
@@ -413,13 +416,10 @@ export default function StandardBuilder() {
             toast.error('Gagal memuat struktur standar.');
             console.error(err);
         } finally {
-            setLoading(false);
+            if (showLoader) {
+                setLoading(false);
+            }
         }
-    };
-
-    const handleConfigTarget = (node) => {
-        setSelectedIndicator(node);
-        setIsTargetConfigOpen(true);
     };
 
     const toggleExpand = (nodeId) => {
@@ -489,9 +489,12 @@ export default function StandardBuilder() {
         setEditingNode(null);
         setParentNode(parent);
 
-        let nextType = 'Statement';
-        if (parent.type === 'Header') nextType = 'Header';
-        if (parent.type === 'Statement') nextType = 'Indicator';
+        const nextType = getNextChildType(parent.type);
+
+        if (!nextType) {
+            toast.error('Indicator tidak dapat memiliki child node.');
+            return;
+        }
 
         setFormData({
             standard_id: id,
@@ -524,8 +527,10 @@ export default function StandardBuilder() {
         if (window.confirm(`Hapus node "${node.content.substring(0, 30)}..."?\nPeringatan: Menghapus ini akan memusnahkan SEMUA data di bawah hirarkinya!`)) {
             try {
                 await api.delete(`/metrics/${node.id}`);
+                setTree((current) => removeNodeFromTree(current, node.id));
+                setSelectedIndicatorView((current) => (current?.id === node.id ? null : current));
                 toast.success('Node berhasil dihapus.');
-                fetchData();
+                fetchData(false);
             } catch (err) {
                 toast.error(err.response?.data?.message || 'Gagal menghapus node.');
             }
@@ -544,14 +549,28 @@ export default function StandardBuilder() {
             }
 
             if (editingNode) {
-                await api.put(`/metrics/${editingNode.id}`, payload);
+                const response = await api.put(`/metrics/${editingNode.id}`, payload);
+                const updatedNode = response.data.data;
+                setTree((current) => updateNodeInTree(current, updatedNode));
+                setSelectedIndicatorView((current) => (current?.id === updatedNode.id ? { ...current, ...updatedNode } : current));
                 toast.success('Node berhasil diperbarui.');
             } else {
-                await api.post('/metrics', payload);
+                const response = await api.post('/metrics', payload);
+                const createdNode = response.data.data;
+                setTree((current) => insertNodeIntoTree(current, createdNode));
+                setExpandedIds((current) => {
+                    const next = new Set(current);
+                    if (createdNode.parent_id) {
+                        next.add(createdNode.parent_id);
+                    }
+                    return next;
+                });
                 toast.success('Node baru berhasil ditambahkan.');
             }
-            fetchData();
             setIsModalOpen(false);
+            setEditingNode(null);
+            setParentNode(null);
+            fetchData(false);
         } catch (err) {
             toast.error(err.response?.data?.message || 'Gagal menyimpan node.');
         }
@@ -591,7 +610,7 @@ export default function StandardBuilder() {
                         className="inline-flex items-center gap-1 px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
                     >
                         <Icon icon={Icons.add} width={18} />
-                        Tambah Akar Baru
+                        Tambah Bab
                     </button>
                 )}
             </div>
@@ -672,18 +691,44 @@ export default function StandardBuilder() {
                 {/* Left Column: Tree Builder */}
                 <div className={`transition-all duration-300 ${selectedIndicatorView ? 'w-2/3' : 'w-full'}`}>
                     <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-xl border border-gray-200 dark:border-gray-700 min-h-[500px]">
+                        <div className="mb-5 flex items-start justify-between gap-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-4">
+                            <div>
+                                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Tree Generator</div>
+                                <div className="mt-1 text-sm font-semibold text-blue-900">Susun struktur standar dari Bab, lalu Pasal, lalu Indicator.</div>
+                                <div className="mt-1 text-sm leading-6 text-blue-800">
+                                    Tambah <strong>Bab</strong> di level utama. Setelah itu, setiap Bab dapat berisi <strong>Pasal</strong>, dan setiap Pasal dapat berisi <strong>Indicator</strong>.
+                                </div>
+                            </div>
+                            {canManageStructure && !['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
+                                <button
+                                    onClick={handleAddRoot}
+                                    className="inline-flex shrink-0 items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+                                >
+                                    <Icon icon={Icons.add} width={16} />
+                                    Tambah Bab
+                                </button>
+                            )}
+                        </div>
+
                         {tree.length === 0 ? (
-                            <div className="text-center py-12">
-                                <p className="text-gray-500 dark:text-gray-400 mb-4">Belum ada struktur hirarki di standar ini.</p>
+                            <div className="rounded-3xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
+                                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                                    <Icon icon={Icons.folder} width={26} />
+                                </div>
+                                <h2 className="mt-4 text-lg font-semibold text-gray-900">Struktur standar masih kosong</h2>
+                                <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">
+                                    Standar baru mulai dari tree kosong. Tambahkan <strong>Bab</strong> terlebih dahulu, lalu isi <strong>Pasal</strong> di dalamnya, dan lanjutkan dengan <strong>Indicator</strong> pada setiap Pasal.
+                                </p>
                                 {canManageStructure ? (
                                     <button
                                         onClick={handleAddRoot}
-                                        className="text-blue-600 font-medium hover:underline"
+                                        className="mt-5 inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
                                     >
-                                        Mulai susun standar baru
+                                        <Icon icon={Icons.add} width={16} />
+                                        Tambah Bab Pertama
                                     </button>
                                 ) : (
-                                    <div className="text-sm text-gray-500">Standar ini hanya dapat dibaca oleh role Anda.</div>
+                                    <div className="mt-4 text-sm text-gray-500">Standar ini hanya dapat dibaca oleh role Anda.</div>
                                 )}
                             </div>
                         ) : (
@@ -696,7 +741,6 @@ export default function StandardBuilder() {
                                         onAddChild={handleAddChild}
                                         onEdit={handleEdit}
                                         onDelete={handleDelete}
-                                        onConfigTarget={handleConfigTarget}
                                         onViewNode={focusNode}
                                         isTerbit={!canManageStructure || ['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
                                         expandedIds={expandedIds}
@@ -754,18 +798,9 @@ export default function StandardBuilder() {
                                                 <div className="mt-1 text-sm font-semibold text-emerald-900">{selectedIndicatorView.pj || '-'}</div>
                                             </div>
                                         </div>
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Target Jenjang</h4>
-                                            <button
-                                                onClick={() => handleConfigTarget(selectedIndicatorView)}
-                                                disabled={!canManageStructure}
-                                                className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${canManageStructure ? 'text-blue-600 hover:text-blue-800 bg-blue-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-                                            >
-                                                <Icon icon={Icons.edit} width={12} />
-                                                Edit Target
-                                            </button>
+                                        <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                            Target indikator diisi saat indikator dimasukkan ke borang per prodi, bukan saat penyusunan standar.
                                         </div>
-                                        <NodeTargetViewer metricId={selectedIndicatorView.id} />
 
                                         <div className="mt-6 border-t border-gray-200 pt-4">
                                             <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Timeline Indikator</h4>
@@ -787,23 +822,40 @@ export default function StandardBuilder() {
                         <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
                         <div className="relative z-[60] inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
                             <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
-                                {editingNode ? 'Edit Node' : parentNode ? `Tambah Sub-Butir untuk ID #${parentNode.id}` : 'Tambah Akar Utama'}
+                                {editingNode
+                                    ? `Edit ${getNodeTypeLabel(editingNode.type)}`
+                                    : parentNode
+                                        ? `${getAddChildLabel(parentNode.type)} untuk ${getNodeTypeLabel(parentNode.type)} #${parentNode.id}`
+                                        : 'Tambah Bab Utama'}
                             </h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
+                                {editingNode && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipe Komponen</label>
+                                        <select
+                                            value={formData.type}
+                                            onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                        >
+                                            <option value="Header">Bab (Folder/Kategori)</option>
+                                            <option value="Statement">Pasal (Pernyataan Kinerja)</option>
+                                            <option value="Indicator">Indicator (Tolak Ukur Target)</option>
+                                        </select>
+                                    </div>
+                                )}
+                                {!editingNode && parentNode && (
+                                    <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                                        Tipe node ditentukan otomatis dari tombol yang dipilih: Bab -&gt; Pasal -&gt; Indicator.
+                                    </div>
+                                )}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipe Komponen</label>
-                                    <select
-                                        value={formData.type}
-                                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                    >
-                                        <option value="Header">Bab (Folder/Kategori)</option>
-                                        <option value="Statement">Pasal (Pernyataan Kinerja)</option>
-                                        <option value="Indicator">Indicator (Tolak Ukur Target)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Isi (Konten)</label>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        {formData.type === 'Header'
+                                            ? 'Nama Bab'
+                                            : formData.type === 'Statement'
+                                                ? 'Nama Pasal'
+                                                : 'Nama Indicator'}
+                                    </label>
                                     <textarea
                                         required
                                         rows="4"
@@ -869,14 +921,6 @@ export default function StandardBuilder() {
                     </div>
                 </div>
             )}
-
-            {/* Target Configuration Modal */}
-            <StandardTargetConfig
-                metric={selectedIndicator}
-                isOpen={isTargetConfigOpen}
-                onClose={() => setIsTargetConfigOpen(false)}
-                isTerbit={!canManageStructure || ['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status)}
-            />
         </div>
     );
 }

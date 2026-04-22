@@ -34,7 +34,6 @@ class BorangController extends Controller
         $items = BorangItem::with([
             'metric.standard',
             'metric.parent',
-            'metric.targets.level',
         ])
             ->where('prodi_id', $prodi->id)
             ->orderBy('id')
@@ -58,6 +57,7 @@ class BorangController extends Controller
             'prodi_id' => 'required|exists:ref_units,id',
             'metric_id' => 'required|exists:mst_metrics,id',
             'pj' => 'required|in:Dekan,Kaprodi',
+            'target_sasaran' => 'required|string',
         ], [
             'prodi_id.required' => 'prodi wajib dipilih',
             'prodi_id.exists' => 'prodi tidak valid',
@@ -65,6 +65,7 @@ class BorangController extends Controller
             'metric_id.exists' => 'indikator tidak valid',
             'pj.required' => 'pj wajib dipilih',
             'pj.in' => 'pj tidak valid',
+            'target_sasaran.required' => 'target sasaran wajib diisi',
         ]);
 
         $prodi = Unit::findOrFail($validated['prodi_id']);
@@ -75,7 +76,7 @@ class BorangController extends Controller
             ], 422);
         }
 
-        $metric = MstMetric::with(['standard', 'parent', 'targets.level'])->findOrFail($validated['metric_id']);
+        $metric = MstMetric::with(['standard', 'parent'])->findOrFail($validated['metric_id']);
         if ($metric->type !== 'Indicator') {
             return response()->json([
                 'status' => 'error',
@@ -98,10 +99,11 @@ class BorangController extends Controller
             'prodi_id' => $prodi->id,
             'metric_id' => $metric->id,
             'pj' => $validated['pj'],
+            'target_sasaran' => trim($validated['target_sasaran']),
             'created_by' => $request->user()?->id,
         ]);
 
-        $item->load(['metric.standard', 'metric.parent', 'metric.targets.level']);
+        $item->load(['metric.standard', 'metric.parent']);
 
         return response()->json([
             'status' => 'success',
@@ -128,19 +130,6 @@ class BorangController extends Controller
     private function transformItem(BorangItem $item): array
     {
         $metric = $item->metric;
-        $targets = $metric?->targets ?? collect();
-
-        $targetSummary = $targets->isNotEmpty()
-            ? $targets
-                ->map(function ($target) {
-                    $value = collect([$target->target_value, $target->measure_unit])
-                        ->filter()
-                        ->join(' ');
-
-                    return $value ?: ($target->data_source ?: '-');
-                })
-                ->join('; ')
-            : '-';
 
         return [
             'id' => $item->id,
@@ -152,7 +141,7 @@ class BorangController extends Controller
             'ikt' => $metric?->ikt ?: '-',
             'sasaran_mutu' => $metric?->parent?->content ?: '-',
             'indikator' => $metric?->content ?: '-',
-            'target_sasaran' => $targetSummary,
+            'target_sasaran' => $item->target_sasaran ?: '-',
             'pj' => $item->pj ?: 'Kaprodi',
         ];
     }

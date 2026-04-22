@@ -21,6 +21,7 @@ const initialState = {
     indicatorSearch: '',
     selectedIndicatorId: '',
     selectedPj: 'Kaprodi',
+    selectedTargetSasaran: '',
 };
 
 const borangSlice = createSlice({
@@ -80,6 +81,7 @@ const borangSlice = createSlice({
             state.indicatorSearch = '';
             state.selectedIndicatorId = '';
             state.selectedPj = 'Kaprodi';
+            state.selectedTargetSasaran = '';
         },
         closeAddModal: (state) => {
             if (state.loadingIndicators) {
@@ -90,6 +92,7 @@ const borangSlice = createSlice({
             state.indicatorSearch = '';
             state.selectedIndicatorId = '';
             state.selectedPj = 'Kaprodi';
+            state.selectedTargetSasaran = '';
         },
         setAllIndicators: (state, action) => {
             state.allIndicators = action.payload;
@@ -106,6 +109,9 @@ const borangSlice = createSlice({
         setSelectedPj: (state, action) => {
             state.selectedPj = action.payload;
         },
+        setSelectedTargetSasaran: (state, action) => {
+            state.selectedTargetSasaran = action.payload;
+        },
         resetBorangView: (state) => {
             state.selectedFaculty = null;
             state.selectedProdi = null;
@@ -119,6 +125,7 @@ const borangSlice = createSlice({
             state.indicatorSearch = '';
             state.selectedIndicatorId = '';
             state.selectedPj = 'Kaprodi';
+            state.selectedTargetSasaran = '';
         },
     },
 });
@@ -147,6 +154,7 @@ export const {
     setIndicatorSearch,
     setSelectedIndicatorId,
     setSelectedPj,
+    setSelectedTargetSasaran,
     resetBorangView,
 } = borangSlice.actions;
 

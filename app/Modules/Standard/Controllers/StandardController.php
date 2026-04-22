@@ -255,8 +255,7 @@ class StandardController extends Controller
             $query->where('periode_tahun', $request->periode_tahun);
         }
 
-        $standards = $query->orderBy('periode_tahun', 'desc')
-                           ->orderBy('name')
+        $standards = $query->orderByDesc('created_at')
                            ->get();
 
         return response()->json([

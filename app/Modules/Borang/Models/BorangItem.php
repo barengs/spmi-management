@@ -18,6 +18,7 @@ class BorangItem extends Model
         'prodi_id',
         'metric_id',
         'pj',
+        'target_sasaran',
         'created_by',
     ];
 

@@ -9,28 +9,6 @@ const initialFacultyForm = {
     code: '',
 };
 
-function walkMetrics(nodes, standard, rows = [], ancestors = []) {
-    nodes.forEach((node) => {
-        const nextAncestors = [...ancestors, node];
-
-        if (node.type === 'Indicator') {
-            const statement = [...ancestors].reverse().find((item) => item.type === 'Statement') || null;
-            rows.push({
-                id: node.id,
-                standard,
-                indicator: node,
-                statement,
-            });
-        }
-
-        if (node.children_recursive?.length) {
-            walkMetrics(node.children_recursive, standard, rows, nextAncestors);
-        }
-    });
-
-    return rows;
-}
-
 export default function EvidenceAuditPage() {
     const PAGE_SIZE = 10;
     const [units, setUnits] = useState([]);
@@ -54,61 +32,13 @@ export default function EvidenceAuditPage() {
         try {
             setLoading(true);
 
-            const [unitsResponse, standardsResponse] = await Promise.all([
+            const [unitsResponse] = await Promise.all([
                 api.get('/units/flat'),
-                api.get('/standards'),
             ]);
 
             const fetchedUnits = unitsResponse.data.data || [];
-            const standards = standardsResponse.data.data || [];
 
             setUnits(fetchedUnits);
-
-            const treeResponses = await Promise.all(
-                standards.map(async (standard) => {
-                    const treeResponse = await api.get(`/standards/${standard.id}/metrics/tree`);
-                    return {
-                        standard,
-                        tree: treeResponse.data.data || [],
-                    };
-                })
-            );
-
-            const indicatorRows = treeResponses.flatMap(({ standard, tree }) => walkMetrics(tree, standard));
-
-            const targetsByMetricId = new Map();
-
-            await Promise.all(
-                indicatorRows.map(async (row) => {
-                    const targetResponse = await api.get(`/metrics/${row.indicator.id}/targets`);
-                    targetsByMetricId.set(String(row.indicator.id), targetResponse.data.data || []);
-                })
-            );
-
-            const nextRows = indicatorRows.map((row, index) => {
-                const targets = targetsByMetricId.get(String(row.indicator.id)) || [];
-                const targetSummary = targets.length > 0
-                    ? targets
-                        .map((target) => {
-                            const value = [target.target_value, target.measure_unit].filter(Boolean).join(' ');
-                            return value || target.data_source || '-';
-                        })
-                        .join('; ')
-                    : '-';
-
-                return {
-                    no: index + 1,
-                    standardName: row.standard.name,
-                    iku: row.indicator.iku || '-',
-                    ikt: row.indicator.ikt || '-',
-                    sasaranMutu: row.statement?.content || '-',
-                    indikator: row.indicator.content || '-',
-                    targetSasaran: targetSummary,
-                    pj: row.indicator.pj || 'Kaprodi',
-                };
-            });
-
-            setRequirementRows(nextRows);
         } catch (error) {
             toast.error(error.response?.data?.message || 'Halaman audit gagal dimuat.');
         } finally {
@@ -181,11 +111,32 @@ export default function EvidenceAuditPage() {
         }
     };
 
-    const openRequirementTable = (faculty, prodi) => {
+    const openRequirementTable = async (faculty, prodi) => {
         setSelectedFaculty(faculty);
         setSelectedProdi(prodi);
         setActiveRequirementTab('DEKAN');
-        setViewMode('requirements');
+        setLoading(true);
+
+        try {
+            const response = await api.get(`/borang/prodis/${prodi.id}`);
+            const rows = (response.data.data || []).map((row) => ({
+                id: row.id,
+                standardName: row.standard_name,
+                iku: row.iku,
+                ikt: row.ikt,
+                sasaranMutu: row.sasaran_mutu,
+                indikator: row.indikator,
+                targetSasaran: row.target_sasaran,
+                pj: row.pj,
+            }));
+
+            setRequirementRows(rows);
+            setViewMode('requirements');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Dokumen borang prodi gagal dimuat.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const goBackToPairs = () => {

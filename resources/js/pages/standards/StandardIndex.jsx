@@ -70,6 +70,17 @@ export default function StandardIndex() {
         fetchStandards();
     }, []);
 
+    const upsertStandard = (incomingStandard) => {
+        setStandards((current) => {
+            const next = current.filter((item) => item.id !== incomingStandard.id);
+            return [incomingStandard, ...next];
+        });
+    };
+
+    const removeStandard = (standardId) => {
+        setStandards((current) => current.filter((item) => item.id !== standardId));
+    };
+
     const getPeriodStatus = (items) => {
         if (!items.length) {
             return 'Non Aktif';
@@ -220,14 +231,18 @@ export default function StandardIndex() {
         setIsSubmitting(true);
         try {
             if (editingStandard) {
-                await api.put(`/standards/${editingStandard.id}`, formData);
+                const response = await api.put(`/standards/${editingStandard.id}`, formData);
+                upsertStandard(response.data.data);
                 toast.success('Standar Mutu berhasil diperbarui.');
             } else {
-                await api.post('/standards', formData);
+                const response = await api.post('/standards', formData);
+                const createdStandard = response.data.data;
+                upsertStandard(createdStandard);
+                setSelectedPeriod(createdStandard.periode_tahun ? String(createdStandard.periode_tahun) : 'Tanpa Periode');
                 toast.success('Standar Mutu baru berhasil dibuat.');
             }
-            fetchStandards();
             handleCloseModal();
+            fetchStandards();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Gagal menyimpan standar.');
         } finally {
@@ -239,6 +254,7 @@ export default function StandardIndex() {
         if (window.confirm('Apakah Anda yakin ingin menghapus standar ini? Semua komponen di dalamnya juga akan ikut terhapus secara berjenjang.')) {
             try {
                 await api.delete(`/standards/${id}`);
+                removeStandard(id);
                 toast.success('Standar berhasil dihapus seluruhnya.');
                 fetchStandards();
             } catch (err) {
@@ -250,7 +266,8 @@ export default function StandardIndex() {
     const handleSubmitForApproval = async (id) => {
         if (window.confirm('Ajukan Standar Mutu ini ke Kepala LPMI? Setelah itu approval akan berlanjut ke Wakil Rektor 1, 2, 3, lalu Rektor.')) {
             try {
-                await api.patch(`/standards/${id}/submit`);
+                const response = await api.patch(`/standards/${id}/submit`);
+                upsertStandard(response.data.data);
                 toast.success('Standar Mutu berhasil DIAJUKAN.');
                 fetchStandards();
             } catch (err) {
