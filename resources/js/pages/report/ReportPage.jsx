@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
+import { getStandardStatusLabel, getWaitingApprovalLabel } from '../../utils/standardStatus';
 
 function formatDateTime(value) {
     if (!value) {
@@ -42,12 +43,8 @@ function getAuditResult(item) {
         return 'Disetujui dan diterbitkan';
     }
 
-    if (item.status === 'WAITING_APPROVAL' && item.review_submitted_at) {
-        return 'Review auditor selesai, menunggu keputusan akhir';
-    }
-
     if (item.status === 'WAITING_APPROVAL') {
-        return 'Sedang direview auditor';
+        return getWaitingApprovalLabel(item);
     }
 
     if (item.status === 'REVISI') {
@@ -212,7 +209,7 @@ export default function ReportPage() {
                                 <div className="flex flex-wrap items-center gap-3">
                                     <h2 className="text-xl font-semibold text-gray-900">{item.name}</h2>
                                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(item.status)}`}>
-                                        {item.status}
+                                        {getStandardStatusLabel(item)}
                                     </span>
                                 </div>
                                 <p className="mt-2 text-sm leading-6 text-gray-600">

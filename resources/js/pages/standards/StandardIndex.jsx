@@ -5,6 +5,7 @@ import api from '../../services/api';
 import { toast } from 'react-toastify';
 import StandardCloneModal from './StandardCloneModal';
 import Icon, { Icons } from '../../components/ui/Icon';
+import { getStandardStatusLabel } from '../../utils/standardStatus';
 import {
     createColumnHelper,
     flexRender,
@@ -307,9 +308,12 @@ export default function StandardIndex() {
                 }
                 if (status === 'WAITING_APPROVAL') {
                     return (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold leading-5 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 shadow-sm border border-blue-200 dark:border-blue-800 animate-pulse">
+                        <span
+                            className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold leading-5 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 shadow-sm border border-blue-200 dark:border-blue-800"
+                            title={getStandardStatusLabel(info.row.original)}
+                        >
                             <Icon icon={Icons.pending} width={14} />
-                            Menunggu Review
+                            {getStandardStatusLabel(info.row.original)}
                         </span>
                     );
                 }

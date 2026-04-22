@@ -41,6 +41,18 @@ class StandardPendingAuditorReviewSeeder extends Seeder
         );
         $pimpinan->syncRoles(['Pimpinan']);
 
+        $kepalaLpmi = User::updateOrCreate(
+            ['email' => 'kepala.lpmi@espmi.dev'],
+            [
+                'nidn_npk' => 'LPMH001',
+                'name' => 'Kepala LPMI',
+                'password' => Hash::make('Password@123'),
+                'unit_id' => $lpmUnit?->id,
+                'is_active' => true,
+            ]
+        );
+        $kepalaLpmi->syncRoles(['Kepala LPMI']);
+
         $admin = User::query()->where('email', 'admin@espmi.dev')->first();
 
         $publishedStandard = MstStandard::withTrashed()->updateOrCreate(

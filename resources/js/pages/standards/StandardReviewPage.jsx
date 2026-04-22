@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
+import { getApprovalStageLabel, getStandardStatusLabel } from '../../utils/standardStatus';
 
 const getNodeTypeLabel = (type) => {
     if (type === 'Header') return 'Bab';
@@ -92,15 +93,6 @@ function statusBadge(status) {
     }
 
     return 'bg-amber-100 text-amber-800 border-amber-200';
-}
-
-function approvalStageLabel(stage) {
-    if (stage === 'HEAD_LPMI') return 'Menunggu Kepala LPMI';
-    if (stage === 'WR') return 'Menunggu Wakil Rektor 1, 2, dan 3';
-    if (stage === 'RECTOR') return 'Menunggu Rektor';
-    if (stage === 'FINAL') return 'Final';
-    if (stage === 'REVISI') return 'Revisi';
-    return 'Draft';
 }
 
 function reviewNodeBadge(status) {
@@ -599,11 +591,11 @@ export default function StandardReviewPage() {
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">Status</div>
                     <div className="mt-2">
                         <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(standard?.status)}`}>
-                            {standard?.status || 'DRAFT'}
+                            {getStandardStatusLabel(standard)}
                         </span>
                     </div>
                     <div className="mt-2 text-xs leading-5 text-gray-500">
-                        Tahap aktif: {approvalStageLabel(standard?.approval_stage)}
+                        Tahap aktif: {getApprovalStageLabel(standard?.approval_stage)}
                     </div>
                 </div>
                 <InfoCard
@@ -737,7 +729,7 @@ export default function StandardReviewPage() {
                         <div className="mt-1">Node belum dicek auditor: {pendingNodes.length}</div>
                         <div className="mt-1">Node cocok dengan periode sebelumnya: {comparison.totalMatchedNodes}</div>
                         <div className="mt-1">Persentase kecocokan: {matchPercentage}%</div>
-                        <div className="mt-1">Tahap persetujuan aktif: {approvalStageLabel(standard?.approval_stage)}</div>
+                        <div className="mt-1">Tahap persetujuan aktif: {getApprovalStageLabel(standard?.approval_stage)}</div>
                         <div className="mt-1">Kepala LPMI: {standard?.head_lpmi_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
                         <div className="mt-1">Wakil Rektor 1: {standard?.wr1_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
                         <div className="mt-1">Wakil Rektor 2: {standard?.wr2_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
