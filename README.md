@@ -70,7 +70,7 @@ app/Modules/
 
 #### 2. **JWT Authentication**
 - Stateless authentication dengan JWT tokens
-- Token TTL: 60 menit (configurable)
+- Token TTL: 3 hari (configurable)
 - Auto-refresh dan 401 handling di frontend
 
 #### 3. **RBAC (Role-Based Access Control)**
@@ -277,13 +277,35 @@ Setelah menjalankan `php artisan db:seed`, login dengan:
 |-------|----------|------|
 | `admin@espmi.dev` | `Password@123` | SuperAdmin |
 | `lpm@espmi.dev` | `Password@123` | LPM-Admin |
+| `ratna.kusuma@espmi.dev` | `Password@123` | Lead Auditor |
 | `auditor@espmi.dev` | `Password@123` | Auditor |
+| `sari.wulandari@espmi.dev` | `Password@123` | Auditor |
+| `andi.pratama@espmi.dev` | `Password@123` | Auditor |
 | `auditee@espmi.dev` | `Password@123` | Auditee |
 | `pimpinan@espmi.dev` | `Password@123` | Pimpinan |
 
+### Dummy Auditee per Prodi
+
+| Email | Password | Role | Prodi |
+|-------|----------|------|-------|
+| `rina.maharani@espmi.dev` | `Password@123` | Auditee | S1 Teknik Informatika |
+| `dimas.setiawan@espmi.dev` | `Password@123` | Auditee | S1 Sistem Informasi |
+| `nabila.ayu@espmi.dev` | `Password@123` | Auditee | S1 Teknologi Komputer |
+| `galih.permana@espmi.dev` | `Password@123` | Auditee | S1 Bisnis Digital |
+| `maya.lestari@espmi.dev` | `Password@123` | Auditee | S1 Manajemen |
+| `fajar.hidayat@espmi.dev` | `Password@123` | Auditee | S1 Akuntansi |
+| `putri.anindya@espmi.dev` | `Password@123` | Auditee | S1 Ekonomi Pembangunan |
+| `rizky.saputra@espmi.dev` | `Password@123` | Auditee | S1 Kewirausahaan |
+| `anita.safitri@espmi.dev` | `Password@123` | Auditee | S1 PGSD |
+| `yusuf.kurniawan@espmi.dev` | `Password@123` | Auditee | S1 Pendidikan Bahasa Inggris |
+| `lia.oktaviani@espmi.dev` | `Password@123` | Auditee | S1 Pendidikan Matematika |
+| `teguh.wicaksono@espmi.dev` | `Password@123` | Auditee | S1 Pendidikan Biologi |
+
 ### Demo Accounts Notes
 
-- `auditor@espmi.dev` digunakan untuk review node standar dan submit hasil review ke Pimpinan.
+- `ratna.kusuma@espmi.dev` digunakan sebagai contoh Lead Auditor untuk penjadwalan audit.
+- `auditor@espmi.dev`, `sari.wulandari@espmi.dev`, dan `andi.pratama@espmi.dev` digunakan sebagai contoh Auditor.
+- akun auditee personal per prodi dipakai untuk assignment otomatis saat prodi dipilih di jadwal audit.
 - `pimpinan@espmi.dev` digunakan untuk keputusan final standar: terbitkan atau kembalikan untuk revisi.
 - Seeder demo juga menyiapkan contoh standar `WAITING_APPROVAL` yang belum direview auditor.
 

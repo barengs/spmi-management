@@ -13,6 +13,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
 
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: Icons.dashboard },
+        { label: 'Notifikasi', path: '/notifications', icon: Icons.bell },
         { label: 'Borang', path: '/borang', icon: Icons.document, roles: ['LPM-Admin', 'SuperAdmin'], permissions: ['standard.update'] },
         { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view'] },
         { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'] },

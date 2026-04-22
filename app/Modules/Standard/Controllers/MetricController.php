@@ -3,6 +3,7 @@
 namespace App\Modules\Standard\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Core\Models\ActivityLog;
 use App\Modules\Evidence\Models\TrxEvidence;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
@@ -13,6 +14,11 @@ use Illuminate\Validation\ValidationException;
 
 class MetricController extends Controller
 {
+    private function logMetricActivity(string $action, MstMetric $metric, mixed $oldData = null, mixed $newData = null): void
+    {
+        ActivityLog::record($action, MstMetric::class, $metric->id, $oldData, $newData);
+    }
+
     private function denyUnlessCanReview(Request $request, string $message): ?JsonResponse
     {
         $user = $request->user();
@@ -208,6 +214,7 @@ class MetricController extends Controller
         }
 
         $metric = MstMetric::create($validated);
+        $this->logMetricActivity('POST', $metric, null, $metric->toArray());
 
         return response()->json([
             'status'  => 'success',
@@ -271,7 +278,9 @@ class MetricController extends Controller
             $validated['pj'] = null;
         }
 
+        $oldData = $metric->toArray();
         $metric->update($validated);
+        $this->logMetricActivity('PUT', $metric, $oldData, $metric->fresh()->toArray());
 
         return response()->json([
             'status'  => 'success',
@@ -307,7 +316,9 @@ class MetricController extends Controller
 
         // Menghapus node ini akan secara otomatis menghapus anak-anaknya berkat `cascadeOnDelete` foreign key pada DB, 
         // namun untuk softdeletes Eloquent kita harus menginisiasinya secara eksplisit jika parent_id dan standard_id tidak null
+        $oldData = $metric->load('childrenRecursive')->toArray();
         $this->deleteMetricAndChildren($metric);
+        $this->logMetricActivity('DELETE', $metric, $oldData, null);
 
         return response()->json([
             'status'  => 'success',
@@ -384,6 +395,12 @@ class MetricController extends Controller
                 $this->applyRejectedState($metric, $request, $validated['comment'], $validated['review_action']);
             }
 
+            $this->logMetricActivity('REVIEW', $metric, null, [
+                'review_status' => 'REJECTED',
+                'review_action' => $validated['review_action'],
+                'review_comment' => $validated['comment'],
+            ]);
+
             return response()->json([
                 'status' => 'success',
                 'message' => $metric->type === 'Header'
@@ -399,12 +416,47 @@ class MetricController extends Controller
             $this->resetReviewState($metric);
         }
 
+        $this->logMetricActivity('REVIEW', $metric, null, [
+            'review_status' => $validated['action'] === 'reject' ? 'REJECTED' : 'ACCEPTED',
+            'review_action' => $validated['review_action'] ?? null,
+            'review_comment' => $validated['comment'] ?? null,
+        ]);
+
         return response()->json([
             'status' => 'success',
             'message' => $metric->type === 'Header'
                 ? 'Header dan seluruh node turunannya ditandai sudah dicek auditor.'
                 : 'Node standar ditandai sudah dicek auditor.',
             'data' => $metric->fresh(),
+        ]);
+    }
+
+    public function timeline($id): JsonResponse
+    {
+        $metric = MstMetric::findOrFail($id);
+
+        $logs = ActivityLog::with('user:id,name,email')
+            ->where('model_type', MstMetric::class)
+            ->where('model_id', $metric->id)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (ActivityLog $log) => [
+                'id' => $log->id,
+                'action' => $log->action,
+                'user' => $log->user ? [
+                    'id' => $log->user->id,
+                    'name' => $log->user->name,
+                    'email' => $log->user->email,
+                ] : null,
+                'old_data' => $log->old_data,
+                'new_data' => $log->new_data,
+                'method' => $log->method,
+                'created_at' => $log->created_at,
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $logs,
         ]);
     }
 }

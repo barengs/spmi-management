@@ -1,17 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../store/authSlice';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import Icon, { Icons } from '../ui/Icon';
+import { buildScheduleNotifications } from '../../utils/notifications';
 
 export default function Navbar({ toggleSidebar }) {
     const dispatch = useDispatch();
     const user = useSelector((state) => state.auth.user);
     const location = useLocation();
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [notificationOpen, setNotificationOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
+    const [notificationSchedules, setNotificationSchedules] = useState([]);
 
     const getBreadcrumbs = () => {
         const path = location.pathname;
@@ -26,6 +29,10 @@ export default function Navbar({ toggleSidebar }) {
 
         if (path === '/borang') {
             return ['Borang'];
+        }
+
+        if (path === '/notifications') {
+            return ['Notifikasi'];
         }
 
         if (/^\/standards\/[^/]+\/builder$/.test(path)) {
@@ -80,6 +87,20 @@ export default function Navbar({ toggleSidebar }) {
     };
 
     const breadcrumbs = getBreadcrumbs();
+    const notifications = useMemo(() => buildScheduleNotifications(user, notificationSchedules).slice(0, 5), [notificationSchedules, user]);
+
+    useEffect(() => {
+        const fetchNotifications = async () => {
+            try {
+                const response = await api.get('/audit-schedules');
+                setNotificationSchedules(response.data.data || []);
+            } catch (error) {
+                setNotificationSchedules([]);
+            }
+        };
+
+        fetchNotifications();
+    }, [location.pathname]);
 
     // Initialize dark mode
     useEffect(() => {
@@ -156,10 +177,54 @@ export default function Navbar({ toggleSidebar }) {
                 </button>
 
                 {/* Notifications */}
-                <button className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition relative">
-                    <Icon icon={Icons.bell} width={20} />
-                    <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-800"></span>
-                </button>
+                <div className="relative">
+                    <button
+                        type="button"
+                        onClick={() => setNotificationOpen((current) => !current)}
+                        className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition relative"
+                    >
+                        <Icon icon={Icons.bell} width={20} />
+                        {notifications.length > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white dark:ring-gray-800">
+                                {notifications.length}
+                            </span>
+                        )}
+                    </button>
+
+                    {notificationOpen && (
+                        <div className="absolute right-0 mt-2 w-96 max-w-[calc(100vw-2rem)] rounded-2xl border border-gray-200 bg-white shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                                <div className="text-sm font-semibold text-gray-900">Notifikasi</div>
+                                <Link
+                                    to="/notifications"
+                                    onClick={() => setNotificationOpen(false)}
+                                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                    Lihat Semua
+                                </Link>
+                            </div>
+                            <div className="max-h-96 overflow-y-auto">
+                                {notifications.length === 0 ? (
+                                    <div className="px-4 py-8 text-center text-sm text-gray-500">
+                                        Belum ada notifikasi masuk.
+                                    </div>
+                                ) : (
+                                    notifications.map((item) => (
+                                        <Link
+                                            key={item.id}
+                                            to={item.href}
+                                            onClick={() => setNotificationOpen(false)}
+                                            className="block border-b border-gray-100 px-4 py-4 transition hover:bg-gray-50"
+                                        >
+                                            <div className="text-sm font-semibold text-gray-900">{item.title}</div>
+                                            <div className="mt-1 text-sm leading-6 text-gray-600">{item.message}</div>
+                                        </Link>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 {/* User Dropdown */}
                 <div className="relative">

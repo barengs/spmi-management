@@ -3,6 +3,7 @@
 namespace App\Modules\Standard\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Core\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Modules\Standard\Models\MstMetric;
@@ -91,6 +92,23 @@ class MetricTargetController extends Controller
                 ]
             );
         }
+
+        ActivityLog::record(
+            'TGT_SYNC',
+            MstMetric::class,
+            $metric->id,
+            null,
+            [
+                'targets' => collect($updatedTargets)->map(fn ($target) => [
+                    'id' => $target->id,
+                    'level_id' => $target->level_id,
+                    'target_value' => $target->target_value,
+                    'measure_unit' => $target->measure_unit,
+                    'data_source' => $target->data_source,
+                    'evidence_type' => $target->evidence_type,
+                ])->values()->all(),
+            ]
+        );
 
         return response()->json([
             'status' => 'success',

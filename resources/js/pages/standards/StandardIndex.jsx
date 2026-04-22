@@ -27,7 +27,12 @@ export default function StandardIndex() {
     const user = useSelector(state => state.auth.user);
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
-    const isPimpinan = hasRole('Pimpinan');
+    const isPimpinan = hasRole('Pimpinan')
+        || hasRole('Kepala LPMI')
+        || hasRole('Wakil Rektor 1')
+        || hasRole('Wakil Rektor 2')
+        || hasRole('Wakil Rektor 3')
+        || hasRole('Rektor');
     const canManageStandards = hasRole('SuperAdmin')
         || user?.permissions?.includes('standard.create')
         || user?.permissions?.includes('standard.update')
@@ -37,7 +42,14 @@ export default function StandardIndex() {
         || hasRole('Auditor')
         || hasRole('LPM-Admin')
         || user?.permissions?.includes('audit.score.update');
-    const canReviewStandards = hasRole('SuperAdmin') || hasRole('Pimpinan') || user?.permissions?.includes('standard.publish');
+    const canReviewStandards = hasRole('SuperAdmin')
+        || hasRole('Pimpinan')
+        || hasRole('Kepala LPMI')
+        || hasRole('Wakil Rektor 1')
+        || hasRole('Wakil Rektor 2')
+        || hasRole('Wakil Rektor 3')
+        || hasRole('Rektor')
+        || user?.permissions?.includes('standard.publish');
     const canUploadEvidence = hasRole('SuperAdmin') || user?.permissions?.includes('evidence.upload');
 
     // Modal state for Create/Edit
@@ -235,7 +247,7 @@ export default function StandardIndex() {
     };
 
     const handleSubmitForApproval = async (id) => {
-        if (window.confirm('Ajukan Standar Mutu ini ke Pimpinan untuk direview? Selama masa review, standar akan dikunci sementara.')) {
+        if (window.confirm('Ajukan Standar Mutu ini ke Kepala LPMI? Setelah itu approval akan berlanjut ke Wakil Rektor 1, 2, 3, lalu Rektor.')) {
             try {
                 await api.patch(`/standards/${id}/submit`);
                 toast.success('Standar Mutu berhasil DIAJUKAN.');
@@ -396,7 +408,7 @@ export default function StandardIndex() {
                             key="submit"
                             onClick={() => handleSubmitForApproval(item.id)}
                             className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
-                            title="Ajukan Review ke Pimpinan"
+                            title="Ajukan ke Kepala LPMI"
                         >
                             Ajukan
                         </button>

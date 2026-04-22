@@ -13,22 +13,65 @@ use Illuminate\Support\Facades\Storage;
 
 class AuditDemoSeeder extends Seeder
 {
+    private int $indicatorSequence = 100;
+
     public function run(): void
     {
         $lpmUnit = Unit::query()->where('code', 'LPM')->first();
         $departmentUnit = Unit::query()->where('code', 'TIF-S1')->first();
+        $departmentUnits = Unit::query()
+            ->where('level', 'department')
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $leadAuditor = User::updateOrCreate(
+            ['email' => 'ratna.kusuma@espmi.dev'],
+            [
+                'nidn_npk' => 'LAD001',
+                'name' => 'Ratna Kusuma',
+                'password' => Hash::make('Password@123'),
+                'unit_id' => $lpmUnit?->id,
+                'is_active' => true,
+            ]
+        );
+        $leadAuditor->syncRoles(['Lead Auditor']);
 
         $auditor = User::updateOrCreate(
             ['email' => 'auditor@espmi.dev'],
             [
                 'nidn_npk' => 'AUD001',
-                'name' => 'Auditor Mutu Internal',
+                'name' => 'Budi Santoso',
                 'password' => Hash::make('Password@123'),
                 'unit_id' => $lpmUnit?->id,
                 'is_active' => true,
             ]
         );
         $auditor->syncRoles(['Auditor']);
+
+        $auditorTwo = User::updateOrCreate(
+            ['email' => 'sari.wulandari@espmi.dev'],
+            [
+                'nidn_npk' => 'AUD002',
+                'name' => 'Sari Wulandari',
+                'password' => Hash::make('Password@123'),
+                'unit_id' => $lpmUnit?->id,
+                'is_active' => true,
+            ]
+        );
+        $auditorTwo->syncRoles(['Auditor']);
+
+        $auditorThree = User::updateOrCreate(
+            ['email' => 'andi.pratama@espmi.dev'],
+            [
+                'nidn_npk' => 'AUD003',
+                'name' => 'Andi Pratama',
+                'password' => Hash::make('Password@123'),
+                'unit_id' => $lpmUnit?->id,
+                'is_active' => true,
+            ]
+        );
+        $auditorThree->syncRoles(['Auditor']);
 
         $auditee = User::updateOrCreate(
             ['email' => 'auditee@espmi.dev'],
@@ -41,6 +84,41 @@ class AuditDemoSeeder extends Seeder
             ]
         );
         $auditee->syncRoles(['Auditee']);
+
+        $auditeePeople = [
+            'TIF-S1' => ['email' => 'rina.maharani@espmi.dev', 'nidn_npk' => 'ADT101', 'name' => 'Rina Maharani'],
+            'SI-S1' => ['email' => 'dimas.setiawan@espmi.dev', 'nidn_npk' => 'ADT102', 'name' => 'Dimas Setiawan'],
+            'TEKOM-S1' => ['email' => 'nabila.ayu@espmi.dev', 'nidn_npk' => 'ADT103', 'name' => 'Nabila Ayu'],
+            'BD-S1' => ['email' => 'galih.permana@espmi.dev', 'nidn_npk' => 'ADT104', 'name' => 'Galih Permana'],
+            'MNJ-S1' => ['email' => 'maya.lestari@espmi.dev', 'nidn_npk' => 'ADT105', 'name' => 'Maya Lestari'],
+            'AKT-S1' => ['email' => 'fajar.hidayat@espmi.dev', 'nidn_npk' => 'ADT106', 'name' => 'Fajar Hidayat'],
+            'EKO-S1' => ['email' => 'putri.anindya@espmi.dev', 'nidn_npk' => 'ADT107', 'name' => 'Putri Anindya'],
+            'KWB-S1' => ['email' => 'rizky.saputra@espmi.dev', 'nidn_npk' => 'ADT108', 'name' => 'Rizky Saputra'],
+            'PGSD-S1' => ['email' => 'anita.safitri@espmi.dev', 'nidn_npk' => 'ADT109', 'name' => 'Anita Safitri'],
+            'PBI-S1' => ['email' => 'yusuf.kurniawan@espmi.dev', 'nidn_npk' => 'ADT110', 'name' => 'Yusuf Kurniawan'],
+            'PMTK-S1' => ['email' => 'lia.oktaviani@espmi.dev', 'nidn_npk' => 'ADT111', 'name' => 'Lia Oktaviani'],
+            'PBIO-S1' => ['email' => 'teguh.wicaksono@espmi.dev', 'nidn_npk' => 'ADT112', 'name' => 'Teguh Wicaksono'],
+        ];
+
+        foreach ($departmentUnits as $unit) {
+            $profile = $auditeePeople[$unit->code] ?? null;
+
+            if (! $profile) {
+                continue;
+            }
+
+            $user = User::updateOrCreate(
+                ['email' => $profile['email']],
+                [
+                    'nidn_npk' => $profile['nidn_npk'],
+                    'name' => $profile['name'],
+                    'password' => Hash::make('Password@123'),
+                    'unit_id' => $unit->id,
+                    'is_active' => true,
+                ]
+            );
+            $user->syncRoles(['Auditee']);
+        }
 
         $standard = MstStandard::firstOrCreate(
             ['name' => 'Standar Audit Demo Repository Bukti'],
@@ -97,7 +175,7 @@ class AuditDemoSeeder extends Seeder
             reviewStatus: 'PENDING'
         );
 
-        $this->command->info('Audit demo seed siap: auditor@espmi.dev dan auditee@espmi.dev / Password@123');
+        $this->command->info('Audit demo seed siap: lead auditor, auditor, dan auditee personal per prodi / Password@123');
     }
 
     /**
@@ -121,17 +199,48 @@ class AuditDemoSeeder extends Seeder
 
     private function firstOrCreateMetric(int $standardId, ?int $parentId, string $content, string $type, int $order): MstMetric
     {
-        return MstMetric::firstOrCreate(
+        $indicatorCodes = $type === 'Indicator'
+            ? $this->generateIndicatorCodes()
+            : [null, null];
+
+        $attributes = [
+            'type' => $type,
+            'order' => $order,
+        ];
+
+        if ($type === 'Indicator') {
+            $attributes['iku'] = $indicatorCodes[0];
+            $attributes['ikt'] = $indicatorCodes[1];
+        }
+
+        $metric = MstMetric::firstOrCreate(
             [
                 'standard_id' => $standardId,
                 'parent_id' => $parentId,
                 'content' => $content,
             ],
-            [
-                'type' => $type,
-                'order' => $order,
-            ]
+            $attributes
         );
+
+        if ($type === 'Indicator' && (! filled($metric->iku) && ! filled($metric->ikt))) {
+            $metric->forceFill([
+                'iku' => $indicatorCodes[0],
+                'ikt' => $indicatorCodes[1],
+            ])->save();
+        }
+
+        return $metric;
+    }
+
+    private function generateIndicatorCodes(): array
+    {
+        $sequence = $this->indicatorSequence++;
+
+        return match ($sequence % 3) {
+            1 => [(string) $sequence, null],
+            2 => [null, (string) $sequence],
+            default => [(string) $sequence, (string) $sequence],
+        };
     }
 
     private function seedLinkEvidence(

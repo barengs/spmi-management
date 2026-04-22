@@ -8,6 +8,8 @@ use App\Modules\Standard\Models\MstMetric;
 
 class StandardSeeder extends Seeder
 {
+    private int $indicatorSequence = 1;
+
     /**
      * Run the database seeds.
      */
@@ -125,11 +127,28 @@ class StandardSeeder extends Seeder
             $nodeData['parent_id'] = $parentId;
             $nodeData['order'] = $index + 1;
 
+            if (($nodeData['type'] ?? null) === 'Indicator') {
+                [$iku, $ikt] = $this->generateIndicatorCodes();
+                $nodeData['iku'] = $iku;
+                $nodeData['ikt'] = $ikt;
+            }
+
             $metric = MstMetric::create($nodeData);
 
             if (!empty($children)) {
                 $this->buildTree($children, $standardId, $metric->id);
             }
         }
+    }
+
+    private function generateIndicatorCodes(): array
+    {
+        $sequence = $this->indicatorSequence++;
+
+        return match ($sequence % 3) {
+            1 => [(string) $sequence, null],
+            2 => [null, (string) $sequence],
+            default => [(string) $sequence, (string) $sequence],
+        };
     }
 }

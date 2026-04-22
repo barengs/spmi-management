@@ -40,7 +40,15 @@ class StandardController extends Controller
     {
         $user = $request->user();
 
-        if (! $user || ! ($user->hasRole('SuperAdmin') || $user->hasRole('Pimpinan'))) {
+        if (! $user || ! (
+            $user->hasRole('SuperAdmin')
+            || $user->hasRole('Pimpinan')
+            || $user->hasRole('Kepala LPMI')
+            || $user->hasRole('Wakil Rektor 1')
+            || $user->hasRole('Wakil Rektor 2')
+            || $user->hasRole('Wakil Rektor 3')
+            || $user->hasRole('Rektor')
+        )) {
             return response()->json([
                 'status' => 'error',
                 'message' => $message,
@@ -48,6 +56,118 @@ class StandardController extends Controller
         }
 
         return null;
+    }
+
+    private function resetApprovalFlow(MstStandard $standard): void
+    {
+        $standard->approval_stage = 'DRAFT';
+        $standard->head_lpmi_approved_by = null;
+        $standard->head_lpmi_approved_at = null;
+        $standard->wr1_approved_by = null;
+        $standard->wr1_approved_at = null;
+        $standard->wr2_approved_by = null;
+        $standard->wr2_approved_at = null;
+        $standard->wr3_approved_by = null;
+        $standard->wr3_approved_at = null;
+        $standard->rector_approved_by = null;
+        $standard->rector_approved_at = null;
+    }
+
+    private function currentApprovalLabel(MstStandard $standard): string
+    {
+        return match ($standard->approval_stage) {
+            'HEAD_LPMI' => 'Kepala LPMI',
+            'WR' => 'Wakil Rektor 1, 2, dan 3',
+            'RECTOR' => 'Rektor',
+            default => 'Tahap awal',
+        };
+    }
+
+    private function approveAsCurrentActor(Request $request, MstStandard $standard): ?JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->hasRole('SuperAdmin')) {
+            if ($standard->approval_stage === 'HEAD_LPMI') {
+                $standard->head_lpmi_approved_by = $user->id;
+                $standard->head_lpmi_approved_at = now();
+                $standard->approval_stage = 'WR';
+                return null;
+            }
+
+            if ($standard->approval_stage === 'WR') {
+                $standard->wr1_approved_by ??= $user->id;
+                $standard->wr1_approved_at ??= now();
+                $standard->wr2_approved_by ??= $user->id;
+                $standard->wr2_approved_at ??= now();
+                $standard->wr3_approved_by ??= $user->id;
+                $standard->wr3_approved_at ??= now();
+                $standard->approval_stage = 'RECTOR';
+                return null;
+            }
+
+            if ($standard->approval_stage === 'RECTOR') {
+                $standard->rector_approved_by = $user->id;
+                $standard->rector_approved_at = now();
+                return null;
+            }
+        }
+
+        if ($standard->approval_stage === 'HEAD_LPMI') {
+            if (! $user->hasRole('Kepala LPMI')) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Standar saat ini menunggu persetujuan Kepala LPMI.',
+                ], 403);
+            }
+
+            $standard->head_lpmi_approved_by = $user->id;
+            $standard->head_lpmi_approved_at = now();
+            $standard->approval_stage = 'WR';
+            return null;
+        }
+
+        if ($standard->approval_stage === 'WR') {
+            if ($user->hasRole('Wakil Rektor 1')) {
+                $standard->wr1_approved_by = $user->id;
+                $standard->wr1_approved_at = now();
+            } elseif ($user->hasRole('Wakil Rektor 2')) {
+                $standard->wr2_approved_by = $user->id;
+                $standard->wr2_approved_at = now();
+            } elseif ($user->hasRole('Wakil Rektor 3')) {
+                $standard->wr3_approved_by = $user->id;
+                $standard->wr3_approved_at = now();
+            } else {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Standar saat ini menunggu persetujuan Wakil Rektor 1, 2, dan 3.',
+                ], 403);
+            }
+
+            if ($standard->wr1_approved_at && $standard->wr2_approved_at && $standard->wr3_approved_at) {
+                $standard->approval_stage = 'RECTOR';
+            }
+
+            return null;
+        }
+
+        if ($standard->approval_stage === 'RECTOR') {
+            if (! $user->hasRole('Rektor')) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Standar saat ini menunggu persetujuan Rektor.',
+                ], 403);
+            }
+
+            $standard->rector_approved_by = $user->id;
+            $standard->rector_approved_at = now();
+            return null;
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Tahap persetujuan standar tidak valid.',
+        ], 422);
     }
 
     private function structureValidationError(MstStandard $standard): ?JsonResponse
@@ -163,6 +283,8 @@ class StandardController extends Controller
         ]);
 
         $standard = MstStandard::create($validated);
+        $this->resetApprovalFlow($standard);
+        $standard->save();
 
         return response()->json([
             'status'  => 'success',
@@ -268,25 +390,20 @@ class StandardController extends Controller
             return $error;
         }
 
-        MstMetric::where('standard_id', $standard->id)->update([
-            'review_status' => 'PENDING',
-            'review_action' => null,
-            'review_comment' => null,
-            'reviewed_by' => null,
-            'reviewed_at' => null,
-        ]);
-
         $standard->status = 'WAITING_APPROVAL';
+        $standard->approval_stage = 'HEAD_LPMI';
         $standard->submitted_by = auth()->id();
         $standard->approved_by = null;
         $standard->review_submitted_by = null;
         $standard->review_submitted_at = null;
         $standard->reject_reason = null;
+        $this->resetApprovalFlow($standard);
+        $standard->approval_stage = 'HEAD_LPMI';
         $standard->save();
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Standar Mutu berhasil diajukan untuk ditinjau.',
+            'message' => 'Standar Mutu berhasil diajukan ke Kepala LPMI.',
             'data'    => $standard,
         ]);
     }
@@ -313,29 +430,29 @@ class StandardController extends Controller
             return $error;
         }
 
-        if (! $standard->review_submitted_at) {
+        if ($error = $this->approveAsCurrentActor($request, $standard)) {
+            return $error;
+        }
+
+        if ($standard->approval_stage === 'RECTOR' && $standard->rector_approved_at) {
+            $standard->status = 'TERBIT';
+            $standard->approval_stage = 'FINAL';
+            $standard->approved_by = auth()->id();
+            $standard->reject_reason = null;
+            $standard->save();
+
             return response()->json([
-                'status' => 'error',
-                'message' => 'Standar belum dapat diterbitkan karena auditor belum mengirimkan hasil review ke pimpinan.',
-            ], 422);
+                'status'  => 'success',
+                'message' => 'Standar Mutu disetujui Rektor dan langsung diterbitkan.',
+                'data'    => $standard,
+            ]);
         }
 
-        if ($error = $this->pendingReviewValidationError($standard)) {
-            return $error;
-        }
-
-        if ($error = $this->reviewValidationError($standard)) {
-            return $error;
-        }
-
-        $standard->status = 'TERBIT';
-        $standard->approved_by = auth()->id();
-        $standard->reject_reason = null;
         $standard->save();
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Standar Mutu berhasil Diterbitkan.',
+            'message' => 'Persetujuan berhasil direkam. Tahap berikutnya: ' . $this->currentApprovalLabel($standard) . '.',
             'data'    => $standard,
         ]);
     }
@@ -362,15 +479,10 @@ class StandardController extends Controller
             ], 400);
         }
 
-        if (! MstMetric::where('standard_id', $standard->id)->where('review_status', 'REJECTED')->exists()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Tandai minimal satu header atau node untuk revisi sebelum mengembalikan standar ke admin.',
-            ], 422);
-        }
-
         $standard->status = 'REVISI';
+        $standard->approval_stage = 'REVISI';
         $standard->reject_reason = $validated['reason'];
+        $this->resetApprovalFlow($standard);
         $standard->save();
 
         return response()->json([
@@ -382,35 +494,9 @@ class StandardController extends Controller
 
     public function submitReview(Request $request, $id): JsonResponse
     {
-        if ($denied = $this->denyUnlessCanAudit($request, 'Anda tidak memiliki hak akses untuk mengirim review auditor ke pimpinan.')) {
-            return $denied;
-        }
-
-        $standard = MstStandard::findOrFail($id);
-
-        if ($standard->status !== 'WAITING_APPROVAL') {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Standar tidak dalam status menunggu review.',
-            ], 400);
-        }
-
-        if ($error = $this->pendingReviewValidationError($standard)) {
-            return $error;
-        }
-
-        if ($error = $this->reviewValidationError($standard)) {
-            return $error;
-        }
-
-        $standard->review_submitted_by = $request->user()->id;
-        $standard->review_submitted_at = now();
-        $standard->save();
-
         return response()->json([
-            'status' => 'success',
-            'message' => 'Hasil review auditor berhasil dikirim ke pimpinan.',
-            'data' => $standard,
-        ]);
+            'status' => 'error',
+            'message' => 'Alur review auditor sudah tidak dipakai. Gunakan alur persetujuan berjenjang Kepala LPMI, Wakil Rektor, lalu Rektor.',
+        ], 410);
     }
 }

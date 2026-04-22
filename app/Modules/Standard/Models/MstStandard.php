@@ -19,10 +19,21 @@ class MstStandard extends Model
         'is_active',
         'referensi_regulasi',
         'status',
+        'approval_stage',
         'submitted_by',
         'approved_by',
         'review_submitted_by',
         'review_submitted_at',
+        'head_lpmi_approved_by',
+        'head_lpmi_approved_at',
+        'wr1_approved_by',
+        'wr1_approved_at',
+        'wr2_approved_by',
+        'wr2_approved_at',
+        'wr3_approved_by',
+        'wr3_approved_at',
+        'rector_approved_by',
+        'rector_approved_at',
         'reject_reason',
     ];
 
@@ -41,6 +52,11 @@ class MstStandard extends Model
         return [
             'is_active' => 'boolean',
             'review_submitted_at' => 'datetime',
+            'head_lpmi_approved_at' => 'datetime',
+            'wr1_approved_at' => 'datetime',
+            'wr2_approved_at' => 'datetime',
+            'wr3_approved_at' => 'datetime',
+            'rector_approved_at' => 'datetime',
         ];
     }
 

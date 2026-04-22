@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Hash;
 
 class StandardPendingAuditorReviewSeeder extends Seeder
 {
+    private int $indicatorSequence = 200;
+
     public function run(): void
     {
         $lpmUnit = Unit::query()->where('code', 'LPM')->first();
@@ -143,6 +145,9 @@ class StandardPendingAuditorReviewSeeder extends Seeder
     {
         foreach ($nodes as $index => $nodeData) {
             $children = $nodeData['children'] ?? [];
+            $indicatorCodes = $nodeData['type'] === 'Indicator'
+                ? $this->generateIndicatorCodes()
+                : [null, null];
 
             $metric = MstMetric::withTrashed()->updateOrCreate(
                 [
@@ -159,6 +164,8 @@ class StandardPendingAuditorReviewSeeder extends Seeder
                     'reviewed_by' => null,
                     'reviewed_at' => null,
                     'deleted_at' => null,
+                    'iku' => $indicatorCodes[0],
+                    'ikt' => $indicatorCodes[1],
                 ]
             );
 
@@ -166,5 +173,16 @@ class StandardPendingAuditorReviewSeeder extends Seeder
                 $this->syncTree($standard, $children, $reviewStatus, $metric->id);
             }
         }
+    }
+
+    private function generateIndicatorCodes(): array
+    {
+        $sequence = $this->indicatorSequence++;
+
+        return match ($sequence % 3) {
+            1 => [(string) $sequence, null],
+            2 => [null, (string) $sequence],
+            default => [(string) $sequence, (string) $sequence],
+        };
     }
 }

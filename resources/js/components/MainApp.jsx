@@ -19,6 +19,7 @@ import FacultyMasterPage from '../pages/settings/FacultyMasterPage';
 import ProdiMasterPage from '../pages/settings/ProdiMasterPage';
 import PtkPage from '../pages/ptk/PtkPage';
 import ReportPage from '../pages/report/ReportPage';
+import NotificationPage from '../pages/notifications/NotificationPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -77,6 +78,7 @@ export default function MainApp() {
                         }
                     >
                         <Route index element={<Dashboard />} />
+                        <Route path="notifications" element={<NotificationPage />} />
                         <Route
                             path="borang"
                             element={

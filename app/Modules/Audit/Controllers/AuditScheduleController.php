@@ -18,20 +18,38 @@ class AuditScheduleController extends Controller
         return $user->hasRole('Auditor') || $user->hasRole('Lead Auditor');
     }
 
+    private function canBeLeadAuditor(User $user): bool
+    {
+        return $user->is_active
+            && ! $user->hasRole('Auditee')
+            && ! $user->hasRole('LPM-Admin');
+    }
+
     private function validateSchedulePayload(Request $request): array
     {
-        return $request->validate([
-            'title' => 'required|string|max:255',
-            'standard_id' => 'nullable|exists:mst_standards,id',
-            'faculty_id' => 'nullable|exists:ref_units,id',
-            'prodi_id' => 'nullable|exists:ref_units,id',
-            'lead_auditor_id' => 'required|exists:users,id|different:auditor_id',
-            'auditor_id' => 'required|exists:users,id|different:lead_auditor_id',
-            'scheduled_start' => 'required|date',
-            'scheduled_end' => 'required|date|after:scheduled_start',
-            'location' => 'nullable|string|max:255',
-            'notes' => 'nullable|string',
-        ]);
+        return $request->validate(
+            [
+                'standard_id' => 'nullable|exists:mst_standards,id',
+                'faculty_id' => 'nullable|exists:ref_units,id',
+                'prodi_id' => 'nullable|exists:ref_units,id',
+                'lead_auditor_id' => 'required|exists:users,id|different:auditor_id',
+                'auditor_id' => 'required|exists:users,id|different:lead_auditor_id',
+                'scheduled_start' => 'required|date',
+                'scheduled_end' => 'nullable|date|after_or_equal:scheduled_start',
+                'location' => 'nullable|string|max:255',
+                'notes' => 'nullable|string',
+            ],
+            [
+                'lead_auditor_id.required' => 'lead auditor wajib dipilih',
+                'lead_auditor_id.exists' => 'lead auditor tidak valid',
+                'lead_auditor_id.different' => 'lead auditor dan auditor tidak boleh sama',
+                'auditor_id.required' => 'auditor wajib dipilih',
+                'auditor_id.exists' => 'auditor tidak valid',
+                'auditor_id.different' => 'lead auditor dan auditor tidak boleh sama',
+                'scheduled_start.required' => 'tanggal mulai audit wajib diisi',
+                'scheduled_start.date' => 'tanggal mulai audit tidak valid',
+            ]
+        );
     }
 
     private function resolveAuditee(array $validated): User|JsonResponse
@@ -67,10 +85,10 @@ class AuditScheduleController extends Controller
         $faculty = isset($validated['faculty_id']) ? Unit::findOrFail($validated['faculty_id']) : null;
         $prodi = isset($validated['prodi_id']) ? Unit::findOrFail($validated['prodi_id']) : null;
 
-        if (! $leadAuditor->hasRole('Lead Auditor')) {
+        if (! $this->canBeLeadAuditor($leadAuditor)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Lead auditor harus memiliki role Lead Auditor.',
+                'message' => 'Lead auditor harus dipilih dari pengguna aktif selain Auditee dan LPM-Admin.',
             ], 422);
         }
 
@@ -84,7 +102,7 @@ class AuditScheduleController extends Controller
         if ((int) $leadAuditor->id === (int) $auditor->id) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Lead auditor dan auditor harus berbeda.',
+                'message' => 'lead auditor dan auditor tidak boleh sama',
             ], 422);
         }
 
@@ -120,6 +138,38 @@ class AuditScheduleController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Prodi harus berada di bawah fakultas yang dipilih.',
+            ], 422);
+        }
+
+        if ($prodi) {
+            $existingSchedule = AuditSchedule::query()
+                ->where('prodi_id', $prodi->id)
+                ->when(
+                    ! empty($validated['id']),
+                    fn ($query) => $query->where('id', '!=', $validated['id'])
+                )
+                ->exists();
+
+            if ($existingSchedule) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Prodi tersebut sudah memiliki jadwal audit.',
+                ], 422);
+            }
+        }
+
+        $existingAuditorSchedule = AuditSchedule::query()
+            ->where('auditor_id', $auditor->id)
+            ->when(
+                ! empty($validated['id']),
+                fn ($query) => $query->where('id', '!=', $validated['id'])
+            )
+            ->exists();
+
+        if ($existingAuditorSchedule) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'auditor sudah terdaftar pada jadwal audit lain',
             ], 422);
         }
 
@@ -233,6 +283,10 @@ class AuditScheduleController extends Controller
                     $sub->where('lead_auditor_id', $user->id)
                         ->orWhere('auditor_id', $user->id)
                         ->orWhere('auditee_id', $user->id);
+
+                    if ($user->hasRole('Auditee') && $user->unit_id) {
+                        $sub->orWhere('prodi_id', $user->unit_id);
+                    }
                 })
             )
             ->orderBy('scheduled_start')
@@ -263,12 +317,18 @@ class AuditScheduleController extends Controller
         $prodis = Unit::query()
             ->where('level', 'department')
             ->where('is_active', true)
+            ->whereHas('users', function ($query) {
+                $query->where('is_active', true)->role('Auditee');
+            })
+            ->whereNotIn('id', AuditSchedule::query()->whereNotNull('prodi_id')->pluck('prodi_id'))
             ->orderBy('name')
             ->get(['id', 'parent_id', 'name', 'code']);
 
         $leadAuditors = User::query()
-            ->role('Lead Auditor')
             ->where('is_active', true)
+            ->whereDoesntHave('roles', function ($query) {
+                $query->whereIn('name', ['Auditee', 'LPM-Admin']);
+            })
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'unit_id']);
 
@@ -277,6 +337,7 @@ class AuditScheduleController extends Controller
                 $query->role('Auditor');
             })
             ->where('is_active', true)
+            ->whereNotIn('id', AuditSchedule::query()->whereNotNull('auditor_id')->pluck('auditor_id'))
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'unit_id']);
 
@@ -305,6 +366,8 @@ class AuditScheduleController extends Controller
         }
 
         $validated = $this->validateSchedulePayload($request);
+        $validated['title'] = $this->generateScheduleTitle($validated);
+        $validated['scheduled_end'] = $validated['scheduled_end'] ?? $validated['scheduled_start'];
         $auditee = $this->resolveAuditee($validated);
         if ($auditee instanceof JsonResponse) {
             return $auditee;
@@ -347,6 +410,9 @@ class AuditScheduleController extends Controller
         }
 
         $validated = $this->validateSchedulePayload($request);
+        $validated['id'] = $auditSchedule->id;
+        $validated['title'] = $this->generateScheduleTitle($validated);
+        $validated['scheduled_end'] = $validated['scheduled_end'] ?? $validated['scheduled_start'];
         $auditee = $this->resolveAuditee($validated);
         if ($auditee instanceof JsonResponse) {
             return $auditee;
@@ -380,6 +446,26 @@ class AuditScheduleController extends Controller
         ]);
     }
 
+    private function generateScheduleTitle(array $validated): string
+    {
+        $faculty = ! empty($validated['faculty_id']) ? Unit::find($validated['faculty_id']) : null;
+        $prodi = ! empty($validated['prodi_id']) ? Unit::find($validated['prodi_id']) : null;
+
+        if ($faculty && $prodi) {
+            return sprintf('Audit %s - %s', $prodi->name, $faculty->name);
+        }
+
+        if ($prodi) {
+            return sprintf('Audit %s', $prodi->name);
+        }
+
+        if ($faculty) {
+            return sprintf('Audit %s', $faculty->name);
+        }
+
+        return 'Jadwal Audit';
+    }
+
     public function destroy(Request $request, AuditSchedule $auditSchedule): JsonResponse
     {
         $guardError = $this->ensureLpmAdmin($request, 'Hanya LPM-Admin yang dapat menghapus jadwal audit.');
@@ -400,10 +486,15 @@ class AuditScheduleController extends Controller
     {
         $user = $request->user();
 
+        $isAuditeeForProdi = $user->hasRole('Auditee')
+            && $user->unit_id
+            && (int) $auditSchedule->prodi_id === (int) $user->unit_id;
+
         if (
             (int) $auditSchedule->lead_auditor_id !== (int) $user->id
             && (int) $auditSchedule->auditor_id !== (int) $user->id
             && (int) $auditSchedule->auditee_id !== (int) $user->id
+            && ! $isAuditeeForProdi
         ) {
             return response()->json([
                 'status' => 'error',
@@ -425,7 +516,7 @@ class AuditScheduleController extends Controller
             $auditSchedule->auditor_responded_at = now();
         }
 
-        if ((int) $auditSchedule->auditee_id === (int) $user->id) {
+        if ((int) $auditSchedule->auditee_id === (int) $user->id || $isAuditeeForProdi) {
             $auditSchedule->auditee_status = $status;
             $auditSchedule->auditee_response_note = $note;
             $auditSchedule->auditee_responded_at = now();

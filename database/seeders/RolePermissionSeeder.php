@@ -103,6 +103,21 @@ class RolePermissionSeeder extends Seeder
             'report.view', 'report.export',
         ]);
 
+        $kepalaLpmi = Role::firstOrCreate(['name' => 'Kepala LPMI', 'guard_name' => 'web']);
+        $kepalaLpmi->syncPermissions($pimpinan->permissions);
+
+        $wakilRektor1 = Role::firstOrCreate(['name' => 'Wakil Rektor 1', 'guard_name' => 'web']);
+        $wakilRektor1->syncPermissions($pimpinan->permissions);
+
+        $wakilRektor2 = Role::firstOrCreate(['name' => 'Wakil Rektor 2', 'guard_name' => 'web']);
+        $wakilRektor2->syncPermissions($pimpinan->permissions);
+
+        $wakilRektor3 = Role::firstOrCreate(['name' => 'Wakil Rektor 3', 'guard_name' => 'web']);
+        $wakilRektor3->syncPermissions($pimpinan->permissions);
+
+        $rektor = Role::firstOrCreate(['name' => 'Rektor', 'guard_name' => 'web']);
+        $rektor->syncPermissions($pimpinan->permissions);
+
         // Observer — minimal read-only access
         $observer = Role::firstOrCreate(['name' => 'Observer', 'guard_name' => 'web']);
         $observer->syncPermissions([

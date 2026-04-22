@@ -5,6 +5,7 @@ use App\Modules\Core\Controllers\RolePermissionController;
 use App\Modules\Core\Controllers\UnitController;
 use App\Modules\Core\Controllers\UserController;
 use App\Modules\Audit\Controllers\AuditScheduleController;
+use App\Modules\Borang\Controllers\BorangController;
 use App\Modules\Evidence\Controllers\EvidenceController;
 use Illuminate\Support\Facades\Route;
 
@@ -89,6 +90,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/{id}',                 [\App\Modules\Standard\Controllers\MetricController::class, 'update']);
             Route::delete('/{id}',              [\App\Modules\Standard\Controllers\MetricController::class, 'destroy']);
             Route::patch('/{id}/review',        [\App\Modules\Standard\Controllers\MetricController::class, 'review']);
+            Route::get('/{id}/timeline',        [\App\Modules\Standard\Controllers\MetricController::class, 'timeline']);
             
             // Target Diferensiasi per Jenjang
             Route::get('/{metric_id}/targets',       [\App\Modules\Standard\Controllers\MetricTargetController::class, 'getTargets']);
@@ -111,6 +113,12 @@ Route::prefix('v1')->group(function () {
             Route::put('/{auditSchedule}',     [AuditScheduleController::class, 'update']);
             Route::delete('/{auditSchedule}',  [AuditScheduleController::class, 'destroy']);
             Route::patch('/{auditSchedule}/respond', [AuditScheduleController::class, 'respond']);
+        });
+
+        Route::prefix('borang')->group(function () {
+            Route::get('/prodis/{prodi}',      [BorangController::class, 'index']);
+            Route::post('/',                   [BorangController::class, 'store']);
+            Route::delete('/{borangItem}',     [BorangController::class, 'destroy']);
         });
 
     });

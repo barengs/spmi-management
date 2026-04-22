@@ -94,6 +94,15 @@ function statusBadge(status) {
     return 'bg-amber-100 text-amber-800 border-amber-200';
 }
 
+function approvalStageLabel(stage) {
+    if (stage === 'HEAD_LPMI') return 'Menunggu Kepala LPMI';
+    if (stage === 'WR') return 'Menunggu Wakil Rektor 1, 2, dan 3';
+    if (stage === 'RECTOR') return 'Menunggu Rektor';
+    if (stage === 'FINAL') return 'Final';
+    if (stage === 'REVISI') return 'Revisi';
+    return 'Draft';
+}
+
 function reviewNodeBadge(status) {
     if (status === 'REJECTED') {
         return 'bg-rose-100 text-rose-800 border-rose-200';
@@ -313,7 +322,13 @@ export default function StandardReviewPage() {
 
         return {
             canAuditReview: hasRole('SuperAdmin') || (user?.permissions || []).includes('standard.publish'),
-            canFinalizeReview: hasRole('SuperAdmin') || hasRole('Pimpinan'),
+            canFinalizeReview: hasRole('SuperAdmin')
+                || hasRole('Pimpinan')
+                || hasRole('Kepala LPMI')
+                || hasRole('Wakil Rektor 1')
+                || hasRole('Wakil Rektor 2')
+                || hasRole('Wakil Rektor 3')
+                || hasRole('Rektor'),
         };
     }, [user]);
 
@@ -588,7 +603,7 @@ export default function StandardReviewPage() {
                         </span>
                     </div>
                     <div className="mt-2 text-xs leading-5 text-gray-500">
-                        Publish hanya boleh saat semua node berstatus sesuai.
+                        Tahap aktif: {approvalStageLabel(standard?.approval_stage)}
                     </div>
                 </div>
                 <InfoCard
@@ -711,9 +726,9 @@ export default function StandardReviewPage() {
 
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Keputusan Review</div>
-                    <h2 className="mt-2 text-xl font-semibold text-gray-900">Tinjauan Pimpinan</h2>
+                    <h2 className="mt-2 text-xl font-semibold text-gray-900">Persetujuan Berjenjang</h2>
                     <p className="mt-2 text-sm leading-6 text-gray-600">
-                        Auditor harus menandai seluruh node terlebih dahulu, lalu mengirim hasil review ke pimpinan. Pimpinan hanya dapat menerbitkan standar setelah hasil review auditor masuk.
+                        Alur penetapan standar berjalan dari Kepala LPMI, lalu Wakil Rektor 1, 2, dan 3, kemudian Rektor. Standar baru langsung berlaku setelah Rektor menyetujui.
                     </p>
 
                     <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-700">
@@ -722,9 +737,12 @@ export default function StandardReviewPage() {
                         <div className="mt-1">Node belum dicek auditor: {pendingNodes.length}</div>
                         <div className="mt-1">Node cocok dengan periode sebelumnya: {comparison.totalMatchedNodes}</div>
                         <div className="mt-1">Persentase kecocokan: {matchPercentage}%</div>
-                        <div className="mt-1">
-                            Status kirim ke pimpinan: {standard?.review_submitted_at ? 'Sudah dikirim' : 'Belum dikirim'}
-                        </div>
+                        <div className="mt-1">Tahap persetujuan aktif: {approvalStageLabel(standard?.approval_stage)}</div>
+                        <div className="mt-1">Kepala LPMI: {standard?.head_lpmi_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
+                        <div className="mt-1">Wakil Rektor 1: {standard?.wr1_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
+                        <div className="mt-1">Wakil Rektor 2: {standard?.wr2_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
+                        <div className="mt-1">Wakil Rektor 3: {standard?.wr3_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
+                        <div className="mt-1">Rektor: {standard?.rector_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
                     </div>
 
                     <div className="mt-6">
@@ -741,21 +759,7 @@ export default function StandardReviewPage() {
                         />
                     </div>
 
-                    {userAccess.canAuditReview && standard?.status === 'WAITING_APPROVAL' && !standard?.review_submitted_at && (
-                        <div className="mt-6 flex flex-wrap gap-3">
-                            <button
-                                type="button"
-                                onClick={handleSubmitToPimpinan}
-                                disabled={submittingAction !== '' || rejectedNodes.length > 0 || pendingNodes.length > 0}
-                                className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <Icon icon={submittingAction === 'submit-review' ? Icons.refresh : Icons.check} width={16} className={submittingAction === 'submit-review' ? 'animate-spin' : ''} />
-                                Submit ke Pimpinan
-                            </button>
-                        </div>
-                    )}
-
-                    {userAccess.canFinalizeReview && standard?.status === 'WAITING_APPROVAL' && standard?.review_submitted_at && (
+                    {userAccess.canFinalizeReview && standard?.status === 'WAITING_APPROVAL' && (
                         <div className="mt-6 flex flex-wrap gap-3">
                             <button
                                 type="button"
@@ -773,7 +777,7 @@ export default function StandardReviewPage() {
                                 className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Icon icon={submittingAction === 'approve' ? Icons.refresh : Icons.check} width={16} className={submittingAction === 'approve' ? 'animate-spin' : ''} />
-                                Setujui dan Terbitkan
+                                Setujui Tahap Ini
                             </button>
                         </div>
                     )}
