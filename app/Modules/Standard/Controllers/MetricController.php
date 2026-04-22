@@ -185,15 +185,15 @@ class MetricController extends Controller
             'type'        => 'required|in:Header,Statement,Indicator',
             'iku'         => 'nullable|string|max:255',
             'ikt'         => 'nullable|string|max:255',
-            'pj'          => 'nullable|in:Dekan,Kaprodi',
             'order'       => 'nullable|integer',
         ]);
 
         if ($validated['type'] !== 'Indicator') {
             $validated['iku'] = null;
             $validated['ikt'] = null;
-            $validated['pj'] = null;
         }
+
+        $validated['pj'] = null;
 
         if (empty($validated['order'])) {
             $validated['order'] = MstMetric::where('standard_id', $validated['standard_id'])
@@ -247,7 +247,6 @@ class MetricController extends Controller
             'type'      => 'sometimes|required|in:Header,Statement,Indicator',
             'iku'       => 'nullable|string|max:255',
             'ikt'       => 'nullable|string|max:255',
-            'pj'        => 'nullable|in:Dekan,Kaprodi',
             'order'     => 'nullable|integer',
         ]);
 
@@ -275,8 +274,9 @@ class MetricController extends Controller
         if ($resolvedType !== 'Indicator') {
             $validated['iku'] = null;
             $validated['ikt'] = null;
-            $validated['pj'] = null;
         }
+
+        $validated['pj'] = null;
 
         $oldData = $metric->toArray();
         $metric->update($validated);

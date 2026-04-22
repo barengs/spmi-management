@@ -253,9 +253,6 @@ const MetricNode = ({
                             <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 font-semibold text-violet-700">
                                 IKT: {node.ikt || '-'}
                             </span>
-                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
-                                PJ: {node.pj || '-'}
-                            </span>
                         </div>
                     )}
                 </div>
@@ -335,7 +332,6 @@ export default function StandardBuilder() {
         content: '',
         iku: '',
         ikt: '',
-        pj: '',
         type: 'Header',
     });
 
@@ -479,7 +475,6 @@ export default function StandardBuilder() {
             content: '',
             iku: '',
             ikt: '',
-            pj: '',
             type: 'Header',
         });
         setIsModalOpen(true);
@@ -502,7 +497,6 @@ export default function StandardBuilder() {
             content: '',
             iku: '',
             ikt: '',
-            pj: nextType === 'Indicator' ? 'Kaprodi' : '',
             type: nextType,
         });
         setIsModalOpen(true);
@@ -517,7 +511,6 @@ export default function StandardBuilder() {
             content: node.content,
             iku: node.iku || '',
             ikt: node.ikt || '',
-            pj: node.pj || '',
             type: node.type,
         });
         setIsModalOpen(true);
@@ -545,7 +538,6 @@ export default function StandardBuilder() {
             if (payload.type !== 'Indicator') {
                 payload.iku = null;
                 payload.ikt = null;
-                payload.pj = null;
             }
 
             if (editingNode) {
@@ -793,10 +785,6 @@ export default function StandardBuilder() {
                                                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-700">IKT</div>
                                                 <div className="mt-1 text-sm font-semibold text-violet-900">{selectedIndicatorView.ikt || '-'}</div>
                                             </div>
-                                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:col-span-2">
-                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">PJ</div>
-                                                <div className="mt-1 text-sm font-semibold text-emerald-900">{selectedIndicatorView.pj || '-'}</div>
-                                            </div>
                                         </div>
                                         <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                                             Target indikator diisi saat indikator dimasukkan ke borang per prodi, bukan saat penyusunan standar.
@@ -886,18 +874,6 @@ export default function StandardBuilder() {
                                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                                 placeholder="Contoh: IKT 1.1"
                                             />
-                                        </div>
-                                        <div className="sm:col-span-2">
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">PJ</label>
-                                            <select
-                                                value={formData.pj}
-                                                onChange={(e) => setFormData({ ...formData, pj: e.target.value })}
-                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                            >
-                                                <option value="">Pilih PJ</option>
-                                                <option value="Dekan">Dekan</option>
-                                                <option value="Kaprodi">Kaprodi</option>
-                                            </select>
                                         </div>
                                     </div>
                                 )}

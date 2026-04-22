@@ -220,6 +220,11 @@ Roles are defined in `RolePermissionSeeder.php`:
 |------|-------------|
 | SuperAdmin | Full system access |
 | LPM-Admin | Quality assurance admin |
+| Kepala LPMI | First approver for standard publication flow |
+| Wakil Rektor 1 | Parallel approver at vice rector stage |
+| Wakil Rektor 2 | Parallel approver at vice rector stage |
+| Wakil Rektor 3 | Parallel approver at vice rector stage |
+| Rektor | Final approver for standard publication flow |
 | Auditor | Can score and create findings |
 | Auditee | Can upload evidence, respond to PTK |
 | Pimpinan | Read-only executive access |
@@ -260,6 +265,13 @@ Permissions follow the pattern `{resource}.{action}`:
 - Belongs to `MstStandard`
 - Self-referencing parent/children relationships
 - Automatic order assignment
+- `PJ` is no longer authored in standard structure; it is assigned during borang creation per prodi
+- Soft deletes enabled
+
+### BorangItem
+- Maps one indicator to one prodi for operational execution/audit
+- Stores per-prodi `pj` and `target_sasaran`
+- Used as the source of truth for borang and evidence audit requirement tables
 - Soft deletes enabled
 
 ### ActivityLog
@@ -307,6 +319,10 @@ Permissions follow the pattern `{resource}.{action}`:
 | GET | `/api/v1/standards/{id}` | Get standard details |
 | PUT | `/api/v1/standards/{id}` | Update standard |
 | DELETE | `/api/v1/standards/{id}` | Delete standard |
+| PATCH | `/api/v1/standards/{id}/submit` | Submit standard into approval flow |
+| PATCH | `/api/v1/standards/{id}/approve` | Approve current stage |
+| PATCH | `/api/v1/standards/{id}/reject` | Reject back to revision |
+| POST | `/api/v1/standards/{id}/clone` | Clone standard to a new period/name |
 | GET | `/api/v1/standards/{id}/metrics/tree` | Get metric hierarchy |
 
 ### Metrics
@@ -315,6 +331,13 @@ Permissions follow the pattern `{resource}.{action}`:
 | POST | `/api/v1/metrics` | Create metric |
 | PUT | `/api/v1/metrics/{id}` | Update metric |
 | DELETE | `/api/v1/metrics/{id}` | Delete metric (cascade) |
+
+### Borang
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/borang/prodis/{prodi}` | List borang items for a prodi |
+| POST | `/api/v1/borang` | Create borang item with per-prodi PJ and target |
+| DELETE | `/api/v1/borang/{borangItem}` | Delete borang item |
 
 ---
 
@@ -461,15 +484,40 @@ APP_DEBUG=false       # Set to false in production
 
 ---
 
-## 13. Current State Audit (2026-03-10)
+## 13. Current State Audit (2026-04-22)
 
 The repository currently contains several additions and implementation details beyond sections above:
 
 ### Newly Present Modules / Features
 - `RefEducationLevel` module (`app/Modules/Core/Models/RefEducationLevel.php`, controller, seeder)
-- `MetricTarget` model + API for per-education-level indicator targets
-- `StandardCloneController` for deep clone of standards, metric trees, and indicator targets
-- Standard lifecycle workflow fields and endpoints: `DRAFT`, `WAITING_APPROVAL`, `TERBIT`, `REVISI`
+- `StandardCloneController` for deep clone of standards and metric trees
+- Standard lifecycle workflow now uses staged approval fields and actors:
+  - `HEAD_LPMI`
+  - `WR`
+  - `RECTOR`
+  - `FINAL`
+- Approval actor roles currently present:
+  - `Kepala LPMI`
+  - `Wakil Rektor 1`
+  - `Wakil Rektor 2`
+  - `Wakil Rektor 3`
+  - `Rektor`
+- Notification center now aggregates:
+  - audit schedule notifications
+  - standard approval notifications per active stage
+- Borang module is now an active execution layer:
+  - `borang_items` binds indicator + prodi
+  - `pj` and `target_sasaran` are filled during borang creation
+  - audit requirement tables now derive target from borang, not from standard builder
+- Standard builder behavior has been refined:
+  - new standards start with an empty tree
+  - structure creation flow is `Bab -> Pasal -> Indicator`
+  - add/edit UI updates immediately without requiring manual page refresh
+- Demo approver accounts now include:
+  - `kepala.lpmi@espmi.dev`
+  - `wareg1@espmi.dev`
+  - `wareg2@espmi.dev`
+  - `wareg3@espmi.dev`
 
 ### Frontend Libraries Actually Used
 - `@tanstack/react-table` used in `resources/js/pages/standards/StandardIndex.jsx`
@@ -482,6 +530,8 @@ The repository currently contains several additions and implementation details b
   - `app/Http/Controllers/Modules/...`
   - `app/Models/Modules/...`
   These are separate from the active `app/Modules/...` implementation and should be reviewed to avoid confusion.
+- `resources/js/pages/standards/StandardTargetConfig.jsx` still exists in the tree, but current product flow no longer uses target input during standard creation.
+- `MetricTarget` backend artifacts still exist, but current operational target entry is handled in borang per prodi.
 
 ### Risks / Inconsistencies To Address
 1. **Model namespace mismatch**
@@ -492,8 +542,10 @@ The repository currently contains several additions and implementation details b
    - `UserController::destroy()` calls `$user->tokens()->delete()` although authentication uses JWT (`tymon/jwt-auth`) and `User` does not include Sanctum token relation.
 4. **RBAC guard consistency**
    - Seeder writes roles/permissions with `guard_name = web`, while API auth guard is `api` (JWT). Re-check permission middleware strategy to prevent guard mismatch behavior.
-5. **Testing depth**
-   - Current tests are still starter-level (`tests/Feature/ExampleTest.php`, `tests/Unit/ExampleTest.php`).
+5. **Legacy target flow still partially present**
+   - `MetricTarget` APIs and `StandardTargetConfig.jsx` remain in the codebase even though current UX expects target entry during borang creation.
+6. **Testing depth**
+   - Current tests remain shallow relative to the approval workflow, borang flow, and notification logic.
 
 ### Quick Verification Paths
 - API routing truth source: `routes/api.php`
@@ -502,4 +554,4 @@ The repository currently contains several additions and implementation details b
 
 ---
 
-*Last Updated: 2026-03-10*
+*Last Updated: 2026-04-22*

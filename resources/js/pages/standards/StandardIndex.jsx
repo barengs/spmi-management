@@ -55,6 +55,7 @@ export default function StandardIndex() {
 
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [cloneTarget, setCloneTarget] = useState(null);
     const [editingStandard, setEditingStandard] = useState(null);
@@ -65,6 +66,7 @@ export default function StandardIndex() {
         is_active: true,
         referensi_regulasi: ''
     });
+    const [cloneSourceId, setCloneSourceId] = useState('');
 
     useEffect(() => {
         fetchStandards();
@@ -218,13 +220,44 @@ export default function StandardIndex() {
                 referensi_regulasi: ''
             });
         }
+        setCloneSourceId('');
         setIsModalOpen(true);
+    };
+
+    const handleOpenImportModal = () => {
+        setEditingStandard(null);
+        setCloneTarget(null);
+        setCloneSourceId(cloneCandidates[0]?.id ? String(cloneCandidates[0].id) : '');
+        setFormData({
+            name: '',
+            category: cloneCandidates[0]?.category || 'Institusi',
+            periode_tahun: selectedPeriod || new Date().getFullYear(),
+            is_active: true,
+            referensi_regulasi: '',
+        });
+        setIsImportModalOpen(true);
     };
 
     const handleCloseModal = () => {
         setIsModalOpen(false);
         setEditingStandard(null);
+        setCloneSourceId('');
     };
+
+    const handleCloseImportModal = () => {
+        setIsImportModalOpen(false);
+        setCloneSourceId('');
+    };
+
+    const cloneCandidates = useMemo(() => (
+        standards
+            .filter((item) => !editingStandard || item.id !== editingStandard.id)
+            .sort((left, right) => {
+                const rightTime = new Date(right.created_at || 0).getTime();
+                const leftTime = new Date(left.created_at || 0).getTime();
+                return rightTime - leftTime;
+            })
+    ), [editingStandard, standards]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -245,6 +278,34 @@ export default function StandardIndex() {
             fetchStandards();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Gagal menyimpan standar.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleImportSubmit = async (e) => {
+        e.preventDefault();
+        if (!cloneSourceId) {
+            toast.warning('Pilih standar sumber terlebih dahulu.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const sourceStandard = cloneCandidates.find((item) => String(item.id) === String(cloneSourceId));
+            const response = await api.post(`/standards/${cloneSourceId}/clone`, {
+                name: formData.name,
+                periode_tahun: selectedPeriod || new Date().getFullYear(),
+                category: sourceStandard?.category || formData.category,
+            });
+            const createdStandard = response.data.data;
+            upsertStandard(createdStandard);
+            setSelectedPeriod(createdStandard.periode_tahun ? String(createdStandard.periode_tahun) : 'Tanpa Periode');
+            toast.success('Standar berhasil diimpor dari siklus sebelumnya.');
+            handleCloseImportModal();
+            fetchStandards();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Gagal mengimpor standar.');
         } finally {
             setIsSubmitting(false);
         }
@@ -510,13 +571,20 @@ export default function StandardIndex() {
                     </p>
                 </div>
                 {canManageStandards && (
-                <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+                <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex gap-3">
                     <button
                         onClick={() => handleOpenModal()}
                         className="inline-flex items-center gap-1 justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:w-auto"
                     >
                         <Icon icon={Icons.add} width={18} />
                         Tambah Standar
+                    </button>
+                    <button
+                        onClick={handleOpenImportModal}
+                        className="inline-flex items-center gap-1 justify-center rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 shadow-sm hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 sm:w-auto"
+                    >
+                        <Icon icon={Icons.clone} width={18} />
+                        Import Standar
                     </button>
                 </div>
                 )}
@@ -808,6 +876,76 @@ export default function StandardIndex() {
                                         <button
                                             type="button"
                                             onClick={handleCloseModal}
+                                            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:col-start-1 sm:text-sm dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                                        >
+                                            Batal
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isImportModalOpen && (
+                <div className="fixed z-50 inset-0 overflow-y-auto" aria-labelledby="import-modal-title" role="dialog" aria-modal="true">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                        <div className="fixed inset-0 bg-black/50 transition-opacity" aria-hidden="true" onClick={handleCloseImportModal}></div>
+                        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                        <div className="relative z-10 inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-white" id="import-modal-title">
+                                    Import Standar Dari Siklus Sebelumnya
+                                </h3>
+                                <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 mb-5">
+                                    Pilih standar sumber, lalu tentukan nama dokumen baru. Kategori akan mengikuti standar sumber dan tahun implementasi otomatis memakai siklus aktif.
+                                </div>
+                                <form onSubmit={handleImportSubmit} className="mt-5 space-y-5">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                            Standar Sumber <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            required
+                                            value={cloneSourceId}
+                                            onChange={(e) => setCloneSourceId(e.target.value)}
+                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
+                                        >
+                                            <option value="">Pilih standar sumber</option>
+                                            {cloneCandidates.map((item) => (
+                                                <option key={item.id} value={item.id}>
+                                                    {item.name} | {item.category} | {item.periode_tahun || '-'}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nama Standar Baru <span className="text-red-500">*</span></label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={formData.name}
+                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
+                                            placeholder="Contoh: Standar Kompetensi Lulusan 2027"
+                                        />
+                                    </div>
+                                    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                        <div>Kategori: mengikuti standar sumber.</div>
+                                        <div className="mt-1">Tahun implementasi: {selectedPeriod || new Date().getFullYear()}.</div>
+                                    </div>
+                                    <div className="mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense pt-4 border-t border-gray-200 dark:border-gray-700">
+                                        <button
+                                            type="submit"
+                                            disabled={isSubmitting}
+                                            className="w-full inline-flex justify-center rounded-md flex-row items-center gap-1 border border-transparent shadow-sm px-4 py-2 bg-amber-600 text-base font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:col-start-2 sm:text-sm disabled:opacity-50"
+                                        >
+                                            {isSubmitting ? 'Mengimpor...' : 'Import Standar'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleCloseImportModal}
                                             className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:col-start-1 sm:text-sm dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                                         >
                                             Batal
