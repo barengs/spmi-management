@@ -2,7 +2,7 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-APP_ENV_FILE=${APP_ENV_FILE:-.env.docker}
+APP_ENV_FILE=${APP_ENV_FILE:-.env}
 COMPOSE_FILE=${COMPOSE_FILE:-docker-compose.yml}
 PROJECT_NAME=${COMPOSE_PROJECT_NAME:-spmi-management}
 

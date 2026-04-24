@@ -6,7 +6,7 @@ services:
     image: espmi-app:latest
     restart: unless-stopped
     env_file:
-      - ${APP_ENV_FILE:-.env.docker}
+      - ${APP_ENV_FILE:-.env}
     environment:
       RUN_MIGRATIONS: "true"
     depends_on:
@@ -14,6 +14,7 @@ services:
         condition: service_healthy
     volumes:
       - app-storage:/var/www/html/storage
+      - ${APP_ENV_FILE:-.env}:/var/www/html/.env:ro
     healthcheck:
       test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
       interval: 30s
@@ -27,6 +28,8 @@ services:
       target: nginx
     image: espmi-nginx:latest
     restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env}
     depends_on:
       app:
         condition: service_healthy
@@ -34,12 +37,13 @@ services:
       - "80:80"
     volumes:
       - app-storage:/var/www/html/storage:ro
+      - ${APP_ENV_FILE:-.env}:/etc/espmi/.env:ro
 
   queue:
     image: espmi-app:latest
     restart: unless-stopped
     env_file:
-      - ${APP_ENV_FILE:-.env.docker}
+      - ${APP_ENV_FILE:-.env}
     environment:
       RUN_MIGRATIONS: "false"
     depends_on:
@@ -47,13 +51,14 @@ services:
         condition: service_healthy
     volumes:
       - app-storage:/var/www/html/storage
+      - ${APP_ENV_FILE:-.env}:/var/www/html/.env:ro
     command: ["php", "artisan", "queue:work", "--verbose", "--tries=3", "--timeout=90"]
 
   scheduler:
     image: espmi-app:latest
     restart: unless-stopped
     env_file:
-      - ${APP_ENV_FILE:-.env.docker}
+      - ${APP_ENV_FILE:-.env}
     environment:
       RUN_MIGRATIONS: "false"
     depends_on:
@@ -61,17 +66,23 @@ services:
         condition: service_healthy
     volumes:
       - app-storage:/var/www/html/storage
+      - ${APP_ENV_FILE:-.env}:/var/www/html/.env:ro
     command: ["sh", "-c", "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"]
 
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     env_file:
-      - ${APP_ENV_FILE:-.env.docker}
+      - ${APP_ENV_FILE:-.env}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spmi_management}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ${APP_ENV_FILE:-.env}:/etc/postgres/.env:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spmi_user} -d ${POSTGRES_DB:-spmi_management}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-spmi_management}"]
       interval: 10s
       timeout: 5s
       retries: 5

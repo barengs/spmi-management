@@ -58,7 +58,6 @@ Setup ini ditujukan untuk deploy ke VPS dengan Docker Compose dan service terpis
 ### File yang disediakan
 - `Dockerfile`
 - `docker-compose.yml`
-- `docker/.env.docker.example`
 - `docker/nginx/default.conf`
 - `docker/php/php.ini`
 - `docker/php/www.conf`
@@ -67,10 +66,10 @@ Setup ini ditujukan untuk deploy ke VPS dengan Docker Compose dan service terpis
 
 ### 1. Siapkan file environment untuk container
 ```bash
-cp docker/.env.docker.example .env.docker
+cp .env.example .env
 ```
 
-Lalu isi minimal value berikut di `.env.docker`:
+Lalu isi minimal value berikut di `.env`:
 ```env
 APP_URL=https://domain-anda.com
 APP_KEY=base64:...hasil dari php artisan key:generate --show
@@ -85,7 +84,14 @@ php artisan key:generate --show
 php artisan jwt:secret --force
 ```
 
-Jika `php artisan jwt:secret --force` dijalankan lokal, ambil nilainya lalu salin ke `JWT_SECRET` pada `.env.docker`.
+Jika `php artisan jwt:secret --force` dijalankan lokal, ambil nilainya lalu salin ke `JWT_SECRET` pada `.env`.
+
+Jika Anda juga menjalankan service `postgres` dari `docker-compose.yml`, tambahkan ini ke `.env`:
+```env
+POSTGRES_DB=spmi_management
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=password-db-yang-kuat
+```
 
 ### 2. Build dan jalankan container
 ```bash
@@ -99,9 +105,9 @@ chmod +x scripts/deploy.sh scripts/setup.sh
 ./scripts/deploy.sh
 ```
 
-Jika Anda ingin memakai file env selain `.env.docker`, gunakan:
+Jika Anda ingin memakai file env selain root `.env`, gunakan:
 ```bash
-APP_ENV_FILE=docker/.env.docker.example docker compose config
+APP_ENV_FILE=.env docker compose config
 APP_ENV_FILE=.env.production docker compose up -d --build
 ```
 
@@ -143,10 +149,11 @@ Dengan script:
 
 ### Catatan produksi
 - Default compose mengekspos port `80` dari container `nginx`.
+- Default compose memakai file root `.env` sebagai sumber env global untuk `app`, `nginx`, `queue`, `scheduler`, dan `postgres`.
 - Untuk HTTPS production, sebaiknya letakkan Nginx Proxy Manager, Traefik, atau Caddy di depan stack ini.
 - `QUEUE_CONNECTION`, `SESSION_DRIVER`, dan `CACHE_STORE` default memakai `database`, jadi tabel terkait harus sudah termigrasi.
 - Volume `app-storage` menyimpan file Laravel `storage`, dan `postgres-data` menyimpan data database PostgreSQL.
-- Jika Anda ingin memakai database managed service, hapus service `postgres` dan ubah `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` di `.env.docker`.
+- Jika Anda ingin memakai database managed service, hapus service `postgres` dan ubah `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` di `.env`.
 
 ---
 
