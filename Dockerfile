@@ -23,7 +23,6 @@ RUN npm ci
 COPY resources ./resources
 COPY public ./public
 COPY vite.config.js ./
-COPY .env.example ./.env
 RUN npm run build
 
 FROM php:8.3-fpm-alpine AS app
