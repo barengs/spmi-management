@@ -62,7 +62,8 @@ Setup ini ditujukan untuk deploy ke VPS dengan Docker Compose dan service terpis
 - `docker/nginx/default.conf`
 - `docker/php/php.ini`
 - `docker/php/www.conf`
-- `docker/scripts/entrypoint.sh`
+- `scripts/setup.sh`
+- `scripts/deploy.sh`
 
 ### 1. Siapkan file environment untuk container
 ```bash
@@ -90,6 +91,12 @@ Jika `php artisan jwt:secret --force` dijalankan lokal, ambil nilainya lalu sali
 ```bash
 docker compose build
 docker compose up -d
+```
+
+Atau gunakan script deploy production:
+```bash
+chmod +x scripts/deploy.sh scripts/setup.sh
+./scripts/deploy.sh
 ```
 
 Jika Anda ingin memakai file env selain `.env.docker`, gunakan:
@@ -127,6 +134,11 @@ docker compose exec app php artisan migrate --force
 git pull
 docker compose build
 docker compose up -d
+```
+
+Dengan script:
+```bash
+./scripts/deploy.sh --pull
 ```
 
 ### Catatan produksi

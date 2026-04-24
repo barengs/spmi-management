@@ -63,7 +63,7 @@ RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framewor
 
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/zz-app.ini
 COPY docker/php/www.conf /usr/local/etc/php-fpm.d/zz-app.conf
-COPY docker/scripts/entrypoint.sh /usr/local/bin/app-entrypoint
+COPY scripts/setup.sh /usr/local/bin/app-entrypoint
 RUN chmod +x /usr/local/bin/app-entrypoint
 
 ENTRYPOINT ["app-entrypoint"]
