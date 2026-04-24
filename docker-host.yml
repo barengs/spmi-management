@@ -1,0 +1,12 @@
+services:
+  app:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  queue:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  scheduler:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
