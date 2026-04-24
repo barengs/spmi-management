@@ -46,6 +46,98 @@ E-SPMI (Sistem Penjaminan Mutu Internal) adalah aplikasi web berbasis Laravel da
 
 ---
 
+## 🐳 Docker Deployment
+
+Setup ini ditujukan untuk deploy ke VPS dengan Docker Compose dan service terpisah untuk:
+- `app` - Laravel PHP-FPM
+- `nginx` - web server
+- `queue` - Laravel queue worker
+- `scheduler` - Laravel scheduler loop
+- `postgres` - database PostgreSQL
+
+### File yang disediakan
+- `Dockerfile`
+- `docker-compose.yml`
+- `docker/.env.docker.example`
+- `docker/nginx/default.conf`
+- `docker/php/php.ini`
+- `docker/php/www.conf`
+- `docker/scripts/entrypoint.sh`
+
+### 1. Siapkan file environment untuk container
+```bash
+cp docker/.env.docker.example .env.docker
+```
+
+Lalu isi minimal value berikut di `.env.docker`:
+```env
+APP_URL=https://domain-anda.com
+APP_KEY=base64:...hasil dari php artisan key:generate --show
+JWT_SECRET=...secret jwt anda
+DB_PASSWORD=password-db-yang-kuat
+POSTGRES_PASSWORD=password-db-yang-kuat
+```
+
+Generate value yang dibutuhkan:
+```bash
+php artisan key:generate --show
+php artisan jwt:secret --force
+```
+
+Jika `php artisan jwt:secret --force` dijalankan lokal, ambil nilainya lalu salin ke `JWT_SECRET` pada `.env.docker`.
+
+### 2. Build dan jalankan container
+```bash
+docker compose build
+docker compose up -d
+```
+
+Jika Anda ingin memakai file env selain `.env.docker`, gunakan:
+```bash
+APP_ENV_FILE=docker/.env.docker.example docker compose config
+APP_ENV_FILE=.env.production docker compose up -d --build
+```
+
+Saat boot pertama, container `app` akan otomatis:
+- memastikan permission `storage` dan `bootstrap/cache`
+- menjalankan `php artisan migrate --force`
+- membangun cache Laravel dengan `php artisan optimize`
+
+### 3. Seed data awal bila diperlukan
+```bash
+docker compose exec app php artisan db:seed
+```
+
+### 4. Akses aplikasi
+- HTTP: `http://IP-VPS`
+- Jika memakai domain, arahkan DNS ke VPS lalu pasang reverse proxy/SSL di depan container ini.
+
+### 5. Operasional umum
+```bash
+docker compose ps
+docker compose logs -f app
+docker compose logs -f nginx
+docker compose logs -f queue
+docker compose exec app php artisan optimize:clear
+docker compose exec app php artisan migrate --force
+```
+
+### 6. Update aplikasi di VPS
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
+
+### Catatan produksi
+- Default compose mengekspos port `80` dari container `nginx`.
+- Untuk HTTPS production, sebaiknya letakkan Nginx Proxy Manager, Traefik, atau Caddy di depan stack ini.
+- `QUEUE_CONNECTION`, `SESSION_DRIVER`, dan `CACHE_STORE` default memakai `database`, jadi tabel terkait harus sudah termigrasi.
+- Volume `app-storage` menyimpan file Laravel `storage`, dan `postgres-data` menyimpan data database PostgreSQL.
+- Jika Anda ingin memakai database managed service, hapus service `postgres` dan ubah `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` di `.env.docker`.
+
+---
+
 ## 🏗️ Architecture
 
 ### Modular Structure

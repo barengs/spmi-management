@@ -1,0 +1,81 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: espmi-app:latest
+    restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env.docker}
+    environment:
+      RUN_MIGRATIONS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - app-storage:/var/www/html/storage
+    healthcheck:
+      test: ["CMD-SHELL", "SCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: nginx
+    image: espmi-nginx:latest
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - app-storage:/var/www/html/storage:ro
+
+  queue:
+    image: espmi-app:latest
+    restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env.docker}
+    environment:
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - app-storage:/var/www/html/storage
+    command: ["php", "artisan", "queue:work", "--verbose", "--tries=3", "--timeout=90"]
+
+  scheduler:
+    image: espmi-app:latest
+    restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env.docker}
+    environment:
+      RUN_MIGRATIONS: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - app-storage:/var/www/html/storage
+    command: ["sh", "-c", "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env.docker}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spmi_user} -d ${POSTGRES_DB:-spmi_management}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  app-storage:
+  postgres-data:
