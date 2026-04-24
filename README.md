@@ -60,6 +60,7 @@ Service container yang dipakai:
 - `docker-compose.yml`
 - `docker/php/php.ini`
 - `docker/php/www.conf`
+- `docker/php/entrypoint.sh`
 - `scripts/setup.sh`
 - `scripts/deploy.sh`
 

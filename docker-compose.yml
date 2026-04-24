@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: app
     image: espmi-app:latest
     restart: unless-stopped
     env_file:
