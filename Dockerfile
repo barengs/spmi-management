@@ -36,10 +36,12 @@ RUN composer install \
     --no-interaction \
     --no-progress \
     --prefer-dist \
-    --optimize-autoloader
+    --optimize-autoloader \
+    --no-scripts
 
 COPY . .
-RUN composer dump-autoload --optimize --no-dev
+RUN composer dump-autoload --optimize --no-dev \
+    && php artisan package:discover --ansi
 
 FROM node:22-alpine AS frontend
 
