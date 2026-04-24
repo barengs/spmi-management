@@ -1,6 +1,34 @@
-FROM composer:2 AS vendor
+FROM php:8.3-cli-alpine AS vendor
 
 WORKDIR /app
+
+RUN apk add --no-cache \
+        git \
+        icu-libs \
+        libpq \
+        libxml2 \
+        libzip \
+        oniguruma \
+        unzip \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS \
+        icu-dev \
+        libpq-dev \
+        libxml2-dev \
+        libzip-dev \
+        oniguruma-dev \
+        postgresql-dev \
+    && docker-php-ext-install \
+        bcmath \
+        dom \
+        intl \
+        mbstring \
+        pdo \
+        pdo_pgsql \
+        zip \
+    && apk del .build-deps
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 COPY composer.json composer.lock ./
 RUN composer install \
