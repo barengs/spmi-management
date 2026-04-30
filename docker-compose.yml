@@ -21,6 +21,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 5
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   queue:
     image: espmi-app:latest
