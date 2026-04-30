@@ -281,6 +281,8 @@ export default function StandardIndex() {
         || hasRole('Wakil Rektor 3')
         || hasRole('Rektor')
         || user?.permissions?.includes('standard.publish');
+    const canExportStandards = hasRole('SuperAdmin')
+        || user?.permissions?.includes('report.export');
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -653,6 +655,25 @@ export default function StandardIndex() {
         setIsCloneModalOpen(true);
     };
 
+    const handleExport = async (standard) => {
+        try {
+            const response = await api.get(`/standards/${standard.id}/export`, {
+                responseType: 'blob',
+            });
+            const blob = new Blob([response.data], { type: 'application/msword' });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = downloadUrl;
+            anchor.download = `${(standard.name || 'standar').replace(/[\\/:*?"<>|]+/g, '-')}-${standard.periode_tahun || 'tanpa-periode'}.doc`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Ekspor standar gagal dijalankan.');
+        }
+    };
+
     // TanStack Table Setup
     const columnHelper = createColumnHelper();
 
@@ -862,6 +883,19 @@ export default function StandardIndex() {
                     );
                 }
 
+                if (canExportStandards && item.status === 'TERBIT') {
+                    actionButtons.push(
+                        <button
+                            key="export"
+                            onClick={() => handleExport(item)}
+                            className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-900"
+                        >
+                            <Icon icon={Icons.document} width={14} />
+                            Unduh
+                        </button>
+                    );
+                }
+
                 return (
                     <div className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm font-medium">
                         {actionButtons}
@@ -869,7 +903,7 @@ export default function StandardIndex() {
                 );
             }
         })
-    ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canReviewStandards, canManageStandardEvidence]);
+    ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canReviewStandards, canManageStandardEvidence, canExportStandards]);
 
     const table = useReactTable({
         data: filteredStandards,

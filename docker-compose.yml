@@ -34,6 +34,8 @@ services:
     volumes:
       - app-storage:/var/www/html/storage
       - ${APP_ENV_FILE:-.env}:/var/www/html/.env:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["php", "artisan", "queue:work", "--verbose", "--tries=3", "--timeout=90"]
 
   scheduler:
@@ -46,6 +48,8 @@ services:
     volumes:
       - app-storage:/var/www/html/storage
       - ${APP_ENV_FILE:-.env}:/var/www/html/.env:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["sh", "-c", "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"]
 
 volumes:

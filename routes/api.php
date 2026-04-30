@@ -71,6 +71,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/',                    [\App\Modules\Standard\Controllers\StandardController::class, 'store']);
             Route::post('/import',             [\App\Modules\Standard\Controllers\StandardController::class, 'import']);
             Route::get('/{id}',                 [\App\Modules\Standard\Controllers\StandardController::class, 'show']);
+            Route::get('/{id}/export',          [\App\Modules\Standard\Controllers\StandardController::class, 'export']);
             Route::get('/{id}/source-document/download', [\App\Modules\Standard\Controllers\StandardController::class, 'downloadSourceDocument']);
             Route::put('/{id}',                 [\App\Modules\Standard\Controllers\StandardController::class, 'update']);
             Route::delete('/{id}',              [\App\Modules\Standard\Controllers\StandardController::class, 'destroy']);

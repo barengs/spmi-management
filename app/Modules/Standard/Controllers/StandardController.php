@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
 use App\Modules\Standard\Services\StandardDocumentImportService;
+use App\Modules\Standard\Services\StandardExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,7 @@ class StandardController extends Controller
 {
     public function __construct(
         private readonly StandardDocumentImportService $documentImportService,
+        private readonly StandardExportService $standardExportService,
     ) {
     }
 
@@ -406,6 +408,31 @@ class StandardController extends Controller
         return response()->json([
             'status' => 'success',
             'data'   => $standard,
+        ]);
+    }
+
+    public function export(Request $request, $id): StreamedResponse|JsonResponse
+    {
+        if ($denied = $this->denyUnless($request, 'report.export', 'Anda tidak memiliki hak akses untuk mengekspor standar.')) {
+            return $denied;
+        }
+
+        $standard = MstStandard::findOrFail($id);
+
+        if ($standard->status !== 'TERBIT') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Hanya standar berstatus TERBIT yang dapat diekspor.',
+            ], 422);
+        }
+
+        $html = $this->standardExportService->buildWordHtml($standard);
+        $fileName = sprintf('%s-%s.doc', Str::slug($standard->name) ?: 'standar', $standard->periode_tahun ?: 'tanpa-periode');
+
+        return response()->streamDownload(function () use ($html) {
+            echo $html;
+        }, $fileName, [
+            'Content-Type' => 'application/msword; charset=UTF-8',
         ]);
     }
 
