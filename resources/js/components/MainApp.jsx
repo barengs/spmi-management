@@ -39,13 +39,22 @@ const GuestRoute = ({ children }) => {
     return children;
 };
 
-const PermissionRoute = ({ permission, children }) => {
+const PermissionRoute = ({ permission, roles: allowedRoles = [], children }) => {
     const user = useSelector((state) => state.auth.user);
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
+    const deniesAuditeeExecution = allowedRoles.length > 0 && hasRole('Auditee');
 
-    if (hasRole('SuperAdmin') || permissions.includes(permission)) {
+    if (deniesAuditeeExecution) {
+        return <Navigate to="/" replace />;
+    }
+
+    if (
+        hasRole('SuperAdmin')
+        || allowedRoles.some((roleName) => hasRole(roleName))
+        || (permission && permissions.includes(permission))
+    ) {
         return children;
     }
 
@@ -93,7 +102,9 @@ export default function MainApp() {
                         <Route
                             path="standards/:id/execution"
                             element={
-                                <PermissionRoute permission="evidence.upload">
+                                <PermissionRoute
+                                    roles={['LPM-Admin', 'Kepala LPMI', 'Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor']}
+                                >
                                     <ExecutionRepositoryPage />
                                 </PermissionRoute>
                             }

@@ -5,11 +5,21 @@ namespace App\Modules\Standard\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
+use App\Modules\Standard\Services\StandardDocumentImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StandardController extends Controller
 {
+    public function __construct(
+        private readonly StandardDocumentImportService $documentImportService,
+    ) {
+    }
+
     private function denyUnless(Request $request, string $permission, string $message): ?JsonResponse
     {
         if (! $request->user()?->can($permission)) {
@@ -172,7 +182,7 @@ class StandardController extends Controller
 
     private function structureValidationError(MstStandard $standard): ?JsonResponse
     {
-        $invalidStatements = $standard->statementsWithoutIndicators();
+        $invalidStatements = $standard->structuralNodesWithoutContent();
 
         if ($invalidStatements->isEmpty()) {
             return null;
@@ -180,11 +190,12 @@ class StandardController extends Controller
 
         return response()->json([
             'status' => 'error',
-            'message' => 'Masih ada Statement yang belum memiliki minimal satu Indicator.',
+            'message' => 'Masih ada Poin Utama atau Sub Poin yang belum memiliki isi.',
             'errors' => [
-                'statements' => $invalidStatements->map(fn ($statement) => [
+                'nodes' => $invalidStatements->map(fn ($statement) => [
                     'id' => $statement->id,
                     'content' => $statement->content,
+                    'type' => $statement->type,
                 ])->values(),
             ],
         ], 422);
@@ -292,6 +303,99 @@ class StandardController extends Controller
         ], 201);
     }
 
+    public function import(Request $request): JsonResponse
+    {
+        if ($denied = $this->denyUnless($request, 'standard.create', 'Anda tidak memiliki hak akses untuk mengimpor standar.')) {
+            return $denied;
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'category' => 'required|in:SN-Dikti,Institusi',
+            'periode_tahun' => 'nullable|integer',
+            'is_active' => 'boolean',
+            'referensi_regulasi' => 'nullable|string',
+            'file' => 'required|file|mimes:pdf|max:20480',
+            'structure_tree' => 'nullable',
+            'extracted_text' => 'nullable|string',
+        ]);
+
+        $uploadedFile = $request->file('file');
+        $baseName = Str::slug(pathinfo($uploadedFile->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'standar';
+        $storedName = sprintf('%s-%s.%s', $baseName, now()->format('YmdHis'), $uploadedFile->getClientOriginalExtension());
+
+        $decodedStructureTree = null;
+        if ($request->filled('structure_tree')) {
+            $decodedStructureTree = json_decode((string) $request->input('structure_tree'), true);
+
+            if (json_last_error() !== JSON_ERROR_NONE || ! is_array($decodedStructureTree)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Format struktur standar tidak valid.',
+                ], 422);
+            }
+        }
+
+        $standard = null;
+        $path = null;
+
+        try {
+            DB::beginTransaction();
+
+            $standard = MstStandard::create([
+                'name' => $validated['name'],
+                'category' => $validated['category'],
+                'periode_tahun' => $validated['periode_tahun'] ?? null,
+                'is_active' => $validated['is_active'] ?? true,
+                'referensi_regulasi' => $validated['referensi_regulasi'] ?? null,
+                'status' => 'DRAFT',
+            ]);
+
+            $directory = sprintf('standards/standard-%s/source-documents', $standard->id);
+            $path = $uploadedFile->storeAs($directory, $storedName, 'local');
+
+            $standard->forceFill([
+                'source_document_path' => $path,
+                'source_document_original_name' => $uploadedFile->getClientOriginalName(),
+                'source_document_stored_name' => $storedName,
+                'source_document_mime_type' => $uploadedFile->getMimeType(),
+                'source_document_size_bytes' => $uploadedFile->getSize(),
+                'imported_from_document_at' => now(),
+            ]);
+            $this->resetApprovalFlow($standard);
+            $standard->save();
+
+            $summary = $this->documentImportService->import(
+                $standard,
+                $decodedStructureTree,
+                $validated['extracted_text'] ?? null,
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Dokumen standar berhasil diimpor beserta struktur poin-poinnya.',
+                'data' => [
+                    ...$standard->fresh()->toArray(),
+                    'import_summary' => $summary,
+                ],
+            ], 201);
+        } catch (\Throwable $exception) {
+            DB::rollBack();
+
+            if ($path) {
+                Storage::disk('local')->delete($path);
+            }
+
+            if ($standard?->exists) {
+                $standard->forceDelete();
+            }
+
+            throw $exception;
+        }
+    }
+
     /**
      * Display the specified standard.
      */
@@ -303,6 +407,19 @@ class StandardController extends Controller
             'status' => 'success',
             'data'   => $standard,
         ]);
+    }
+
+    public function downloadSourceDocument($id): StreamedResponse
+    {
+        $standard = MstStandard::findOrFail($id);
+
+        abort_unless($standard->source_document_path, 404);
+        abort_unless(Storage::disk('local')->exists($standard->source_document_path), 404);
+
+        return Storage::disk('local')->download(
+            $standard->source_document_path,
+            $standard->source_document_original_name ?? $standard->source_document_stored_name
+        );
     }
 
     /**

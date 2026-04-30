@@ -18,6 +18,12 @@ class MstStandard extends Model
         'periode_tahun',
         'is_active',
         'referensi_regulasi',
+        'source_document_path',
+        'source_document_original_name',
+        'source_document_stored_name',
+        'source_document_mime_type',
+        'source_document_size_bytes',
+        'imported_from_document_at',
         'status',
         'approval_stage',
         'submitted_by',
@@ -51,6 +57,7 @@ class MstStandard extends Model
     {
         return [
             'is_active' => 'boolean',
+            'imported_from_document_at' => 'datetime',
             'review_submitted_at' => 'datetime',
             'head_lpmi_approved_at' => 'datetime',
             'wr1_approved_at' => 'datetime',
@@ -65,12 +72,17 @@ class MstStandard extends Model
         return $this->hasMany(MstMetric::class, 'standard_id');
     }
 
-    public function statementsWithoutIndicators(): Collection
+    public function structuralNodesWithoutContent(): Collection
     {
         return $this->metrics()
-            ->where('type', 'Statement')
+            ->whereIn('type', ['Header', 'Statement'])
             ->get()
-            ->filter(fn (MstMetric $statement) => ! $statement->children()->where('type', 'Indicator')->exists())
+            ->filter(function (MstMetric $metric) {
+                $hasChildren = $metric->children()->exists();
+                $hasOwnContent = filled(trim((string) $metric->content));
+
+                return ! $hasChildren && ! $hasOwnContent;
+            })
             ->values();
     }
 }

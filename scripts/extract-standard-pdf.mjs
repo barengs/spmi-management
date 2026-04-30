@@ -1,0 +1,251 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+
+const [, , filePath] = process.argv;
+
+if (!filePath) {
+    console.error('PDF path is required.');
+    process.exit(1);
+}
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    '../node_modules/pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+).toString();
+
+const normalizeText = (text) => String(text || '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+const buildNode = (type, content) => ({
+    type,
+    content: String(content || '').trim(),
+    iku: null,
+    ikt: null,
+    children: [],
+});
+
+const isHeaderLine = (line) => /^[0-9]+\.\s+\S+/.test(line);
+const isStatementLine = (line) => /^[A-Za-z]\.\s+\S+/.test(line);
+const isContentListLine = (line) => /^[0-9]+\)\s+\S+/.test(line);
+
+const shouldSkipLine = (line) => {
+    const normalized = line.trim();
+
+    if (!normalized) {
+        return true;
+    }
+
+    return [
+        /^universitas islam madura$/i,
+        /^standar spmi universitas islam madura$/i,
+        /^standar spmi universitas islam madura\b.*$/i,
+        /^standar mutu kemahasiswaan$/i,
+        /^daftar isi$/i,
+        /^no isi halaman$/i,
+        /^\d+\s+standar spmi universitas islam madura$/i,
+        /^halaman\s*:/i,
+        /^kode\s*:/i,
+        /^alamat:/i,
+        /^tanggal\s*:/i,
+        /^revisi\s*:/i,
+        /^proses\s+penanggung jawab/i,
+        /^nama\s+jabatan$/i,
+    ].some((pattern) => pattern.test(normalized));
+};
+
+const cropToStandardBody = (lines) => {
+    const startIndex = lines.findIndex((line, index, source) => {
+        if (!/^1\.\s+/i.test(line.trim())) {
+            return false;
+        }
+
+        const lookahead = source.slice(index + 1, index + 6);
+        return lookahead.some((candidate) => isStatementLine(candidate.trim()));
+    });
+
+    if (startIndex === -1) {
+        return lines;
+    }
+
+    return lines.slice(startIndex);
+};
+
+const buildTreeFromText = (text) => {
+    const lines = normalizeText(text)
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+    const tree = [];
+    let currentHeaderIndex = null;
+    let currentStatementIndex = null;
+    let paragraphBuffer = [];
+    let activeListItemIndex = null;
+
+    const flushParagraphBuffer = () => {
+        if (!paragraphBuffer.length || currentHeaderIndex === null || currentStatementIndex === null) {
+            paragraphBuffer = [];
+            return;
+        }
+
+        const content = paragraphBuffer.join(' ').trim();
+        if (content) {
+            tree[currentHeaderIndex].children[currentStatementIndex].children.push(buildNode('Indicator', content));
+        }
+
+        paragraphBuffer = [];
+        activeListItemIndex = null;
+    };
+
+    for (const line of lines) {
+        if (shouldSkipLine(line)) {
+            continue;
+        }
+
+        if (isHeaderLine(line)) {
+            flushParagraphBuffer();
+            tree.push(buildNode('Header', line));
+            currentHeaderIndex = tree.length - 1;
+            currentStatementIndex = null;
+            activeListItemIndex = null;
+            continue;
+        }
+
+        if (isStatementLine(line)) {
+            flushParagraphBuffer();
+            if (currentHeaderIndex === null) {
+                continue;
+            }
+            tree[currentHeaderIndex].children.push(buildNode('Statement', line));
+            currentStatementIndex = tree[currentHeaderIndex].children.length - 1;
+            activeListItemIndex = null;
+            continue;
+        }
+
+        if (isContentListLine(line)) {
+            flushParagraphBuffer();
+            if (currentHeaderIndex === null || currentStatementIndex === null) {
+                continue;
+            }
+            tree[currentHeaderIndex].children[currentStatementIndex].children.push(buildNode('Indicator', line));
+            activeListItemIndex = tree[currentHeaderIndex].children[currentStatementIndex].children.length - 1;
+            continue;
+        }
+
+        if (currentHeaderIndex === null || currentStatementIndex === null) {
+            continue;
+        }
+
+        if (activeListItemIndex !== null) {
+            const current = tree[currentHeaderIndex].children[currentStatementIndex].children[activeListItemIndex].content || '';
+            tree[currentHeaderIndex].children[currentStatementIndex].children[activeListItemIndex].content = `${current} ${line}`.trim();
+            continue;
+        }
+
+        paragraphBuffer.push(line);
+    }
+
+    flushParagraphBuffer();
+
+    return tree.filter((header) => header.content || header.children.length > 0);
+};
+
+const reconstructPageLines = (items) => {
+    const textItems = items
+        .filter((item) => typeof item.str === 'string' && item.str.trim() !== '')
+        .map((item) => ({
+            str: item.str,
+            x: item.transform[4],
+            y: item.transform[5],
+            width: item.width || 0,
+        }))
+        .sort((left, right) => {
+            if (Math.abs(right.y - left.y) > 2) {
+                return right.y - left.y;
+            }
+
+            return left.x - right.x;
+        });
+
+    const rows = [];
+
+    for (const item of textItems) {
+        const existingRow = rows.find((row) => Math.abs(row.y - item.y) <= 2);
+
+        if (existingRow) {
+            existingRow.items.push(item);
+            continue;
+        }
+
+        rows.push({
+            y: item.y,
+            items: [item],
+        });
+    }
+
+    return rows
+        .sort((left, right) => right.y - left.y)
+        .map((row) => row.items.sort((left, right) => left.x - right.x))
+        .map((rowItems) => {
+            let line = '';
+            let previous = null;
+
+            for (const item of rowItems) {
+                if (previous) {
+                    const previousRight = previous.x + previous.width;
+                    const gap = item.x - previousRight;
+
+                    if (gap > 2) {
+                        line += ' ';
+                    }
+                }
+
+                line += item.str;
+                previous = item;
+            }
+
+            return line.replace(/[ \t]+/g, ' ').trim();
+        })
+        .filter((line) => !shouldSkipLine(line));
+};
+
+const extractText = async (absolutePath) => {
+    const data = await fs.readFile(absolutePath);
+    const pdf = await pdfjsLib.getDocument({
+        data: new Uint8Array(data),
+        standardFontDataUrl: path.resolve('node_modules/pdfjs-dist/standard_fonts/') + path.sep,
+    }).promise;
+
+    const pages = [];
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const textContent = await page.getTextContent();
+        const pageLines = reconstructPageLines(textContent.items);
+        const pageText = pageLines.join('\n').trim();
+
+        if (pageText) {
+            pages.push(pageText);
+        }
+    }
+
+    return cropToStandardBody(
+        pages.join('\n').split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+    ).join('\n');
+};
+
+try {
+    const extractedText = await extractText(path.resolve(filePath));
+    const structureTree = buildTreeFromText(extractedText);
+
+    process.stdout.write(JSON.stringify({
+        extracted_text: extractedText,
+        structure_tree: structureTree,
+    }));
+} catch (error) {
+    console.error(error?.message || String(error));
+    process.exit(1);
+}

@@ -12,71 +12,66 @@ const getNodeTypeLabel = (type) => {
     return 'Indicator';
 };
 
-function normalizeContent(value) {
-    return String(value || '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-}
-
-function buildTreeMatches(currentNodes, previousNodes) {
-    const currentCounts = new Map();
-    const previousCounts = new Map();
-    const currentMatchedIds = new Set();
-    const previousMatchedIds = new Set();
-
-    const collectCounts = (nodes, counts) => {
-        nodes.forEach((node) => {
-            const key = `${node.type}::${normalizeContent(node.content)}`;
-            counts.set(key, (counts.get(key) || 0) + 1);
-
-            if (node.children_recursive?.length > 0) {
-                collectCounts(node.children_recursive, counts);
-            }
-        });
-    };
-
-    const markMatches = (nodes, limitMap, seenMap, targetSet) => {
-        nodes.forEach((node) => {
-            const key = `${node.type}::${normalizeContent(node.content)}`;
-            const nextSeen = (seenMap.get(key) || 0) + 1;
-            seenMap.set(key, nextSeen);
-
-            if (nextSeen <= (limitMap.get(key) || 0)) {
-                targetSet.add(node.id);
-            }
-
-            if (node.children_recursive?.length > 0) {
-                markMatches(node.children_recursive, limitMap, seenMap, targetSet);
-            }
-        });
-    };
-
-    collectCounts(currentNodes, currentCounts);
-    collectCounts(previousNodes, previousCounts);
-
-    const sharedCounts = new Map();
-    currentCounts.forEach((count, key) => {
-        if (previousCounts.has(key)) {
-            sharedCounts.set(key, Math.min(count, previousCounts.get(key)));
-        }
-    });
-
-    markMatches(currentNodes, sharedCounts, new Map(), currentMatchedIds);
-    markMatches(previousNodes, sharedCounts, new Map(), previousMatchedIds);
-
-    return {
-        currentMatchedIds,
-        previousMatchedIds,
-        totalMatchedNodes: Array.from(sharedCounts.values()).reduce((sum, count) => sum + count, 0),
-    };
-}
-
 function flattenTree(nodes) {
     return nodes.flatMap((node) => [
         node,
         ...(node.children_recursive?.length > 0 ? flattenTree(node.children_recursive) : []),
     ]);
+}
+
+function buildComparisonSearchBlob(standard, tree) {
+    const nodeTerms = flattenTree(tree).flatMap((node) => [
+        node.content || '',
+        getNodeTypeLabel(node.type),
+        node.type || '',
+    ]);
+
+    return [
+        standard.name || '',
+        standard.category || '',
+        standard.referensi_regulasi || '',
+        String(standard.periode_tahun || ''),
+        ...nodeTerms,
+    ].join(' ').toLowerCase();
+}
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getSearchTerms(value) {
+    return Array.from(
+        new Set(
+            String(value || '')
+                .trim()
+                .toLowerCase()
+                .split(/\s+/)
+                .filter(Boolean)
+        )
+    );
+}
+
+function renderHighlightedText(content, searchTerms) {
+    const text = String(content || '');
+
+    if (searchTerms.length === 0) {
+        return text;
+    }
+
+    const pattern = new RegExp(`(${searchTerms.map(escapeRegExp).join('|')})`, 'gi');
+    const parts = text.split(pattern);
+
+    return parts.map((part, index) => {
+        const isMatch = searchTerms.some((term) => part.toLowerCase() === term);
+
+        return isMatch ? (
+            <mark key={`${part}-${index}`} className="rounded bg-amber-200 px-1 text-gray-900">
+                {part}
+            </mark>
+        ) : (
+            <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
+        );
+    });
 }
 
 function statusBadge(status) {
@@ -139,9 +134,9 @@ function InfoCard({ label, value, hint, accent = 'gray' }) {
 function MetricNodeCard({
     node,
     depth,
-    isMatched,
     reviewable,
     isExpanded,
+    searchTerms,
     nodeDraft,
     nodeSubmittingId,
     onDraftChange,
@@ -158,9 +153,7 @@ function MetricNodeCard({
                 className={`rounded-2xl border px-4 py-3 ${
                     isRejected
                         ? 'border-rose-300 bg-rose-50'
-                        : isMatched
-                            ? 'border-blue-300 bg-blue-50'
-                            : 'border-gray-200 bg-gray-50/70'
+                        : 'border-gray-200 bg-gray-50/70'
                 }`}
                 style={{ marginLeft: `${depth * 16}px` }}
             >
@@ -172,17 +165,12 @@ function MetricNodeCard({
                             {node.review_status === 'REJECTED'
                                 ? 'Revisi'
                                 : node.review_status === 'ACCEPTED'
-                                    ? 'Sudah Dicek'
+                                    ? 'Diterima'
                                     : 'Belum Dicek'}
                         </span>
                         {node.review_action && (
                             <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-amber-800">
                                 {node.review_action === 'REMOVE' ? 'Harus Dihapus' : 'Harus Diubah'}
-                            </span>
-                        )}
-                        {isMatched && (
-                            <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] text-white">
-                                Node Cocok
                             </span>
                         )}
                     </div>
@@ -200,7 +188,7 @@ function MetricNodeCard({
                     )}
                 </div>
 
-                <div className="text-sm leading-6 text-gray-800">{node.content}</div>
+                <div className="text-sm leading-6 text-gray-800">{renderHighlightedText(node.content, searchTerms)}</div>
 
                 {(node.review_comment || !reviewable) && node.review_comment && (
                     <div className="mt-3 rounded-2xl border border-rose-200 bg-white/80 px-3 py-3 text-sm text-rose-900">
@@ -250,7 +238,7 @@ function MetricNodeCard({
                                 className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Icon icon={isSubmitting ? Icons.refresh : Icons.check} width={14} className={isSubmitting ? 'animate-spin' : ''} />
-                                Tandai Sudah Dicek
+                                Tandai Diterima
                             </button>
                         </div>
 
@@ -274,8 +262,8 @@ function MetricNodeCard({
 
 function renderMetricTree(nodes, options, depth = 0) {
     const {
-        matchedIds,
         reviewable,
+        searchTerms,
         expandedNodeIds,
         nodeDrafts,
         nodeSubmittingId,
@@ -290,9 +278,9 @@ function renderMetricTree(nodes, options, depth = 0) {
             <MetricNodeCard
                 node={node}
                 depth={depth}
-                isMatched={matchedIds.has(node.id)}
                 reviewable={reviewable}
                 isExpanded={Boolean(expandedNodeIds[node.id])}
+                searchTerms={searchTerms}
                 nodeDraft={nodeDrafts[node.id] || { comment: '', reviewAction: '' }}
                 nodeSubmittingId={nodeSubmittingId}
                 onDraftChange={onDraftChange}
@@ -310,10 +298,15 @@ export default function StandardReviewPage() {
     const navigate = useNavigate();
     const user = useSelector((state) => state.auth.user);
     const [standard, setStandard] = useState(null);
+    const [availableComparisonStandards, setAvailableComparisonStandards] = useState([]);
     const [currentTree, setCurrentTree] = useState([]);
     const [previousStandard, setPreviousStandard] = useState(null);
+    const [selectedPreviousStandardId, setSelectedPreviousStandardId] = useState('');
     const [previousTree, setPreviousTree] = useState([]);
+    const [comparisonSearch, setComparisonSearch] = useState('');
+    const [comparisonYearFilter, setComparisonYearFilter] = useState('ALL');
     const [loading, setLoading] = useState(true);
+    const [comparisonLoading, setComparisonLoading] = useState(false);
     const [submittingAction, setSubmittingAction] = useState('');
     const [nodeSubmittingId, setNodeSubmittingId] = useState(null);
     const [rejectReason, setRejectReason] = useState('');
@@ -336,11 +329,6 @@ export default function StandardReviewPage() {
         };
     }, [user]);
 
-    const comparison = useMemo(
-        () => buildTreeMatches(currentTree, previousTree),
-        [currentTree, previousTree]
-    );
-
     const rejectedNodes = useMemo(
         () => flattenTree(currentTree).filter((node) => node.review_status === 'REJECTED'),
         [currentTree]
@@ -351,15 +339,27 @@ export default function StandardReviewPage() {
         [currentTree]
     );
     const totalCurrentNodes = useMemo(() => flattenTree(currentTree).length, [currentTree]);
-    const matchPercentage = useMemo(() => {
-        if (totalCurrentNodes === 0) {
-            return 0;
-        }
-
-        return Math.round((comparison.totalMatchedNodes / totalCurrentNodes) * 100);
-    }, [comparison.totalMatchedNodes, totalCurrentNodes]);
 
     const canShowAuditControls = userAccess.canAuditReview && standard?.status === 'WAITING_APPROVAL' && !standard?.review_submitted_at;
+
+    const comparisonCandidates = useMemo(() => (
+        availableComparisonStandards
+            .filter((item) => comparisonYearFilter === 'ALL' || String(item.periode_tahun || '') === comparisonYearFilter)
+            .filter((item) => (
+                (item.search_blob || '').includes(comparisonSearch.trim().toLowerCase())
+            ))
+    ), [availableComparisonStandards, comparisonSearch, comparisonYearFilter]);
+
+    const comparisonYearOptions = useMemo(() => (
+        Array.from(
+            new Set(
+                availableComparisonStandards
+                    .map((item) => item.periode_tahun)
+                    .filter((value) => value !== null && value !== undefined && value !== '')
+            )
+        ).sort((left, right) => Number(right) - Number(left))
+    ), [availableComparisonStandards]);
+    const comparisonSearchTerms = useMemo(() => getSearchTerms(comparisonSearch), [comparisonSearch]);
 
     const auditReviewLockReason = useMemo(() => {
         if (canShowAuditControls) {
@@ -393,12 +393,10 @@ export default function StandardReviewPage() {
             const current = standardResponse.data.data;
             const nextCurrentTree = treeResponse.data.data || [];
             const allStandards = standardsResponse.data.data || [];
-
-            const previous = allStandards
+            const rawCandidates = allStandards
                 .filter((item) => (
                     String(item.id) !== String(current.id)
                     && item.status === 'TERBIT'
-                    && Number(item.periode_tahun) < Number(current.periode_tahun)
                     && item.category === current.category
                 ))
                 .sort((a, b) => {
@@ -410,11 +408,27 @@ export default function StandardReviewPage() {
                     }
 
                     return Number(b.periode_tahun) - Number(a.periode_tahun);
-                })[0] || null;
+                });
+            const candidateTrees = await Promise.allSettled(
+                rawCandidates.map((item) => api.get(`/standards/${item.id}/metrics/tree`))
+            );
+            const candidates = rawCandidates.map((item, index) => {
+                const result = candidateTrees[index];
+                const tree = result.status === 'fulfilled' ? (result.value.data.data || []) : [];
+
+                return {
+                    ...item,
+                    comparison_tree: tree,
+                    search_blob: buildComparisonSearchBlob(item, tree),
+                };
+            });
+            const previous = candidates[0] || null;
 
             setStandard(current);
+            setAvailableComparisonStandards(candidates);
             setCurrentTree(nextCurrentTree);
             setPreviousStandard(previous);
+            setSelectedPreviousStandardId(previous ? String(previous.id) : '');
             setRejectReason(current.reject_reason || '');
 
             const nextDrafts = {};
@@ -426,13 +440,6 @@ export default function StandardReviewPage() {
             });
             setNodeDrafts(nextDrafts);
             setExpandedNodeIds({});
-
-            if (previous) {
-                const previousTreeResponse = await api.get(`/standards/${previous.id}/metrics/tree`);
-                setPreviousTree(previousTreeResponse.data.data || []);
-            } else {
-                setPreviousTree([]);
-            }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Halaman review standar gagal dimuat.');
         } finally {
@@ -443,6 +450,65 @@ export default function StandardReviewPage() {
     useEffect(() => {
         fetchPageData();
     }, [id]);
+
+    useEffect(() => {
+        const selectedStandard = availableComparisonStandards.find((item) => String(item.id) === String(selectedPreviousStandardId)) || null;
+        setPreviousStandard(selectedStandard);
+
+        if (!selectedPreviousStandardId || !selectedStandard) {
+            setPreviousTree([]);
+            setComparisonLoading(false);
+            return;
+        }
+
+        if (Array.isArray(selectedStandard.comparison_tree) && selectedStandard.comparison_tree.length > 0) {
+            setPreviousTree(selectedStandard.comparison_tree);
+            setComparisonLoading(false);
+            return;
+        }
+
+        let isCancelled = false;
+
+        const fetchPreviousTree = async () => {
+            try {
+                setComparisonLoading(true);
+                const previousTreeResponse = await api.get(`/standards/${selectedPreviousStandardId}/metrics/tree`);
+
+                if (!isCancelled) {
+                    setPreviousTree(previousTreeResponse.data.data || []);
+                }
+            } catch (error) {
+                if (!isCancelled) {
+                    setPreviousTree([]);
+                    toast.error(error.response?.data?.message || 'Struktur standar pembanding gagal dimuat.');
+                }
+            } finally {
+                if (!isCancelled) {
+                    setComparisonLoading(false);
+                }
+            }
+        };
+
+        fetchPreviousTree();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [availableComparisonStandards, selectedPreviousStandardId]);
+
+    useEffect(() => {
+        if (comparisonCandidates.length === 0) {
+            if (selectedPreviousStandardId) {
+                setSelectedPreviousStandardId('');
+            }
+            return;
+        }
+
+        const currentStillVisible = comparisonCandidates.some((item) => String(item.id) === String(selectedPreviousStandardId));
+        if (!currentStillVisible) {
+            setSelectedPreviousStandardId(String(comparisonCandidates[0].id));
+        }
+    }, [comparisonCandidates, selectedPreviousStandardId]);
 
     const handleDraftChange = (nodeId, key, value) => {
         setNodeDrafts((current) => ({
@@ -619,7 +685,7 @@ export default function StandardReviewPage() {
                 <InfoCard
                     label="Standar Pembanding"
                     value={previousStandard?.name || 'Belum tersedia'}
-                    hint={previousStandard ? `Periode ${previousStandard.periode_tahun}` : 'Belum ada standar terbit sebelumnya yang cocok.'}
+                    hint={previousStandard ? `Tahun ${previousStandard.periode_tahun || '-'} • Mode baca pembanding` : 'Pilih standar terbit lain untuk dijadikan pembanding.'}
                     accent="rose"
                 />
                 <InfoCard
@@ -656,8 +722,8 @@ export default function StandardReviewPage() {
                         {currentTree.length > 0 ? (
                             <div className="space-y-3">
                                 {renderMetricTree(currentTree, {
-                                    matchedIds: comparison.currentMatchedIds,
                                     reviewable: canShowAuditControls,
+                                    searchTerms: [],
                                     expandedNodeIds,
                                     nodeDrafts,
                                     nodeSubmittingId,
@@ -677,34 +743,66 @@ export default function StandardReviewPage() {
 
                 <section className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="border-b border-gray-200 px-5 py-4">
-                        <div className="flex items-start justify-between gap-4">
                             <div>
-                                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Standar Periode Sebelumnya</h2>
+                                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Standar Pembanding</h2>
                                 <p className="mt-1 text-sm text-gray-600">
-                                    Seluruh struktur pembanding tetap ditampilkan. Node yang cocok dengan standar diajukan diberi highlight.
+                                    Pimpinan dapat memilih standar terbit sebelumnya sebagai pembanding dalam mode baca.
                                 </p>
                             </div>
-                            <div className="rounded-2xl bg-rose-50 px-3 py-2 text-right">
-                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">Periode Pembanding</div>
-                                <div className="mt-1 text-sm font-semibold text-rose-900">{previousStandard?.periode_tahun || '-'}</div>
-                            </div>
-                        </div>
                     </div>
                     <div className="h-[calc(100vh-21rem)] min-h-[32rem] overflow-y-auto px-5 py-5">
+                        <div className="mb-4 space-y-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                                <input
+                                    type="text"
+                                    value={comparisonSearch}
+                                    onChange={(event) => setComparisonSearch(event.target.value)}
+                                    placeholder="Cari nama standar pembanding..."
+                                    className="w-full rounded-2xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                />
+                                <select
+                                    value={comparisonYearFilter}
+                                    onChange={(event) => setComparisonYearFilter(event.target.value)}
+                                    className="w-full rounded-2xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                >
+                                    <option value="ALL">Semua Tahun</option>
+                                    {comparisonYearOptions.map((year) => (
+                                        <option key={year} value={String(year)}>
+                                            {year}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                                <select
+                                    value={selectedPreviousStandardId}
+                                    onChange={(event) => setSelectedPreviousStandardId(event.target.value)}
+                                    className="w-full rounded-2xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                >
+                                    <option value="">Pilih standar pembanding</option>
+                                    {comparisonCandidates.map((item) => (
+                                        <option key={item.id} value={String(item.id)}>
+                                            {item.name} ({item.periode_tahun || '-'})
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className="text-xs text-gray-500">
+                                    {comparisonCandidates.length} standar tersedia
+                                </div>
+                            </div>
+                        </div>
+
                         {previousStandard ? (
-                            previousTree.length > 0 ? (
+                            comparisonLoading ? (
+                                <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
+                                    Memuat struktur standar pembanding...
+                                </div>
+                            ) : previousTree.length > 0 ? (
                                 <div className="space-y-3">
-                                    <div className="mb-4 flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
-                                        <div className="text-sm font-medium text-blue-900">
-                                            {comparison.totalMatchedNodes} node cocok terdeteksi antara standar diajukan dan periode sebelumnya.
-                                        </div>
-                                        <div className="rounded-full bg-blue-600 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white">
-                                            Highlight Aktif
-                                        </div>
-                                    </div>
                                     {renderMetricTree(previousTree, {
-                                        matchedIds: comparison.previousMatchedIds,
                                         reviewable: false,
+                                        searchTerms: comparisonSearchTerms,
                                         expandedNodeIds: {},
                                         nodeDrafts: {},
                                         nodeSubmittingId: null,
@@ -721,7 +819,7 @@ export default function StandardReviewPage() {
                             )
                         ) : (
                             <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
-                                Tidak ada standar terbit dari periode sebelumnya yang cocok untuk dijadikan pembanding.
+                                Pilih salah satu standar terbit pada daftar di atas untuk dijadikan pembanding.
                             </div>
                         )}
                     </div>
@@ -739,8 +837,7 @@ export default function StandardReviewPage() {
                         <div className="font-semibold text-gray-900">Ringkasan Review</div>
                         <div className="mt-2">Node revisi aktif: {rejectedNodes.length}</div>
                         <div className="mt-1">Node belum dicek auditor: {pendingNodes.length}</div>
-                        <div className="mt-1">Node cocok dengan periode sebelumnya: {comparison.totalMatchedNodes}</div>
-                        <div className="mt-1">Persentase kecocokan: {matchPercentage}%</div>
+                        <div className="mt-1">Total node standar diajukan: {totalCurrentNodes}</div>
                         <div className="mt-1">Tahap persetujuan aktif: {getApprovalStageLabel(standard?.approval_stage, standard)}</div>
                         <div className="mt-1">Kepala LPMI: {approvalProgressLabel(standard?.head_lpmi_approved_at, standard?.approval_stage, 'WR')}</div>
                         <div className="mt-1">Wakil Rektor 1: {approvalProgressLabel(standard?.wr1_approved_at, standard?.approval_stage, 'RECTOR')}</div>

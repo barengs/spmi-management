@@ -484,7 +484,7 @@ APP_DEBUG=false       # Set to false in production
 
 ---
 
-## 13. Current State Audit (2026-04-22)
+## 13. Current State Audit (2026-04-29)
 
 The repository currently contains several additions and implementation details beyond sections above:
 
@@ -511,8 +511,32 @@ The repository currently contains several additions and implementation details b
   - audit requirement tables now derive target from borang, not from standard builder
 - Standard builder behavior has been refined:
   - new standards start with an empty tree
-  - structure creation flow is `Bab -> Pasal -> Indicator`
+  - structure creation flow is now conceptually `Poin Utama -> Sub Poin -> Isi`
+  - internal DB type values still remain `Header -> Statement -> Indicator`
   - add/edit UI updates immediately without requiring manual page refresh
+- Standard document import is now active:
+  - source PDF files are stored on `mst_standards` via:
+    - `source_document_path`
+    - `source_document_original_name`
+    - `source_document_stored_name`
+    - `source_document_mime_type`
+    - `source_document_size_bytes`
+    - `imported_from_document_at`
+  - backend import endpoint: `POST /api/v1/standards/import`
+  - source document download endpoint: `GET /api/v1/standards/{id}/source-document/download`
+  - parser runs server-side using `pdfjs-dist` via `scripts/extract-standard-pdf.mjs`
+  - current parser behavior:
+    - top-level point uses `1. ...`
+    - sub point uses `a. ...` / `b. ...`
+    - paragraph content under a sub point becomes one `Isi`
+    - numbered list content under a sub point uses `1)` / `2)` and is merged across wrapped PDF lines
+  - current parser still uses heuristics and is not yet table-aware in persisted node payloads
+- Indicator authoring metadata has been reduced:
+  - `IKU` and `IKT` are no longer authored in the standard builder flow
+  - standard create/update/import paths no longer populate `iku`/`ikt` for newly created nodes
+- Structure validation behavior has changed:
+  - warning / submit blocking should only happen when a `Poin Utama` or `Sub Poin` is actually empty
+  - a `Sub Poin` with its own textual content is now considered valid even without child `Isi`
 - Demo approver accounts now include:
   - `kepala.lpmi@espmi.dev`
   - `wareg1@espmi.dev`
@@ -532,6 +556,9 @@ The repository currently contains several additions and implementation details b
   These are separate from the active `app/Modules/...` implementation and should be reviewed to avoid confusion.
 - `resources/js/pages/standards/StandardTargetConfig.jsx` still exists in the tree, but current product flow no longer uses target input during standard creation.
 - `MetricTarget` backend artifacts still exist, but current operational target entry is handled in borang per prodi.
+- `resources/js/pages/standards/StandardBuilder.jsx` is the main active UI for manual standard authoring.
+- `scripts/extract-standard-pdf.mjs` is the truth source for current PDF parsing heuristics used by document import.
+- Existing manually-created standards and imported standards now share the same persisted tree model (`mst_metrics`), but import-specific parsing rules only apply during file import.
 
 ### Risks / Inconsistencies To Address
 1. **Model namespace mismatch**
@@ -546,12 +573,30 @@ The repository currently contains several additions and implementation details b
    - `MetricTarget` APIs and `StandardTargetConfig.jsx` remain in the codebase even though current UX expects target entry during borang creation.
 6. **Testing depth**
    - Current tests remain shallow relative to the approval workflow, borang flow, and notification logic.
+7. **Export parity for published manual standards**
+   - Next required work: if a standard is created manually in the system, already `TERBIT`, and exported, the export output must support table sections like the approval/signature table shown by the user example, not only plain text blocks.
+   - This requirement applies even when the standard was not created via PDF upload.
+8. **Table preservation during import/export**
+   - Current import parser is text-structure aware, but table structures in PDF content are not yet persisted as explicit table payloads inside node content.
+   - Future export work should account for both:
+     - manually-authored standards that need rendered tables in exported output
+     - imported standards whose source documents may contain tables that should remain table-shaped in exported output
+9. **Legacy IKU/IKT references remain outside standard builder**
+   - Borang/audit/report pages still contain `IKU`/`IKT` references in some tables and filters even though builder authoring has removed them from new standard node creation.
 
 ### Quick Verification Paths
 - API routing truth source: `routes/api.php`
 - SPA routing truth source: `resources/js/components/MainApp.jsx`
 - Auth flow: `app/Modules/Core/Controllers/AuthController.php`, `resources/js/store/authSlice.js`, `resources/js/services/api.js`
+- Standard import logic:
+  - `app/Modules/Standard/Controllers/StandardController.php`
+  - `app/Modules/Standard/Services/StandardDocumentImportService.php`
+  - `scripts/extract-standard-pdf.mjs`
+- Standard builder validation / authoring:
+  - `app/Modules/Standard/Controllers/MetricController.php`
+  - `app/Modules/Standard/Models/MstStandard.php`
+  - `resources/js/pages/standards/StandardBuilder.jsx`
 
 ---
 
-*Last Updated: 2026-04-22*
+*Last Updated: 2026-04-29*

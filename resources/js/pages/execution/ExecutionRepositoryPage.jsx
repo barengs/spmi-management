@@ -50,6 +50,9 @@ function reviewBadge(reviewStatus) {
 export default function ExecutionRepositoryPage() {
     const { id: routeStandardId } = useParams();
     const user = useSelector((state) => state.auth.user);
+    const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
+    const hasRole = (roleName) => roleNames.includes(roleName);
+    const isAuditee = hasRole('Auditee');
     const [standards, setStandards] = useState([]);
     const [selectedStandardId, setSelectedStandardId] = useState('');
     const [indicators, setIndicators] = useState([]);
@@ -66,8 +69,16 @@ export default function ExecutionRepositoryPage() {
     const [previewUrl, setPreviewUrl] = useState('');
     const [previewType, setPreviewType] = useState('');
     const [previewLoading, setPreviewLoading] = useState(false);
-    const canUploadEvidence = user?.roles?.includes('SuperAdmin') || user?.permissions?.includes('evidence.upload');
-    const canDeleteEvidence = user?.roles?.includes('SuperAdmin') || user?.permissions?.includes('evidence.delete');
+    const canManageStandardEvidence = !isAuditee && (
+        hasRole('SuperAdmin')
+        || hasRole('LPM-Admin')
+        || hasRole('Kepala LPMI')
+        || hasRole('Wakil Rektor 1')
+        || hasRole('Wakil Rektor 2')
+        || hasRole('Wakil Rektor 3')
+        || hasRole('Rektor')
+    );
+    const canDeleteEvidence = hasRole('SuperAdmin') || user?.permissions?.includes('evidence.delete');
 
     useEffect(() => {
         const fetchStandards = async () => {
@@ -337,7 +348,7 @@ export default function ExecutionRepositoryPage() {
                             </div>
                         </div>
 
-                        {canUploadEvidence ? (
+                        {canManageStandardEvidence ? (
                             <form onSubmit={handleUpload} className="mt-6 space-y-5">
                                 <div className="flex gap-3">
                                     <button
@@ -440,7 +451,7 @@ export default function ExecutionRepositoryPage() {
                             </form>
                         ) : (
                             <div className="mt-6 rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">
-                                Role Anda tidak memiliki akses untuk mengunggah bukti. Halaman ini tampil sebagai mode baca.
+                                Upload dokumen pada penetapan standar hanya tersedia untuk LPMI Admin, Kepala LPMI, Wakil Rektor 1/2/3, dan Rektor. Halaman ini tampil sebagai mode baca.
                             </div>
                         )}
                     </div>

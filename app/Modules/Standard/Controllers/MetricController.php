@@ -56,28 +56,28 @@ class MetricController extends Controller
         if ($resolvedParentId === null && $resolvedType === 'Indicator') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Indicator tidak dapat dibuat sebagai node akar.',
+                'message' => 'Isi tidak dapat dibuat sebagai node akar.',
             ], 422);
         }
 
         if ($parent?->type === 'Indicator') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Indicator tidak dapat memiliki child node.',
+                'message' => 'Isi tidak dapat memiliki child node.',
             ], 422);
         }
 
         if ($parent?->type === 'Statement' && $resolvedType !== 'Indicator') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Child dari Statement wajib bertipe Indicator.',
+                'message' => 'Child dari Sub Poin wajib bertipe Isi.',
             ], 422);
         }
 
         if ($parent?->type === 'Header' && $resolvedType === 'Indicator') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Indicator tidak dapat langsung berada di bawah Header. Tambahkan Statement terlebih dahulu.',
+                'message' => 'Isi tidak dapat langsung berada di bawah Poin Utama. Tambahkan Sub Poin terlebih dahulu.',
             ], 422);
         }
 
@@ -88,21 +88,21 @@ class MetricController extends Controller
         if ($resolvedType === 'Indicator' && $metric->children()->exists()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Node yang sudah memiliki child tidak dapat diubah menjadi Indicator.',
+                'message' => 'Node yang sudah memiliki child tidak dapat diubah menjadi Isi.',
             ], 422);
         }
 
         if ($resolvedType === 'Statement' && $metric->children()->where('type', '!=', 'Indicator')->exists()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Statement hanya boleh memiliki child bertipe Indicator.',
+                'message' => 'Sub Poin hanya boleh memiliki child bertipe Isi.',
             ], 422);
         }
 
         if ($resolvedType === 'Header' && $metric->children()->where('type', 'Indicator')->exists()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Header tidak boleh memiliki child Indicator secara langsung.',
+                'message' => 'Poin Utama tidak boleh memiliki child Isi secara langsung.',
             ], 422);
         }
 
@@ -183,15 +183,8 @@ class MetricController extends Controller
             'parent_id'   => 'nullable|exists:mst_metrics,id',
             'content'     => 'required|string',
             'type'        => 'required|in:Header,Statement,Indicator',
-            'iku'         => 'nullable|string|max:255',
-            'ikt'         => 'nullable|string|max:255',
             'order'       => 'nullable|integer',
         ]);
-
-        if ($validated['type'] !== 'Indicator') {
-            $validated['iku'] = null;
-            $validated['ikt'] = null;
-        }
 
         $validated['pj'] = null;
 
@@ -245,8 +238,6 @@ class MetricController extends Controller
             'parent_id' => 'nullable|exists:mst_metrics,id',
             'content'   => 'sometimes|required|string',
             'type'      => 'sometimes|required|in:Header,Statement,Indicator',
-            'iku'       => 'nullable|string|max:255',
-            'ikt'       => 'nullable|string|max:255',
             'order'     => 'nullable|integer',
         ]);
 
@@ -268,12 +259,6 @@ class MetricController extends Controller
 
         if ($error = $this->hierarchyValidationError($validated, $metric)) {
             return $error;
-        }
-
-        $resolvedType = $validated['type'] ?? $metric->type;
-        if ($resolvedType !== 'Indicator') {
-            $validated['iku'] = null;
-            $validated['ikt'] = null;
         }
 
         $validated['pj'] = null;

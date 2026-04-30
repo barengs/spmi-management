@@ -284,8 +284,8 @@ export default function EvidenceAuditPage() {
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Faculty Name</th>
                                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Prodi Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Faculty Name</th>
                                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Action</th>
                                 </tr>
                             </thead>
@@ -301,8 +301,8 @@ export default function EvidenceAuditPage() {
                                 ) : (
                                     paginatedFacultyProdiRows.map(({ faculty, prodi }) => (
                                         <tr key={`${faculty.id}-${prodi.id}`} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{faculty.name}</td>
-                                            <td className="px-6 py-4 text-sm text-gray-700">{prodi.name}</td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{prodi.name}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-700">{faculty.name}</td>
                                             <td className="px-6 py-4 text-right">
                                                 <button
                                                     type="button"

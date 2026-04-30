@@ -17,8 +17,6 @@ class MstMetric extends Model
         'standard_id',
         'parent_id',
         'content',
-        'iku',
-        'ikt',
         'pj',
         'type',
         'order',

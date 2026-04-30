@@ -7,9 +7,9 @@ import Icon, { Icons } from '../../components/ui/Icon';
 
 
 const getNodeTypeLabel = (type) => {
-    if (type === 'Header') return 'Bab';
-    if (type === 'Statement') return 'Pasal';
-    return 'Indicator';
+    if (type === 'Header') return 'Poin Utama';
+    if (type === 'Statement') return 'Sub Poin';
+    return 'Isi';
 };
 
 const getNextChildType = (parentType) => {
@@ -19,8 +19,8 @@ const getNextChildType = (parentType) => {
 };
 
 const getAddChildLabel = (nodeType) => {
-    if (nodeType === 'Header') return 'Tambah Pasal';
-    if (nodeType === 'Statement') return 'Tambah Indicator';
+    if (nodeType === 'Header') return 'Tambah Sub Poin';
+    if (nodeType === 'Statement') return 'Tambah Isi';
     return 'Tambah';
 };
 
@@ -135,11 +135,11 @@ const IndicatorTimeline = ({ metricId }) => {
     }, [metricId]);
 
     const getActionLabel = (action) => {
-        if (action === 'POST') return 'Indikator dibuat';
-        if (action === 'PUT') return 'Indikator diperbarui';
-        if (action === 'DELETE') return 'Indikator dihapus';
-        if (action === 'REVIEW') return 'Review indikator';
-        if (action === 'TGT_SYNC') return 'Target indikator diperbarui';
+        if (action === 'POST') return 'Isi dibuat';
+        if (action === 'PUT') return 'Isi diperbarui';
+        if (action === 'DELETE') return 'Isi dihapus';
+        if (action === 'REVIEW') return 'Review isi';
+        if (action === 'TGT_SYNC') return 'Target isi diperbarui';
         return action;
     };
 
@@ -169,8 +169,6 @@ const IndicatorTimeline = ({ metricId }) => {
                     {item.new_data && (
                         <div className="mt-3 text-xs leading-5 text-gray-600">
                             {item.new_data.content && <div>Konten: {item.new_data.content}</div>}
-                            {Object.prototype.hasOwnProperty.call(item.new_data, 'iku') && <div>IKU: {item.new_data.iku || '-'}</div>}
-                            {Object.prototype.hasOwnProperty.call(item.new_data, 'ikt') && <div>IKT: {item.new_data.ikt || '-'}</div>}
                             {item.new_data.review_status && <div>Status review: {item.new_data.review_status}</div>}
                             {item.new_data.targets && <div>Jumlah target aktif: {item.new_data.targets.length}</div>}
                         </div>
@@ -245,16 +243,6 @@ const MetricNode = ({
                     <div className="text-sm font-medium text-gray-900 dark:text-white mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         {highlightText(node.content, searchQuery)}
                     </div>
-                    {node.type === 'Indicator' && (
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-semibold text-sky-700">
-                                IKU: {node.iku || '-'}
-                            </span>
-                            <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 font-semibold text-violet-700">
-                                IKT: {node.ikt || '-'}
-                            </span>
-                        </div>
-                    )}
                 </div>
 
                 {!isTerbit && (
@@ -330,8 +318,6 @@ export default function StandardBuilder() {
         standard_id: id,
         parent_id: '',
         content: '',
-        iku: '',
-        ikt: '',
         type: 'Header',
     });
 
@@ -357,9 +343,11 @@ export default function StandardBuilder() {
                 expandableIds.push(node.id);
             }
 
-            if (node.type === 'Statement') {
-                const directIndicators = (node.children_recursive || []).filter((child) => child.type === 'Indicator');
-                if (directIndicators.length === 0) {
+            if (['Header', 'Statement'].includes(node.type)) {
+                const hasChildren = (node.children_recursive || []).length > 0;
+                const hasOwnContent = String(node.content || '').trim() !== '';
+
+                if (!hasChildren && !hasOwnContent) {
                     statementWarnings.push(node);
                 }
             }
@@ -473,8 +461,6 @@ export default function StandardBuilder() {
             standard_id: id,
             parent_id: '',
             content: '',
-            iku: '',
-            ikt: '',
             type: 'Header',
         });
         setIsModalOpen(true);
@@ -487,7 +473,7 @@ export default function StandardBuilder() {
         const nextType = getNextChildType(parent.type);
 
         if (!nextType) {
-            toast.error('Indicator tidak dapat memiliki child node.');
+            toast.error('Isi tidak dapat memiliki child node.');
             return;
         }
 
@@ -495,8 +481,6 @@ export default function StandardBuilder() {
             standard_id: id,
             parent_id: parent.id,
             content: '',
-            iku: '',
-            ikt: '',
             type: nextType,
         });
         setIsModalOpen(true);
@@ -509,8 +493,6 @@ export default function StandardBuilder() {
             standard_id: id,
             parent_id: node.parent_id || '',
             content: node.content,
-            iku: node.iku || '',
-            ikt: node.ikt || '',
             type: node.type,
         });
         setIsModalOpen(true);
@@ -535,10 +517,6 @@ export default function StandardBuilder() {
         try {
             const payload = { ...formData };
             if (!payload.parent_id) payload.parent_id = null;
-            if (payload.type !== 'Indicator') {
-                payload.iku = null;
-                payload.ikt = null;
-            }
 
             if (editingNode) {
                 const response = await api.put(`/metrics/${editingNode.id}`, payload);
@@ -602,7 +580,7 @@ export default function StandardBuilder() {
                         className="inline-flex items-center gap-1 px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
                     >
                         <Icon icon={Icons.add} width={18} />
-                        Tambah Bab
+                        Tambah Poin Utama
                     </button>
                 )}
             </div>
@@ -669,9 +647,9 @@ export default function StandardBuilder() {
                     <div className="flex items-start gap-2">
                         <Icon icon={Icons.warning} width={18} className="mt-0.5 shrink-0 text-amber-700" />
                         <div>
-                            <div className="font-semibold">Validasi struktur Sprint 3 belum terpenuhi.</div>
+                            <div className="font-semibold">Validasi struktur belum terpenuhi.</div>
                             <div className="mt-1">
-                                {statementWarnings.length} statement masih belum memiliki minimal satu indicator. Standar belum bisa diajukan
+                                {statementWarnings.length} poin utama atau sub poin masih kosong. Standar belum bisa diajukan
                                 sebelum struktur ini dilengkapi.
                             </div>
                         </div>
@@ -686,9 +664,9 @@ export default function StandardBuilder() {
                         <div className="mb-5 flex items-start justify-between gap-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-4">
                             <div>
                                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Tree Generator</div>
-                                <div className="mt-1 text-sm font-semibold text-blue-900">Susun struktur standar dari Bab, lalu Pasal, lalu Indicator.</div>
+                                <div className="mt-1 text-sm font-semibold text-blue-900">Susun struktur standar dari Poin Utama, lalu Sub Poin, lalu Isi.</div>
                                 <div className="mt-1 text-sm leading-6 text-blue-800">
-                                    Tambah <strong>Bab</strong> di level utama. Setelah itu, setiap Bab dapat berisi <strong>Pasal</strong>, dan setiap Pasal dapat berisi <strong>Indicator</strong>.
+                                    Tambah <strong>Poin Utama</strong> di level utama. Setelah itu, setiap Poin Utama dapat berisi <strong>Sub Poin</strong>, dan setiap Sub Poin dapat berisi <strong>Isi</strong>.
                                 </div>
                             </div>
                             {canManageStructure && !['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
@@ -697,7 +675,7 @@ export default function StandardBuilder() {
                                     className="inline-flex shrink-0 items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
                                 >
                                     <Icon icon={Icons.add} width={16} />
-                                    Tambah Bab
+                                    Tambah Poin Utama
                                 </button>
                             )}
                         </div>
@@ -709,7 +687,7 @@ export default function StandardBuilder() {
                                 </div>
                                 <h2 className="mt-4 text-lg font-semibold text-gray-900">Struktur standar masih kosong</h2>
                                 <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">
-                                    Standar baru mulai dari tree kosong. Tambahkan <strong>Bab</strong> terlebih dahulu, lalu isi <strong>Pasal</strong> di dalamnya, dan lanjutkan dengan <strong>Indicator</strong> pada setiap Pasal.
+                                    Standar baru mulai dari tree kosong. Tambahkan <strong>Poin Utama</strong> terlebih dahulu, lalu isi <strong>Sub Poin</strong> di dalamnya, dan lanjutkan dengan <strong>Isi</strong> pada setiap Sub Poin.
                                 </p>
                                 {canManageStructure ? (
                                     <button
@@ -717,7 +695,7 @@ export default function StandardBuilder() {
                                         className="mt-5 inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
                                     >
                                         <Icon icon={Icons.add} width={16} />
-                                        Tambah Bab Pertama
+                                        Tambah Poin Utama Pertama
                                     </button>
                                 ) : (
                                     <div className="mt-4 text-sm text-gray-500">Standar ini hanya dapat dibaca oleh role Anda.</div>
@@ -776,22 +754,12 @@ export default function StandardBuilder() {
 
                                 {selectedIndicatorView.type === 'Indicator' && (
                                     <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
-                                        <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                                            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
-                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">IKU</div>
-                                                <div className="mt-1 text-sm font-semibold text-sky-900">{selectedIndicatorView.iku || '-'}</div>
-                                            </div>
-                                            <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3">
-                                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-700">IKT</div>
-                                                <div className="mt-1 text-sm font-semibold text-violet-900">{selectedIndicatorView.ikt || '-'}</div>
-                                            </div>
-                                        </div>
                                         <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                                            Target indikator diisi saat indikator dimasukkan ke borang per prodi, bukan saat penyusunan standar.
+                                            Target isi diisi saat isi dimasukkan ke borang per prodi, bukan saat penyusunan standar.
                                         </div>
 
                                         <div className="mt-6 border-t border-gray-200 pt-4">
-                                            <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Timeline Indikator</h4>
+                                            <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Timeline Isi</h4>
                                             <IndicatorTimeline metricId={selectedIndicatorView.id} />
                                         </div>
                                     </div>
@@ -814,7 +782,7 @@ export default function StandardBuilder() {
                                     ? `Edit ${getNodeTypeLabel(editingNode.type)}`
                                     : parentNode
                                         ? `${getAddChildLabel(parentNode.type)} untuk ${getNodeTypeLabel(parentNode.type)} #${parentNode.id}`
-                                        : 'Tambah Bab Utama'}
+                                        : 'Tambah Poin Utama'}
                             </h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 {editingNode && (
@@ -825,24 +793,24 @@ export default function StandardBuilder() {
                                             onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         >
-                                            <option value="Header">Bab (Folder/Kategori)</option>
-                                            <option value="Statement">Pasal (Pernyataan Kinerja)</option>
-                                            <option value="Indicator">Indicator (Tolak Ukur Target)</option>
+                                            <option value="Header">Poin Utama</option>
+                                            <option value="Statement">Sub Poin</option>
+                                            <option value="Indicator">Isi</option>
                                         </select>
                                     </div>
                                 )}
                                 {!editingNode && parentNode && (
                                     <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                                        Tipe node ditentukan otomatis dari tombol yang dipilih: Bab -&gt; Pasal -&gt; Indicator.
+                                        Tipe node ditentukan otomatis dari tombol yang dipilih: Poin Utama -&gt; Sub Poin -&gt; Isi.
                                     </div>
                                 )}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                         {formData.type === 'Header'
-                                            ? 'Nama Bab'
+                                            ? 'Nama Poin Utama'
                                             : formData.type === 'Statement'
-                                                ? 'Nama Pasal'
-                                                : 'Nama Indicator'}
+                                                ? 'Nama Sub Poin'
+                                                : 'Nama Isi'}
                                     </label>
                                     <textarea
                                         required
@@ -853,30 +821,6 @@ export default function StandardBuilder() {
                                         placeholder="Masukkan isi uraian di sini..."
                                     ></textarea>
                                 </div>
-                                {formData.type === 'Indicator' && (
-                                    <div className="grid gap-4 sm:grid-cols-2">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">IKU</label>
-                                            <input
-                                                type="text"
-                                                value={formData.iku}
-                                                onChange={(e) => setFormData({ ...formData, iku: e.target.value })}
-                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                                placeholder="Contoh: IKU 1"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">IKT</label>
-                                            <input
-                                                type="text"
-                                                value={formData.ikt}
-                                                onChange={(e) => setFormData({ ...formData, ikt: e.target.value })}
-                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                                placeholder="Contoh: IKT 1.1"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
                                 <div className="mt-5 sm:mt-6 flex space-x-3">
                                     <button
                                         type="submit"

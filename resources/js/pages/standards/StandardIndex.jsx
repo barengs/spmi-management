@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 import StandardCloneModal from './StandardCloneModal';
 import Icon, { Icons } from '../../components/ui/Icon';
 import { getStandardStatusLabel } from '../../utils/standardStatus';
+import * as pdfjsLib from 'pdfjs-dist';
 import {
     createColumnHelper,
     flexRender,
@@ -16,6 +17,223 @@ import {
     getFilteredRowModel,
     getPaginationRowModel
 } from '@tanstack/react-table';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+).toString();
+
+const buildNode = (type, content) => ({
+    type,
+    content: String(content || '').trim(),
+    children: [],
+});
+
+const isHeaderLine = (line) => /^[0-9]+\.\s+\S+/.test(line);
+const isStatementLine = (line) => /^[A-Za-z]\.\s+\S+/.test(line);
+const isContentListLine = (line) => /^[0-9]+\)\s+\S+/.test(line);
+
+const shouldSkipLine = (line) => {
+    const normalized = line.trim();
+
+    if (!normalized) {
+        return true;
+    }
+
+    return [
+        /^universitas islam madura$/i,
+        /^standar spmi universitas islam madura$/i,
+        /^standar mutu kemahasiswaan$/i,
+        /^daftar isi$/i,
+        /^\d+\s+standar spmi universitas islam madura$/i,
+        /^halaman\s*:/i,
+        /^kode\s*:/i,
+        /^alamat:/i,
+        /^tanggal\s*:/i,
+        /^revisi\s*:/i,
+        /^proses\s+penanggung jawab/i,
+        /^nama\s+jabatan$/i,
+    ].some((pattern) => pattern.test(normalized));
+};
+
+const cropToStandardBody = (lines) => {
+    const startIndex = lines.findIndex((line, index, source) => {
+        if (!/^1\.\s+/i.test(line.trim())) {
+            return false;
+        }
+
+        const lookahead = source.slice(index + 1, index + 6);
+        return lookahead.some((candidate) => isStatementLine(candidate.trim()));
+    });
+
+    if (startIndex === -1) {
+        return lines;
+    }
+
+    return lines.slice(startIndex);
+};
+
+const normalizeExtractedText = (text) => (
+    String(text || '')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+);
+
+const buildStructureTreeFromText = (text) => {
+    const lines = normalizeExtractedText(text)
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+    const tree = [];
+    let currentHeaderIndex = null;
+    let currentStatementIndex = null;
+    let paragraphBuffer = [];
+    let activeListItemIndex = null;
+
+    const flushParagraphBuffer = () => {
+        if (!paragraphBuffer.length || currentHeaderIndex === null || currentStatementIndex === null) {
+            paragraphBuffer = [];
+            return;
+        }
+
+        const content = paragraphBuffer.join(' ').trim();
+        if (content) {
+            tree[currentHeaderIndex].children[currentStatementIndex].children.push(buildNode('Indicator', content));
+        }
+
+        paragraphBuffer = [];
+        activeListItemIndex = null;
+    };
+
+    lines.forEach((line) => {
+        if (shouldSkipLine(line)) {
+            return;
+        }
+
+        if (isHeaderLine(line)) {
+            flushParagraphBuffer();
+            tree.push(buildNode('Header', line));
+            currentHeaderIndex = tree.length - 1;
+            currentStatementIndex = null;
+            activeListItemIndex = null;
+            return;
+        }
+
+        if (isStatementLine(line)) {
+            flushParagraphBuffer();
+            if (currentHeaderIndex === null) {
+                return;
+            }
+            tree[currentHeaderIndex].children.push(buildNode('Statement', line));
+            currentStatementIndex = tree[currentHeaderIndex].children.length - 1;
+            activeListItemIndex = null;
+            return;
+        }
+
+        if (isContentListLine(line)) {
+            flushParagraphBuffer();
+            if (currentHeaderIndex === null || currentStatementIndex === null) {
+                return;
+            }
+            tree[currentHeaderIndex].children[currentStatementIndex].children.push(buildNode('Indicator', line));
+            activeListItemIndex = tree[currentHeaderIndex].children[currentStatementIndex].children.length - 1;
+            return;
+        }
+
+        if (currentHeaderIndex === null || currentStatementIndex === null) {
+            return;
+        }
+
+        if (activeListItemIndex !== null) {
+            const current = tree[currentHeaderIndex].children[currentStatementIndex].children[activeListItemIndex].content || '';
+            tree[currentHeaderIndex].children[currentStatementIndex].children[activeListItemIndex].content = `${current} ${line}`.trim();
+            return;
+        }
+
+        paragraphBuffer.push(line);
+    });
+
+    flushParagraphBuffer();
+
+    return tree.filter((header) => header.content || header.children.length > 0);
+};
+
+const reconstructPageLines = (items) => {
+    const textItems = items
+        .filter((item) => typeof item.str === 'string' && item.str.trim() !== '')
+        .map((item) => ({
+            str: item.str,
+            x: item.transform[4],
+            y: item.transform[5],
+            width: item.width || 0,
+        }))
+        .sort((left, right) => {
+            if (Math.abs(right.y - left.y) > 2) {
+                return right.y - left.y;
+            }
+
+            return left.x - right.x;
+        });
+
+    const rows = [];
+
+    textItems.forEach((item) => {
+        const row = rows.find((candidate) => Math.abs(candidate.y - item.y) <= 2);
+
+        if (row) {
+            row.items.push(item);
+            return;
+        }
+
+        rows.push({ y: item.y, items: [item] });
+    });
+
+    return rows
+        .sort((left, right) => right.y - left.y)
+        .map((row) => row.items.sort((left, right) => left.x - right.x))
+        .map((rowItems) => {
+            let line = '';
+            let previous = null;
+
+            rowItems.forEach((item) => {
+                if (previous) {
+                    const previousRight = previous.x + previous.width;
+                    const gap = item.x - previousRight;
+
+                    if (gap > 2) {
+                        line += ' ';
+                    }
+                }
+
+                line += item.str;
+                previous = item;
+            });
+
+            return line.replace(/[ \t]+/g, ' ').trim();
+        })
+        .filter((line) => !shouldSkipLine(line));
+};
+
+const summarizeStructureTree = (nodes) => {
+    const summary = { headers: 0, statements: 0, indicators: 0 };
+
+    const visit = (items) => {
+        items.forEach((item) => {
+            if (item.type === 'Header') summary.headers += 1;
+            if (item.type === 'Statement') summary.statements += 1;
+            if (item.type === 'Indicator') summary.indicators += 1;
+            if (item.children?.length) {
+                visit(item.children);
+            }
+        });
+    };
+
+    visit(nodes || []);
+
+    return summary;
+};
 
 export default function StandardIndex() {
     const [standards, setStandards] = useState([]);
@@ -30,6 +248,16 @@ export default function StandardIndex() {
     const user = useSelector(state => state.auth.user);
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
+    const isAuditee = hasRole('Auditee');
+    const canManageStandardEvidence = !isAuditee && (
+        hasRole('SuperAdmin')
+        || hasRole('LPM-Admin')
+        || hasRole('Kepala LPMI')
+        || hasRole('Wakil Rektor 1')
+        || hasRole('Wakil Rektor 2')
+        || hasRole('Wakil Rektor 3')
+        || hasRole('Rektor')
+    );
     const isPimpinan = hasRole('Pimpinan')
         || hasRole('Kepala LPMI')
         || hasRole('Wakil Rektor 1')
@@ -53,14 +281,17 @@ export default function StandardIndex() {
         || hasRole('Wakil Rektor 3')
         || hasRole('Rektor')
         || user?.permissions?.includes('standard.publish');
-    const canUploadEvidence = hasRole('SuperAdmin') || user?.permissions?.includes('evidence.upload');
-
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [cloneTarget, setCloneTarget] = useState(null);
     const [editingStandard, setEditingStandard] = useState(null);
+    const [importFile, setImportFile] = useState(null);
+    const [importExtractedText, setImportExtractedText] = useState('');
+    const [importStructureTree, setImportStructureTree] = useState([]);
+    const [importSummary, setImportSummary] = useState(null);
+    const [isParsingImportFile, setIsParsingImportFile] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
         category: 'Institusi',
@@ -229,10 +460,14 @@ export default function StandardIndex() {
     const handleOpenImportModal = () => {
         setEditingStandard(null);
         setCloneTarget(null);
-        setCloneSourceId(cloneCandidates[0]?.id ? String(cloneCandidates[0].id) : '');
+        setCloneSourceId('');
+        setImportFile(null);
+        setImportExtractedText('');
+        setImportStructureTree([]);
+        setImportSummary(null);
         setFormData({
             name: '',
-            category: cloneCandidates[0]?.category || 'Institusi',
+            category: 'Institusi',
             periode_tahun: selectedPeriod || new Date().getFullYear(),
             is_active: true,
             referensi_regulasi: '',
@@ -249,6 +484,66 @@ export default function StandardIndex() {
     const handleCloseImportModal = () => {
         setIsImportModalOpen(false);
         setCloneSourceId('');
+        setImportFile(null);
+        setImportExtractedText('');
+        setImportStructureTree([]);
+        setImportSummary(null);
+    };
+
+    const extractTextFromPdf = async (file) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const pages = [];
+
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+            const page = await pdf.getPage(pageNumber);
+            const textContent = await page.getTextContent();
+            const pageText = reconstructPageLines(textContent.items).join('\n').trim();
+
+            if (pageText) {
+                pages.push(pageText);
+            }
+        }
+
+        return cropToStandardBody(
+            pages.join('\n').split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+        ).join('\n');
+    };
+
+    const handleImportFileChange = async (event) => {
+        const file = event.target.files?.[0];
+        setImportFile(file || null);
+        setImportExtractedText('');
+        setImportStructureTree([]);
+        setImportSummary(null);
+
+        if (!file) {
+            return;
+        }
+
+        setIsParsingImportFile(true);
+
+        try {
+            const extractedText = await extractTextFromPdf(file);
+            const tree = buildStructureTreeFromText(extractedText);
+            const summary = summarizeStructureTree(tree);
+
+            setImportExtractedText(extractedText);
+            setImportStructureTree(tree);
+            setImportSummary(summary);
+
+            setFormData((current) => ({
+                ...current,
+                name: current.name || file.name.replace(/\.pdf$/i, ''),
+            }));
+        } catch (error) {
+            setImportExtractedText('');
+            setImportStructureTree([]);
+            setImportSummary(null);
+            toast.error('PDF gagal dibaca. Pastikan file memiliki text layer yang dapat diekstrak.');
+        } finally {
+            setIsParsingImportFile(false);
+        }
     };
 
     const cloneCandidates = useMemo(() => (
@@ -287,27 +582,41 @@ export default function StandardIndex() {
 
     const handleImportSubmit = async (e) => {
         e.preventDefault();
-        if (!cloneSourceId) {
-            toast.warning('Pilih standar sumber terlebih dahulu.');
+        if (!importFile) {
+            toast.warning('Pilih dokumen PDF standar terlebih dahulu.');
+            return;
+        }
+
+        if (!importStructureTree.length) {
+            toast.warning('Struktur poin belum berhasil dibaca dari dokumen.');
             return;
         }
 
         setIsSubmitting(true);
         try {
-            const sourceStandard = cloneCandidates.find((item) => String(item.id) === String(cloneSourceId));
-            const response = await api.post(`/standards/${cloneSourceId}/clone`, {
-                name: formData.name,
-                periode_tahun: selectedPeriod || new Date().getFullYear(),
-                category: sourceStandard?.category || formData.category,
+            const payload = new FormData();
+            payload.append('name', formData.name);
+            payload.append('category', formData.category);
+            payload.append('periode_tahun', String(formData.periode_tahun || ''));
+            payload.append('is_active', formData.is_active ? '1' : '0');
+            payload.append('referensi_regulasi', formData.referensi_regulasi || '');
+            payload.append('file', importFile);
+            payload.append('extracted_text', importExtractedText);
+            payload.append('structure_tree', JSON.stringify(importStructureTree));
+
+            const response = await api.post('/standards/import', payload, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
             });
             const createdStandard = response.data.data;
             upsertStandard(createdStandard);
             setSelectedPeriod(createdStandard.periode_tahun ? String(createdStandard.periode_tahun) : 'Tanpa Periode');
-            toast.success('Standar berhasil diimpor dari siklus sebelumnya.');
+            toast.success('Standar berhasil diimpor dari dokumen PDF.');
             handleCloseImportModal();
             fetchStandards();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Gagal mengimpor standar.');
+            toast.error(err.response?.data?.message || 'Gagal mengimpor dokumen standar.');
         } finally {
             setIsSubmitting(false);
         }
@@ -484,23 +793,23 @@ export default function StandardIndex() {
                     );
                 }
 
-                if (canUploadEvidence) {
-                    actionButtons.push(
-                        <Link
-                            key="upload-evidence"
-                            to={`/standards/${item.id}/execution`}
-                            className="rounded bg-sky-50 px-2 py-1 font-semibold text-sky-700 transition hover:bg-sky-100 hover:text-sky-900"
-                        >
-                            Dokumen Auditee
-                        </Link>
-                    );
-                }
+                // if (canManageStandardEvidence) {
+                //     actionButtons.push(
+                //         <Link
+                //             key="upload-evidence"
+                //             to={`/standards/${item.id}/execution`}
+                //             className="rounded bg-sky-50 px-2 py-1 font-semibold text-sky-700 transition hover:bg-sky-100 hover:text-sky-900"
+                //         >
+                //             Dokumen Auditee
+                //         </Link>
+                //     );
+                // }
 
                 if (canReviewAudit && pendingAuditCount > 0) {
                     actionButtons.push(
                         <Link
                             key="start-review"
-                            to={`/standards/${item.id}/review`}
+                            to={`/audit/standards/${item.id}/review`}
                             className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
                         >
                             Mulai Review ({pendingAuditCount})
@@ -560,7 +869,7 @@ export default function StandardIndex() {
                 );
             }
         })
-    ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canReviewStandards, canUploadEvidence]);
+    ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canReviewStandards, canManageStandardEvidence]);
 
     const table = useReactTable({
         data: filteredStandards,
@@ -923,29 +1232,26 @@ export default function StandardIndex() {
                         <div className="relative z-10 inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
                             <div>
                                 <h3 className="text-xl font-bold text-gray-900 dark:text-white" id="import-modal-title">
-                                    Import Standar Dari Siklus Sebelumnya
+                                    Import Standar Dari Dokumen
                                 </h3>
                                 <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 mb-5">
-                                    Pilih standar sumber, lalu tentukan nama dokumen baru. Kategori akan mengikuti standar sumber dan tahun implementasi otomatis memakai siklus aktif.
+                                    Upload PDF standar. Sistem akan membaca text layer dokumen, membentuk tree poin, lalu menyimpan file asli beserta struktur datanya.
                                 </div>
                                 <form onSubmit={handleImportSubmit} className="mt-5 space-y-5">
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                            Standar Sumber <span className="text-red-500">*</span>
+                                            Dokumen PDF <span className="text-red-500">*</span>
                                         </label>
-                                        <select
+                                        <input
+                                            type="file"
+                                            accept="application/pdf"
                                             required
-                                            value={cloneSourceId}
-                                            onChange={(e) => setCloneSourceId(e.target.value)}
+                                            onChange={handleImportFileChange}
                                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
-                                        >
-                                            <option value="">Pilih standar sumber</option>
-                                            {cloneCandidates.map((item) => (
-                                                <option key={item.id} value={item.id}>
-                                                    {item.name} | {item.category} | {item.periode_tahun || '-'}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        />
+                                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                            Format yang didukung: PDF dengan text layer.
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nama Standar Baru <span className="text-red-500">*</span></label>
@@ -958,9 +1264,24 @@ export default function StandardIndex() {
                                             placeholder="Contoh: Standar Kompetensi Lulusan 2027"
                                         />
                                     </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Kategori <span className="text-red-500">*</span></label>
+                                        <select
+                                            value={formData.category}
+                                            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
+                                        >
+                                            <option value="Institusi">Institusi</option>
+                                            <option value="SN-Dikti">SN-Dikti</option>
+                                        </select>
+                                    </div>
                                     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                                        <div>Kategori: mengikuti standar sumber.</div>
-                                        <div className="mt-1">Tahun implementasi: {selectedPeriod || new Date().getFullYear()}.</div>
+                                        <div>Tahun implementasi: {selectedPeriod || new Date().getFullYear()}.</div>
+                                        <div className="mt-1">
+                                            {isParsingImportFile && 'Sedang membaca dokumen PDF...'}
+                                            {!isParsingImportFile && importSummary && `Tree terbaca: ${importSummary.headers} header, ${importSummary.statements} pasal, ${importSummary.indicators} indikator.`}
+                                            {!isParsingImportFile && !importSummary && 'Tree poin akan muncul setelah PDF berhasil dibaca.'}
+                                        </div>
                                     </div>
                                     <div className="mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense pt-4 border-t border-gray-200 dark:border-gray-700">
                                         <button

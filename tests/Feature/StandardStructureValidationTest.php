@@ -37,7 +37,7 @@ class StandardStructureValidationTest extends TestCase
         return $user;
     }
 
-    public function test_standard_cannot_be_submitted_when_statement_has_no_indicator(): void
+    public function test_standard_can_be_submitted_when_sub_point_has_own_content(): void
     {
         $this->actingAsLpmAdmin();
 
@@ -52,15 +52,15 @@ class StandardStructureValidationTest extends TestCase
         MstMetric::create([
             'standard_id' => $standard->id,
             'parent_id' => null,
-            'content' => 'Pernyataan tanpa indikator',
+            'content' => 'Sub poin dengan konten sendiri',
             'type' => 'Statement',
             'order' => 1,
         ]);
 
         $response = $this->patchJson("/api/v1/standards/{$standard->id}/submit");
 
-        $response->assertStatus(422);
-        $response->assertJsonPath('status', 'error');
+        $response->assertOk();
+        $response->assertJsonPath('status', 'success');
     }
 
     public function test_indicator_cannot_be_created_as_root_node(): void
