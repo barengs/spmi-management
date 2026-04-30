@@ -2,8 +2,13 @@ import axios from 'axios';
 import { store } from '../store';
 import { logout } from '../store/authSlice';
 
+const apiBaseUrl = (
+    import.meta.env.VITE_API_BASE_URL
+    || '/api/v1'
+).replace(/\/+$/, '');
+
 const api = axios.create({
-    baseURL: '/api/v1',
+    baseURL: apiBaseUrl,
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
