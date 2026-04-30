@@ -82,8 +82,10 @@ log "Validating compose configuration..."
 APP_ENV_FILE="$APP_ENV_FILE" docker compose -f "$COMPOSE_FILE" config >/dev/null
 
 if [ "$RUN_BUILD" = "true" ]; then
-    log "Building application images..."
-    APP_ENV_FILE="$APP_ENV_FILE" docker compose -f "$COMPOSE_FILE" build
+    log "Building application images, including frontend assets..."
+    APP_ENV_FILE="$APP_ENV_FILE" docker compose -f "$COMPOSE_FILE" build app nginx
+else
+    log "Skipping image build. Existing frontend assets inside current images will be reused."
 fi
 
 log "Starting production services..."

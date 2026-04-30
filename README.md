@@ -48,10 +48,11 @@ E-SPMI (Sistem Penjaminan Mutu Internal) adalah aplikasi web berbasis Laravel da
 
 ## 🐳 Docker Deployment
 
-Setup ini ditujukan untuk deploy ke VPS dengan Docker Compose hanya untuk proses Laravel. Nginx dan PostgreSQL dijalankan di level sistem VPS.
+Setup ini ditujukan untuk deploy ke VPS dengan Docker Compose untuk web tier Laravel. PostgreSQL tetap dapat dijalankan di level sistem VPS.
 
 Service container yang dipakai:
 - `app` - Laravel PHP-FPM
+- `nginx` - Web server untuk melayani frontend + API Laravel
 - `queue` - Laravel queue worker
 - `scheduler` - Laravel scheduler loop
 
@@ -112,15 +113,20 @@ Saat boot pertama, container `app` akan otomatis:
 - menjalankan `php artisan migrate --force`
 - membangun cache Laravel dengan `php artisan optimize`
 
+Saat `./scripts/deploy.sh` dijalankan tanpa `--no-build`, script akan:
+- membangun ulang image `app` dan `nginx`
+- menjalankan build frontend Vite di stage Docker Node
+- menyalin hasil frontend build ke image runtime yang dipakai Nginx/Laravel
+
 ### 3. Seed data awal bila diperlukan
 ```bash
 docker compose exec app php artisan db:seed
 ```
 
 ### 4. Akses aplikasi
-- PHP-FPM container tersedia di port `9000` host VPS secara default.
-- Konfigurasikan Nginx sistem untuk meneruskan request PHP ke `127.0.0.1:9000`.
-- Arahkan domain ke Nginx sistem di VPS, bukan ke container Docker.
+- Aplikasi HTTP tersedia di port `80` host VPS secara default melalui container `nginx`.
+- Arahkan domain atau IP publik ke port `80` VPS.
+- Container `app` hanya melayani PHP-FPM secara internal untuk container `nginx`.
 
 ### 5. Operasional umum
 ```bash
@@ -144,9 +150,9 @@ Dengan script:
 ```
 
 ### Catatan produksi
-- Default compose mengekspos PHP-FPM di port `9000` host. Anda bisa ubah lewat `APP_PORT`.
+- Default compose mengekspos HTTP container `nginx` ke port host `80`. Anda bisa ubah lewat `APP_PORT`.
 - Default compose memakai file root `.env` sebagai sumber env global untuk `app`, `queue`, dan `scheduler`.
-- Nginx dan PostgreSQL harus tersedia di level sistem VPS atau service eksternal.
+- PostgreSQL harus tersedia di level sistem VPS atau service eksternal.
 - `QUEUE_CONNECTION`, `SESSION_DRIVER`, dan `CACHE_STORE` default memakai `database`, jadi tabel terkait harus sudah termigrasi.
 - Volume `app-storage` menyimpan file Laravel `storage`.
 
