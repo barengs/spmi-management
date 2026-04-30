@@ -66,7 +66,7 @@ export default function useSessionManager() {
                     // Refresh failed (e.g. token expired on server)
                     console.error('Failed to refresh token', err);
                     dispatch(logout());
-                    toast.error('Sesi Kadaluarsa. Silakan login kembali.');
+                    toast.error('Sesi habis, harap login kembali');
                 } finally {
                     isTokenRefreshing.current = false;
                 }

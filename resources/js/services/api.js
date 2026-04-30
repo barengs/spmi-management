@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from 'react-toastify';
 import { store } from '../store';
 import { logout } from '../store/authSlice';
 
@@ -14,6 +15,8 @@ const api = axios.create({
         'Accept': 'application/json',
     },
 });
+
+let hasShownSessionExpiredToast = false;
 
 // Request interceptor: attach token
 api.interceptors.request.use(
@@ -38,11 +41,23 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && error.response.status === 401) {
-            // Auto logout if 401
+            const hasToken = Boolean(store.getState().auth.token);
+
+            if (hasToken && !hasShownSessionExpiredToast) {
+                hasShownSessionExpiredToast = true;
+                toast.error('Sesi habis, harap login kembali');
+            }
+
             store.dispatch(logout());
         }
         return Promise.reject(error);
     }
 );
+
+store.subscribe(() => {
+    if (store.getState().auth.token) {
+        hasShownSessionExpiredToast = false;
+    }
+});
 
 export default api;
