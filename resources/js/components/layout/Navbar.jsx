@@ -10,12 +10,21 @@ import { buildNotifications } from '../../utils/notifications';
 export default function Navbar({ toggleSidebar }) {
     const dispatch = useDispatch();
     const user = useSelector((state) => state.auth.user);
+    const permissions = user?.permissions || [];
+    const roles = user?.roles || [];
+    const roleNames = roles.map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
     const location = useLocation();
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [notificationOpen, setNotificationOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
     const [notificationSchedules, setNotificationSchedules] = useState([]);
     const [notificationStandards, setNotificationStandards] = useState([]);
+    const hasRole = (roleName) => roleNames.includes(roleName);
+    const canAccessNotifications = hasRole('SuperAdmin')
+        || permissions.includes('standard.publish')
+        || permissions.includes('audit.view')
+        || permissions.includes('audit.score.update');
+    const canOpenSettings = hasRole('SuperAdmin') || permissions.includes('role.manage');
 
     const getBreadcrumbs = () => {
         const path = location.pathname;
@@ -94,14 +103,25 @@ export default function Navbar({ toggleSidebar }) {
     );
 
     useEffect(() => {
+        if (!canAccessNotifications) {
+            setNotificationSchedules([]);
+            setNotificationStandards([]);
+            return undefined;
+        }
+
         const fetchNotifications = async () => {
             try {
-                const [scheduleResponse, standardResponse] = await Promise.all([
-                    api.get('/audit-schedules'),
-                    api.get('/standards'),
-                ]);
+                const requests = [api.get('/standards')];
 
-                setNotificationSchedules(scheduleResponse.data.data || []);
+                if (hasRole('SuperAdmin') || permissions.includes('audit.view') || permissions.includes('audit.score.update')) {
+                    requests.unshift(api.get('/audit-schedules'));
+                }
+
+                const responses = await Promise.all(requests);
+                const standardResponse = responses[responses.length - 1];
+                const scheduleResponse = responses.length > 1 ? responses[0] : null;
+
+                setNotificationSchedules(scheduleResponse?.data?.data || []);
                 setNotificationStandards(standardResponse.data.data || []);
             } catch (error) {
                 setNotificationSchedules([]);
@@ -122,7 +142,7 @@ export default function Navbar({ toggleSidebar }) {
             window.clearInterval(intervalId);
             window.removeEventListener('focus', handleFocus);
         };
-    }, [location.pathname]);
+    }, [canAccessNotifications, location.pathname, permissions, roleNames]);
 
     // Initialize dark mode
     useEffect(() => {
@@ -199,6 +219,7 @@ export default function Navbar({ toggleSidebar }) {
                 </button>
 
                 {/* Notifications */}
+                {canAccessNotifications && (
                 <div className="relative">
                     <button
                         type="button"
@@ -247,6 +268,7 @@ export default function Navbar({ toggleSidebar }) {
                         </div>
                     )}
                 </div>
+                )}
 
                 {/* User Dropdown */}
                 <div className="relative">
@@ -269,7 +291,9 @@ export default function Navbar({ toggleSidebar }) {
                                 <div className="text-xs text-gray-500 truncate">{user?.email}</div>
                             </div>
                             <a href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Profil</a>
-                            <Link to="/settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Pengaturan</Link>
+                            {canOpenSettings && (
+                                <Link to="/settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Pengaturan</Link>
+                            )}
                             <div className="border-t border-gray-100 dark:border-gray-700 mt-1"></div>
                             <button
                                 onClick={handleLogout}

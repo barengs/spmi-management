@@ -7,13 +7,18 @@ export default function Sidebar({ isOpen, setIsOpen }) {
     const roles = useSelector((state) => state.auth.user?.roles || []);
     const permissions = useSelector((state) => state.auth.user?.permissions || []);
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
+    const isPerumus = hasRole('Perumus');
+    const canAccessNotifications = hasRole('SuperAdmin')
+        || permissions.includes('standard.publish')
+        || permissions.includes('audit.view')
+        || permissions.includes('audit.score.update');
 
     // Menu items based on capabilities/roles
     const [masterOpen, setMasterOpen] = useState(true);
 
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: Icons.dashboard },
-        { label: 'Notifikasi', path: '/notifications', icon: Icons.bell },
+        { label: 'Notifikasi', path: '/notifications', icon: Icons.bell, visible: canAccessNotifications },
         { label: 'Borang', path: '/borang', icon: Icons.document, roles: ['LPM-Admin', 'SuperAdmin'], permissions: ['standard.update'] },
         { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view'] },
         { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'], hideRoles: ['Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor'] },
@@ -30,6 +35,10 @@ export default function Sidebar({ isOpen, setIsOpen }) {
 
     // Filter menu items based on user role
     const authorizedMenu = menuItems.filter(item => {
+        if (item.visible === false) {
+            return false;
+        }
+
         const isHiddenForRole = item.hideRoles?.some(role => hasRole(role));
         const hasRoleAccess = !item.roles || item.roles.some(role => hasRole(role));
         const hasPermissionAccess = hasRole('SuperAdmin')
@@ -122,6 +131,12 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {isPerumus && (
+                            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-900">
+                                Role Perumus difokuskan untuk membuat dan menyusun dokumen standar mutu.
                             </div>
                         )}
                     </nav>

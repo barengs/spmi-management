@@ -61,6 +61,8 @@ function getCyclePeriodStatus(items) {
 
 export default function Dashboard() {
     const user = useSelector((state) => state.auth.user);
+    const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
+    const isPerumus = roleNames.includes('Perumus');
     const [standards, setStandards] = useState([]);
     const [loadingCycle, setLoadingCycle] = useState(true);
     const [selectedPeriod, setSelectedPeriod] = useState('');
@@ -281,8 +283,6 @@ export default function Dashboard() {
         };
     }, [currentCycleStandards]);
 
-    const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
-
     return (
         <div className="space-y-6 p-6 sm:p-8">
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -346,6 +346,7 @@ export default function Dashboard() {
                 </div>
             </section>
 
+            {!isPerumus && (
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
@@ -440,6 +441,20 @@ export default function Dashboard() {
                     })}
                 </div>
             </section>
+            )}
+
+            {isPerumus && (
+                <section className="rounded-3xl border border-blue-100 bg-blue-50 p-6 shadow-sm">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">
+                        <Icon icon={Icons.standard} width={14} />
+                        Fokus Perumus
+                    </div>
+                    <h2 className="mt-4 text-2xl font-semibold text-gray-900">Akun ini difokuskan untuk penyusunan standar</h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
+                        Menu dan notifikasi yang tidak terkait langsung dengan pembuatan serta penyusunan dokumen standar disembunyikan untuk menyederhanakan alur kerja.
+                    </p>
+                </section>
+            )}
 
             <section className="rounded-3xl border-2 border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
                 Fase 6: Dashboard analytic IKU akan dilanjutkan pada sprint berikutnya.

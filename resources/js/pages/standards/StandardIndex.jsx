@@ -269,6 +269,8 @@ export default function StandardIndex() {
         || user?.permissions?.includes('standard.update')
         || user?.permissions?.includes('standard.delete')
         || user?.permissions?.includes('standard.publish');
+    const canSubmitStandards = hasRole('SuperAdmin')
+        || user?.permissions?.includes('standard.publish');
     const canReviewAudit = hasRole('SuperAdmin')
         || hasRole('Auditor')
         || hasRole('LPM-Admin')
@@ -851,7 +853,7 @@ export default function StandardIndex() {
                             Detail Review
                         </Link>
                     );
-                } else if (canManageStandards && !isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI')) {
+                } else if (canSubmitStandards && !isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI')) {
                     actionButtons.push(
                         <button
                             key="submit"
@@ -908,7 +910,7 @@ export default function StandardIndex() {
                 );
             }
         })
-    ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canReviewStandards, canManageStandardEvidence, canExportStandards]);
+    ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canSubmitStandards, canReviewStandards, canManageStandardEvidence, canExportStandards]);
 
     const table = useReactTable({
         data: filteredStandards,
