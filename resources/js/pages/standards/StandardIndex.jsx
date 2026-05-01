@@ -436,6 +436,11 @@ export default function StandardIndex() {
     };
 
     const handleOpenModal = (standard = null) => {
+        if (!standard) {
+            handleOpenImportModal();
+            return;
+        }
+
         if (standard) {
             setEditingStandard(standard);
             setFormData({
@@ -536,7 +541,7 @@ export default function StandardIndex() {
 
             setFormData((current) => ({
                 ...current,
-                name: current.name || file.name.replace(/\.pdf$/i, ''),
+                name: file.name.replace(/\.[^.]+$/u, ''),
             }));
         } catch (error) {
             setImportExtractedText('');
@@ -944,13 +949,6 @@ export default function StandardIndex() {
                         <Icon icon={Icons.add} width={18} />
                         Tambah Standar
                     </button>
-                    <button
-                        onClick={handleOpenImportModal}
-                        className="inline-flex items-center gap-1 justify-center rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 shadow-sm hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 sm:w-auto"
-                    >
-                        <Icon icon={Icons.clone} width={18} />
-                        Import Standar
-                    </button>
                 </div>
                 )}
             </div>
@@ -1266,37 +1264,25 @@ export default function StandardIndex() {
                         <div className="relative z-10 inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
                             <div>
                                 <h3 className="text-xl font-bold text-gray-900 dark:text-white" id="import-modal-title">
-                                    Import Standar Dari Dokumen
+                                    Tambah Standar Mutu Baru
                                 </h3>
                                 <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 mb-5">
-                                    Upload PDF standar. Sistem akan membaca text layer dokumen, membentuk tree poin, lalu menyimpan file asli beserta struktur datanya.
+                                    Lengkapi data standar dan upload dokumen PDF. Nama standar akan terisi otomatis dari nama file yang dipilih.
                                 </div>
                                 <form onSubmit={handleImportSubmit} className="mt-5 space-y-5">
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                            Dokumen PDF <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="file"
-                                            accept="application/pdf"
-                                            required
-                                            onChange={handleImportFileChange}
-                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
-                                        />
-                                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                            Format yang didukung: PDF dengan text layer.
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nama Standar Baru <span className="text-red-500">*</span></label>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nama Standar <span className="text-red-500">*</span></label>
                                         <input
                                             type="text"
                                             required
                                             value={formData.name}
                                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
-                                            placeholder="Contoh: Standar Kompetensi Lulusan 2027"
+                                            placeholder="Akan terisi otomatis dari nama file"
                                         />
+                                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                            Nama akan otomatis mengikuti nama file saat dokumen dipilih, tetapi masih bisa disesuaikan manual bila diperlukan.
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Kategori <span className="text-red-500">*</span></label>
@@ -1308,6 +1294,21 @@ export default function StandardIndex() {
                                             <option value="Institusi">Institusi</option>
                                             <option value="SN-Dikti">SN-Dikti</option>
                                         </select>
+                                    </div>
+                                    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                        <label className="mb-1 block text-sm font-semibold text-amber-900">
+                                            Dokumen Upload <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="file"
+                                            accept="application/pdf"
+                                            required
+                                            onChange={handleImportFileChange}
+                                            className="block w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                        />
+                                        <div className="mt-2 text-xs text-amber-800">
+                                            Format yang didukung: PDF dengan text layer.
+                                        </div>
                                     </div>
                                     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                                         <div>Tahun implementasi: {selectedPeriod || new Date().getFullYear()}.</div>
@@ -1323,7 +1324,7 @@ export default function StandardIndex() {
                                             disabled={isSubmitting}
                                             className="w-full inline-flex justify-center rounded-md flex-row items-center gap-1 border border-transparent shadow-sm px-4 py-2 bg-amber-600 text-base font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:col-start-2 sm:text-sm disabled:opacity-50"
                                         >
-                                            {isSubmitting ? 'Mengimpor...' : 'Import Standar'}
+                                            {isSubmitting ? 'Menyimpan...' : 'Simpan Standar'}
                                         </button>
                                         <button
                                             type="button"
