@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import api from '../../services/api';
+import api, { getCached } from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 function flattenIndicators(nodes, carry = []) {
@@ -83,7 +83,7 @@ export default function ExecutionRepositoryPage() {
     useEffect(() => {
         const fetchStandards = async () => {
             try {
-                const response = await api.get('/standards');
+                const response = await getCached('/standards');
                 const activeStandards = response.data.data || [];
                 setStandards(activeStandards);
 

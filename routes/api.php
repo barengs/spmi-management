@@ -7,6 +7,7 @@ use App\Modules\Core\Controllers\UserController;
 use App\Modules\Audit\Controllers\AuditScheduleController;
 use App\Modules\Borang\Controllers\BorangController;
 use App\Modules\Evidence\Controllers\EvidenceController;
+use App\Modules\Ptk\Controllers\PtkController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -122,6 +123,14 @@ Route::prefix('v1')->group(function () {
             Route::get('/prodis/{prodi}',      [BorangController::class, 'index']);
             Route::post('/',                   [BorangController::class, 'store']);
             Route::delete('/{borangItem}',     [BorangController::class, 'destroy']);
+        });
+
+        Route::prefix('ptk')->group(function () {
+            Route::get('/',                    [PtkController::class, 'index']);
+            Route::post('/',                   [PtkController::class, 'store']);
+            Route::patch('/{ptk}/respond',     [PtkController::class, 'respond']);
+            Route::patch('/{ptk}/verify',      [PtkController::class, 'verify']);
+            Route::patch('/{ptk}/close',       [PtkController::class, 'close']);
         });
 
     });

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
@@ -69,6 +70,9 @@ function renderMetricTree(nodes, selectedMetricId, depth = 0) {
 export default function StandardAuditReviewPage() {
     const { standardId } = useParams();
     const navigate = useNavigate();
+    const user = useSelector((state) => state.auth.user);
+    const permissions = user?.permissions || [];
+    const canCreatePtk = permissions.includes('ptk.create');
     const [standard, setStandard] = useState(null);
     const [evidences, setEvidences] = useState([]);
     const [selectedEvidence, setSelectedEvidence] = useState(null);
@@ -78,6 +82,7 @@ export default function StandardAuditReviewPage() {
     const [standardTreeLoading, setStandardTreeLoading] = useState(false);
     const [previewUrl, setPreviewUrl] = useState('');
     const [reviewComment, setReviewComment] = useState('');
+    const [createPtkOnReject, setCreatePtkOnReject] = useState(false);
     const [submittingAction, setSubmittingAction] = useState('');
 
     const fetchPageData = async () => {
@@ -119,6 +124,7 @@ export default function StandardAuditReviewPage() {
         }
 
         setReviewComment(selectedEvidence.review_status === 'REJECTED' ? (selectedEvidence.review_comment || '') : '');
+        setCreatePtkOnReject(false);
     }, [selectedEvidence]);
 
     useEffect(() => {
@@ -184,6 +190,16 @@ export default function StandardAuditReviewPage() {
                 action,
                 comment: reviewComment,
             });
+
+            if (action === 'reject' && createPtkOnReject) {
+                await api.post('/ptk', {
+                    metric_id: selectedEvidence.metric?.id,
+                    evidence_id: selectedEvidence.id,
+                    assigned_user_id: selectedEvidence.uploader?.id || null,
+                    assigned_unit_id: selectedEvidence.uploader?.unit?.id || selectedEvidence.uploader?.unit_id || null,
+                    finding_summary: reviewComment.trim(),
+                });
+            }
 
             toast.success(response.data.message);
             navigate('/audit');
@@ -408,6 +424,20 @@ export default function StandardAuditReviewPage() {
                                 placeholder="Isi komentar revisi saat menolak, atau catatan akhir saat menerima."
                             />
                         </div>
+
+                        {canCreatePtk && (
+                            <label className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                <input
+                                    type="checkbox"
+                                    checked={createPtkOnReject}
+                                    onChange={(event) => setCreatePtkOnReject(event.target.checked)}
+                                    className="mt-1 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                                />
+                                <span>
+                                    Buat PTK dari temuan ini saat bukti ditolak. Aktifkan hanya jika auditor memutuskan temuan perlu tindak koreksi resmi.
+                                </span>
+                            </label>
+                        )}
 
                         <div className="mt-6 flex flex-wrap gap-3">
                             <button

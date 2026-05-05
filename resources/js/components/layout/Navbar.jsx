@@ -7,6 +7,8 @@ import { toast } from 'react-toastify';
 import Icon, { Icons } from '../ui/Icon';
 import { buildNotifications } from '../../utils/notifications';
 
+const NOTIFICATION_POLL_INTERVAL_MS = 30000;
+
 export default function Navbar({ toggleSidebar }) {
     const dispatch = useDispatch();
     const user = useSelector((state) => state.auth.user);
@@ -20,6 +22,9 @@ export default function Navbar({ toggleSidebar }) {
     const [notificationSchedules, setNotificationSchedules] = useState([]);
     const [notificationStandards, setNotificationStandards] = useState([]);
     const hasRole = (roleName) => roleNames.includes(roleName);
+    const shouldFetchSchedules = hasRole('SuperAdmin')
+        || permissions.includes('audit.view')
+        || permissions.includes('audit.score.update');
     const canAccessNotifications = hasRole('SuperAdmin')
         || permissions.includes('standard.publish')
         || permissions.includes('audit.view')
@@ -113,7 +118,7 @@ export default function Navbar({ toggleSidebar }) {
             try {
                 const requests = [api.get('/standards')];
 
-                if (hasRole('SuperAdmin') || permissions.includes('audit.view') || permissions.includes('audit.score.update')) {
+                if (shouldFetchSchedules) {
                     requests.unshift(api.get('/audit-schedules'));
                 }
 
@@ -131,18 +136,12 @@ export default function Navbar({ toggleSidebar }) {
 
         fetchNotifications();
 
-        const intervalId = window.setInterval(fetchNotifications, 30000);
-        const handleFocus = () => {
-            fetchNotifications();
-        };
-
-        window.addEventListener('focus', handleFocus);
+        const intervalId = window.setInterval(fetchNotifications, NOTIFICATION_POLL_INTERVAL_MS);
 
         return () => {
             window.clearInterval(intervalId);
-            window.removeEventListener('focus', handleFocus);
         };
-    }, [canAccessNotifications, location.pathname, permissions, roleNames]);
+    }, [canAccessNotifications, shouldFetchSchedules]);
 
     // Initialize dark mode
     useEffect(() => {

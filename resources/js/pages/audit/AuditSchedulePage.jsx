@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import api from '../../services/api';
+import api, { getCached, invalidateCachedGet } from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 import TablePagination from '../../components/ui/TablePagination';
 
@@ -166,7 +166,7 @@ export default function AuditSchedulePage() {
     const fetchSchedules = async () => {
         try {
             setLoading(true);
-            const response = await api.get('/audit-schedules');
+            const response = await getCached('/audit-schedules');
             const nextSchedules = response.data.data || [];
             setSchedules(nextSchedules);
             return nextSchedules;
@@ -184,7 +184,7 @@ export default function AuditSchedulePage() {
         }
 
         try {
-            const response = await api.get('/audit-schedules/metadata');
+            const response = await getCached('/audit-schedules/metadata');
             setMetadata(response.data.data || {
                 faculties: [],
                 prodis: [],
@@ -271,6 +271,8 @@ export default function AuditSchedulePage() {
             const response = editingSchedule
                 ? await api.put(`/audit-schedules/${editingSchedule.id}`, payload)
                 : await api.post('/audit-schedules', payload);
+            invalidateCachedGet('/audit-schedules');
+            invalidateCachedGet('/audit-schedules/metadata');
 
             toast.success(response.data.message || (editingSchedule ? 'Jadwal audit berhasil diperbarui.' : 'Jadwal audit berhasil dibuat.'));
             await Promise.all([fetchSchedules(), fetchMetadata()]);
@@ -289,6 +291,8 @@ export default function AuditSchedulePage() {
 
         try {
             const response = await api.delete(`/audit-schedules/${schedule.id}`);
+            invalidateCachedGet('/audit-schedules');
+            invalidateCachedGet('/audit-schedules/metadata');
             toast.success(response.data.message || 'Jadwal audit berhasil dihapus.');
             await Promise.all([fetchSchedules(), fetchMetadata()]);
         } catch (error) {
@@ -363,6 +367,7 @@ export default function AuditSchedulePage() {
                 action: responseModal.action,
                 note: responseModal.note.trim() || null,
             });
+            invalidateCachedGet('/audit-schedules');
 
             mergeUpdatedSchedule(response.data.data);
             closeResponseModal();

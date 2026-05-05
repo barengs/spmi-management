@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
-import api from '../services/api';
+import { getCached } from '../services/api';
 import Icon, { Icons } from '../components/ui/Icon';
 
 const auditTimeline = [
@@ -70,7 +70,7 @@ export default function Dashboard() {
     useEffect(() => {
         const fetchStandards = async () => {
             try {
-                const response = await api.get('/standards');
+                const response = await getCached('/standards');
                 setStandards(response.data.data || []);
             } catch (error) {
                 setStandards([]);

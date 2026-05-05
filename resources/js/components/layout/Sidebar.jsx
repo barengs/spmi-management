@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import Icon, { Icons } from '../ui/Icon';
 
-export default function Sidebar({ isOpen, setIsOpen }) {
+export default function Sidebar({ isOpen, setIsOpen, isOnline = true, pendingQueueCount = 0 }) {
     const roles = useSelector((state) => state.auth.user?.roles || []);
     const permissions = useSelector((state) => state.auth.user?.permissions || []);
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
@@ -72,13 +72,29 @@ export default function Sidebar({ isOpen, setIsOpen }) {
             <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} `}>
 
                 <div className="flex h-16 items-center px-6 border-b border-gray-200 dark:border-gray-700">
-                    <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 flex items-center gap-2">
-                        E-SPMI <Icon icon={Icons.logo} className="text-green-500" />
-                    </span>
+                    <div className="flex items-center justify-between w-full gap-3">
+                        <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 flex items-center gap-2">
+                            E-SPMI <Icon icon={isOnline ? Icons.logo : Icons.offline} className={isOnline ? 'text-green-500' : 'text-amber-500'} />
+                        </span>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                            isOnline
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                        }`}>
+                            <Icon icon={isOnline ? Icons.online : Icons.offline} width={14} />
+                            {isOnline ? 'Online' : 'Offline'}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="overflow-y-auto h-full pb-20">
                     <nav className="mt-6 px-4 space-y-2">
+                        {pendingQueueCount > 0 && (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                                {pendingQueueCount} perubahan tersimpan sementara dan menunggu sinkronisasi.
+                            </div>
+                        )}
+
                         {authorizedMenu.map((item, index) => (
                             <NavLink
                                 key={index}

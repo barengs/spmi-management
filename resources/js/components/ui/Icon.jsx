@@ -84,6 +84,8 @@ export const Icons = {
     warning: 'material-symbols:warning',
     error: 'material-symbols:error',
     success: 'material-symbols:check-circle',
+    online: 'material-symbols:wifi',
+    offline: 'material-symbols:wifi-off',
     
     // Actions
     add: 'material-symbols:add',

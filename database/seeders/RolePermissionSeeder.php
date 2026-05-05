@@ -65,7 +65,7 @@ class RolePermissionSeeder extends Seeder
             'standard.publish', 'standard.clone',
             'audit.view', 'audit.create', 'audit.plot',
             'audit.finding.create', 'audit.finding.update',
-            'ptk.view', 'ptk.close',
+            'ptk.view', 'ptk.create', 'ptk.close',
             'report.view', 'report.export',
             'system.audit_log.view',
         ]);
@@ -83,7 +83,7 @@ class RolePermissionSeeder extends Seeder
             'evidence.view',
             'audit.view', 'audit.score.view', 'audit.score.update',
             'audit.finding.create', 'audit.finding.update',
-            'ptk.view', 'ptk.verify', 'ptk.close',
+            'ptk.view', 'ptk.create', 'ptk.verify', 'ptk.close',
             'report.view',
         ]);
 

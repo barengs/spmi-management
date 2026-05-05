@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import api from '../../services/api';
+import api, { getCached } from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 import { getApprovalStageLabel, getStandardStatusLabel } from '../../utils/standardStatus';
 
@@ -387,7 +387,7 @@ export default function StandardReviewPage() {
             const [standardResponse, treeResponse, standardsResponse] = await Promise.all([
                 api.get(`/standards/${id}`),
                 api.get(`/standards/${id}/metrics/tree`),
-                api.get('/standards'),
+                getCached('/standards'),
             ]);
 
             const current = standardResponse.data.data;

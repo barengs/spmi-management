@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import api from '../../services/api';
+import { getCached } from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 import { getStandardStatusLabel, getWaitingApprovalLabel } from '../../utils/standardStatus';
 
@@ -69,7 +69,7 @@ export default function ReportPage() {
     useEffect(() => {
         const fetchStandards = async () => {
             try {
-                const response = await api.get('/standards');
+                const response = await getCached('/standards');
                 setStandards(response.data.data || []);
             } catch (error) {
                 toast.error(error.response?.data?.message || 'Riwayat laporan audit gagal dimuat.');

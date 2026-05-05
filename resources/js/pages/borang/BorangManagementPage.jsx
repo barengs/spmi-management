@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import api from '../../services/api';
+import api, { getCached } from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 import TablePagination from '../../components/ui/TablePagination';
 import {
@@ -107,7 +107,7 @@ export default function BorangManagementPage() {
 
         try {
             dispatch(setLoadingIndicators(true));
-            const standardsResponse = await api.get('/standards');
+            const standardsResponse = await getCached('/standards');
             const fetchedStandards = standardsResponse.data.data || [];
 
             const treeResponses = await Promise.all(

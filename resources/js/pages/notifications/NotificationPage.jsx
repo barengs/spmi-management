@@ -6,6 +6,8 @@ import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 import { buildNotifications } from '../../utils/notifications';
 
+const NOTIFICATION_POLL_INTERVAL_MS = 30000;
+
 function formatDateTime(value) {
     if (!value) {
         return '-';
@@ -34,6 +36,9 @@ export default function NotificationPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const hasRole = (roleName) => roleNames.includes(roleName);
+    const shouldFetchSchedules = hasRole('SuperAdmin')
+        || permissions.includes('audit.view')
+        || permissions.includes('audit.score.update');
     const canAccessNotifications = hasRole('SuperAdmin')
         || permissions.includes('standard.publish')
         || permissions.includes('audit.view')
@@ -52,7 +57,7 @@ export default function NotificationPage() {
                 setLoading(true);
                 const requests = [api.get('/standards')];
 
-                if (hasRole('SuperAdmin') || permissions.includes('audit.view') || permissions.includes('audit.score.update')) {
+                if (shouldFetchSchedules) {
                     requests.unshift(api.get('/audit-schedules'));
                 }
 
@@ -72,7 +77,13 @@ export default function NotificationPage() {
         };
 
         fetchNotifications();
-    }, [canAccessNotifications, permissions, roleNames]);
+
+        const intervalId = window.setInterval(fetchNotifications, NOTIFICATION_POLL_INTERVAL_MS);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [canAccessNotifications, shouldFetchSchedules]);
 
     const notifications = useMemo(
         () => buildNotifications(user, schedules, standards),
