@@ -142,6 +142,8 @@ export default function BorangManagementPage() {
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
     const canManageBorang = hasRole('SuperAdmin') || permissions.includes('standard.update');
     const canAuditBorang = permissions.includes('audit.score.update');
+    const canViewBorang = permissions.includes('audit.view');
+    const isReadOnlyBorang = !canManageBorang && !canAuditBorang && canViewBorang;
     const canCreatePtk = permissions.includes('ptk.create');
     const canEditAuditSchedule = hasRole('SuperAdmin') || hasRole('LPM-Admin');
     const [assignedSchedules, setAssignedSchedules] = useState([]);
@@ -162,7 +164,7 @@ export default function BorangManagementPage() {
                 ]);
                 dispatch(setUnits(unitsResponse.data.data || []));
                 setAssignedSchedules(schedulesResponse.data.data || []);
-            } else if (canAuditBorang) {
+            } else if (canAuditBorang || canViewBorang) {
                 const schedulesResponse = await api.get('/audit-schedules');
                 setAssignedSchedules(schedulesResponse.data.data || []);
                 dispatch(setUnits([]));
@@ -176,7 +178,7 @@ export default function BorangManagementPage() {
 
     useEffect(() => {
         fetchPageData();
-    }, [canManageBorang, canAuditBorang, permissions, roles]);
+    }, [canManageBorang, canAuditBorang, canViewBorang, permissions, roles]);
 
     const openAddBorangModal = async () => {
         dispatch(openAddModal());
@@ -340,9 +342,9 @@ export default function BorangManagementPage() {
     const openRequirementTable = async (faculty, prodi, scheduleOverride = null) => {
         dispatch(setSelectedFaculty(faculty));
         dispatch(setSelectedProdi(prodi));
-        dispatch(setActiveRequirementTab('DEKAN'));
+        dispatch(setActiveRequirementTab(isReadOnlyBorang ? 'KAPRODI' : 'DEKAN'));
         dispatch(setLoadingRequirements(true));
-        setDetailTab('information');
+        setDetailTab(isReadOnlyBorang ? 'KAPRODI' : 'information');
         setSelectedSchedule(
             scheduleOverride
             || assignedSchedules.find((schedule) => String(schedule?.prodi?.id || '') === String(prodi.id))
@@ -372,10 +374,12 @@ export default function BorangManagementPage() {
             description: 'Halaman manajemen borang menampilkan seluruh kombinasi fakultas dan prodi. Detailnya memuat daftar dokumen borang yang dibentuk dari indikator standar oleh LPMI Admin.',
         }
         : {
-            title: `${canManageBorang ? 'Dokumen Borang' : 'Checklist Audit Borang'} ${selectedFaculty?.name || '-'} / ${selectedProdi?.name || '-'}`.trim(),
+            title: `${canManageBorang ? 'Dokumen Borang' : isReadOnlyBorang ? 'Dokumen Borang Prodi' : 'Checklist Audit Borang'} ${selectedFaculty?.name || '-'} / ${selectedProdi?.name || '-'}`.trim(),
             description: canManageBorang
                 ? 'Daftar berikut menampilkan indikator, target sasaran, dan PJ dokumen borang untuk prodi terpilih.'
-                : 'Auditor dapat melihat status pengecekan tiap indikator, membuka review audit, dan membuat PTK bila diperlukan.',
+                : isReadOnlyBorang
+                    ? 'Auditee dapat melihat daftar indikator borang untuk prodi yang ditugaskan beserta status bukti yang sudah diunggah.'
+                    : 'Auditor dapat melihat status pengecekan tiap indikator, membuka review audit, dan membuat PTK bila diperlukan.',
         };
 
     const filteredIndicators = useMemo(() => {
@@ -493,10 +497,10 @@ export default function BorangManagementPage() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
-                            canManageBorang ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                            canManageBorang ? 'bg-amber-50 text-amber-700' : isReadOnlyBorang ? 'bg-sky-50 text-sky-700' : 'bg-rose-50 text-rose-700'
                         }`}>
                             <Icon icon={Icons.document} width={14} />
-                            {canManageBorang ? 'LPM-Admin' : 'Audit Mode'}
+                            {canManageBorang ? 'LPM-Admin' : isReadOnlyBorang ? 'Read Only' : 'Audit Mode'}
                         </div>
                         <h1 className="mt-4 text-2xl font-semibold text-gray-900">{pageMeta.title}</h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
@@ -534,7 +538,7 @@ export default function BorangManagementPage() {
                     <div className="border-b border-gray-200 px-6 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">
-                                {canManageBorang ? 'Daftar Fakultas dan Prodi' : 'Daftar Prodi Audit'}
+                                {canManageBorang ? 'Daftar Fakultas dan Prodi' : isReadOnlyBorang ? 'Daftar Prodi Borang' : 'Daftar Prodi Audit'}
                             </h2>
                             <span className="text-sm text-gray-500">{filteredFacultyProdiRows.length} baris</span>
                         </div>
@@ -583,7 +587,7 @@ export default function BorangManagementPage() {
                                 ) : filteredFacultyProdiRows.length === 0 ? (
                                     <tr>
                                         <td colSpan={canManageBorang ? 3 : 4} className="px-6 py-10 text-center text-sm text-gray-500">
-                                            {canManageBorang ? 'Belum ada data fakultas dan prodi.' : 'Belum ada prodi audit yang ditugaskan kepada Anda.'}
+                                            {canManageBorang ? 'Belum ada data fakultas dan prodi.' : isReadOnlyBorang ? 'Belum ada prodi borang yang ditugaskan kepada Anda.' : 'Belum ada prodi audit yang ditugaskan kepada Anda.'}
                                         </td>
                                     </tr>
                                 ) : (
@@ -602,7 +606,7 @@ export default function BorangManagementPage() {
                                                     className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
                                                 >
                                                     <Icon icon={Icons.eye} width={16} />
-                                                    {loadingRequirements ? 'Memuat...' : canManageBorang ? 'Lihat Dokumen' : 'Lihat Checklist'}
+                                                    {loadingRequirements ? 'Memuat...' : canManageBorang || isReadOnlyBorang ? 'Lihat Dokumen' : 'Lihat Checklist'}
                                                 </button>
                                             </td>
                                         </tr>
@@ -626,7 +630,7 @@ export default function BorangManagementPage() {
                     <div className="border-b border-gray-200 px-6 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">
-                                {canManageBorang ? 'Detail Borang Prodi' : 'Detail Checklist Audit'}
+                                {canManageBorang ? 'Detail Borang Prodi' : isReadOnlyBorang ? 'Detail Dokumen Borang' : 'Detail Checklist Audit'}
                             </h2>
                             {detailTab !== 'information' && (
                                 <span className="text-sm text-gray-500">{filteredRequirementRows.length} baris</span>
@@ -742,7 +746,7 @@ export default function BorangManagementPage() {
                                                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Checklist</th>
                                             )}
                                             <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                                                {canManageBorang ? 'Kelola' : 'Aksi Audit'}
+                                                {canManageBorang ? 'Kelola' : isReadOnlyBorang ? 'Aksi' : 'Aksi Audit'}
                                             </th>
                                         </tr>
                                     </thead>
@@ -803,7 +807,7 @@ export default function BorangManagementPage() {
                                                                 <Icon icon={Icons.delete} width={14} />
                                                                 Hapus
                                                             </button>
-                                                        ) : (
+                                                        ) : canAuditBorang ? (
                                                             <div className="flex flex-wrap justify-end gap-2">
                                                                 <button
                                                                     type="button"
@@ -825,6 +829,15 @@ export default function BorangManagementPage() {
                                                                     </button>
                                                                 )}
                                                             </div>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => window.location.assign(`/borang/items/${row.id}/detail`)}
+                                                                className="inline-flex items-center gap-2 rounded-full border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                                                            >
+                                                                <Icon icon={Icons.eye} width={14} />
+                                                                Detail
+                                                            </button>
                                                         )}
                                                     </td>
                                                 </tr>
@@ -848,11 +861,15 @@ export default function BorangManagementPage() {
             <section className={`rounded-3xl border border-dashed p-5 text-sm leading-6 ${
                 canManageBorang
                     ? 'border-amber-200 bg-amber-50/60 text-amber-900'
-                    : 'border-rose-200 bg-rose-50/60 text-rose-900'
+                    : isReadOnlyBorang
+                        ? 'border-sky-200 bg-sky-50/60 text-sky-900'
+                        : 'border-rose-200 bg-rose-50/60 text-rose-900'
             }`}>
                 {canManageBorang
                     ? 'LPMI Admin menambahkan item borang per prodi dengan memilih indikator dari standar yang sudah disusun. Detail borang hanya menampilkan indikator yang sudah dipilih untuk prodi tersebut.'
-                    : 'Dalam audit mode, auditor hanya melihat borang untuk prodi yang ditugaskan. Setiap poin menampilkan status checklist bukti dan auditor dapat membuat PTK bila indikator memerlukan tindak koreksi.'}
+                    : isReadOnlyBorang
+                        ? 'Mode baca menampilkan borang untuk prodi yang ditugaskan kepada auditee. Halaman ini digunakan untuk melihat indikator, PJ, target, dan ringkasan status bukti.'
+                        : 'Dalam audit mode, auditor hanya melihat borang untuk prodi yang ditugaskan. Setiap poin menampilkan status checklist bukti dan auditor dapat membuat PTK bila indikator memerlukan tindak koreksi.'}
             </section>
 
             {isAddModalOpen && (

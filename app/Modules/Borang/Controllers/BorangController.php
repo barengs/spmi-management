@@ -6,13 +6,41 @@ use App\Modules\Audit\Models\AuditSchedule;
 use App\Http\Controllers\Controller;
 use App\Modules\Borang\Models\BorangItem;
 use App\Modules\Core\Models\Unit;
+use App\Modules\Evidence\Models\TrxEvidence;
 use App\Modules\Standard\Models\MstMetric;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class BorangController extends Controller
 {
+    private function canAccessBorangProdi(?object $user, Unit $prodi): bool
+    {
+        $canManageBorang = $user?->can('standard.update');
+        $canAuditBorang = $user?->can('audit.score.update');
+        $canViewBorang = $user?->can('audit.view');
+
+        if (! $canManageBorang && ! $canAuditBorang && ! $canViewBorang) {
+            return false;
+        }
+
+        if ($canManageBorang) {
+            return true;
+        }
+
+        $isAssigned = AuditSchedule::query()
+            ->where('prodi_id', $prodi->id)
+            ->where(function ($query) use ($user) {
+                $query->where('auditor_id', $user->id)
+                    ->orWhere('lead_auditor_id', $user->id)
+                    ->orWhere('auditee_id', $user->id);
+            })
+            ->exists();
+
+        return $isAssigned;
+    }
+
     private function activeProdis()
     {
         return Unit::query()
@@ -89,34 +117,14 @@ class BorangController extends Controller
     {
         $user = $request->user();
 
-        $canManageBorang = $user?->can('standard.update');
-        $canAuditBorang = $user?->can('audit.score.update');
-
-        if (! $canManageBorang && ! $canAuditBorang) {
+        if (! $this->canAccessBorangProdi($user, $prodi)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Anda tidak memiliki hak akses untuk melihat borang.',
+                'message' => 'Anda hanya dapat melihat borang untuk prodi yang ditugaskan kepada Anda.',
             ], 403);
         }
 
         abort_if($prodi->level !== 'department', 404);
-
-        if (! $canManageBorang && $canAuditBorang) {
-            $isAssigned = AuditSchedule::query()
-                ->where('prodi_id', $prodi->id)
-                ->where(function ($query) use ($user) {
-                    $query->where('auditor_id', $user->id)
-                        ->orWhere('lead_auditor_id', $user->id);
-                })
-                ->exists();
-
-            if (! $isAssigned) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Anda hanya dapat melihat borang untuk prodi yang ditugaskan kepada Anda.',
-                ], 403);
-            }
-        }
 
         $this->syncSharedBorangTemplate($user?->id);
 
@@ -136,6 +144,187 @@ class BorangController extends Controller
             'status' => 'success',
             'data' => $items,
         ]);
+    }
+
+    public function show(Request $request, BorangItem $borangItem): JsonResponse
+    {
+        $user = $request->user();
+
+        $borangItem->loadMissing([
+            'prodi.parent',
+            'metric.standard',
+            'metric.parent',
+            'metric.evidences:id,metric_id,review_status,reviewed_at,created_at',
+            'metric.ptks:id,metric_id,status',
+        ]);
+
+        $prodi = $borangItem->prodi;
+        abort_if(! $prodi || $prodi->level !== 'department', 404);
+
+        if (! $this->canAccessBorangProdi($user, $prodi)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda hanya dapat melihat detail borang untuk prodi yang ditugaskan kepada Anda.',
+            ], 403);
+        }
+
+        $latestSubmission = null;
+        if ($borangItem->metric_id && $user?->id) {
+            $latestEvidence = TrxEvidence::query()
+                ->where('metric_id', $borangItem->metric_id)
+                ->where('uploaded_by', $user->id)
+                ->latest()
+                ->first();
+
+            if ($latestEvidence) {
+                $latestSubmission = [
+                    'id' => $latestEvidence->id,
+                    'source_type' => $latestEvidence->source_type,
+                    'notes' => $latestEvidence->notes,
+                    'link_url' => $latestEvidence->link_url,
+                    'original_name' => $latestEvidence->original_name,
+                    'stored_name' => $latestEvidence->stored_name,
+                    'mime_type' => $latestEvidence->mime_type,
+                    'size_bytes' => $latestEvidence->size_bytes,
+                    'review_status' => $latestEvidence->review_status,
+                    'review_comment' => $latestEvidence->review_comment,
+                    'download_url' => $latestEvidence->source_type === 'file' ? "/api/v1/evidences/{$latestEvidence->id}/download" : null,
+                    'created_at' => $latestEvidence->created_at?->toISOString(),
+                ];
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                ...$this->transformItem($borangItem),
+                'prodi' => [
+                    'id' => $prodi->id,
+                    'name' => $prodi->name,
+                    'code' => $prodi->code,
+                ],
+                'faculty' => $prodi->parent ? [
+                    'id' => $prodi->parent->id,
+                    'name' => $prodi->parent->name,
+                    'code' => $prodi->parent->code,
+                ] : null,
+                'latest_submission' => $latestSubmission,
+            ],
+        ]);
+    }
+
+    public function storeEvidence(Request $request, BorangItem $borangItem): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user?->can('evidence.upload')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk mengunggah bukti borang.',
+            ], 403);
+        }
+
+        $borangItem->loadMissing([
+            'prodi',
+            'metric.standard',
+        ]);
+
+        $prodi = $borangItem->prodi;
+        abort_if(! $prodi || $prodi->level !== 'department', 404);
+
+        if (! $this->canAccessBorangProdi($user, $prodi)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda hanya dapat mengunggah bukti untuk borang prodi yang ditugaskan kepada Anda.',
+            ], 403);
+        }
+
+        $metric = $borangItem->metric;
+        if (! $metric || $metric->type !== 'Indicator') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Bukti borang hanya dapat diunggah ke node Indicator.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'source_type' => 'required|in:file,link',
+            'notes' => 'nullable|string',
+            'link_url' => 'nullable|url|max:2048',
+            'file' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+        ]);
+
+        $hasNotes = filled($validated['notes'] ?? null);
+        $hasLink = filled($validated['link_url'] ?? null);
+        $hasFile = $request->hasFile('file');
+
+        if (! $hasNotes && ! $hasLink && ! $hasFile) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Isi komentar/catatan atau unggah file/tautan bukti terlebih dahulu.',
+            ], 422);
+        }
+
+        $payload = [
+            'metric_id' => $metric->id,
+            'uploaded_by' => $user->id,
+            'source_type' => $validated['source_type'],
+            'title' => null,
+            'notes' => $validated['notes'] ?? null,
+            'link_url' => null,
+            'file_path' => null,
+            'original_name' => null,
+            'stored_name' => null,
+            'mime_type' => null,
+            'size_bytes' => null,
+            'review_status' => 'PENDING',
+            'review_comment' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ];
+
+        if ($validated['source_type'] === 'link' && $hasLink) {
+            $payload['link_url'] = $validated['link_url'];
+        }
+
+        if ($validated['source_type'] === 'file' && $hasFile) {
+            $file = $request->file('file');
+            $baseName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'bukti-borang';
+            $storedName = sprintf('%s-%s.%s', $baseName, now()->format('YmdHis'), $file->getClientOriginalExtension());
+            $directory = sprintf('evidences/borang-item-%s', $borangItem->id);
+            $path = $file->storeAs($directory, $storedName, 'local');
+
+            $payload['file_path'] = $path;
+            $payload['original_name'] = $file->getClientOriginalName();
+            $payload['stored_name'] = $storedName;
+            $payload['mime_type'] = $file->getMimeType();
+            $payload['size_bytes'] = $file->getSize();
+            $payload['title'] = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        }
+
+        $evidence = TrxEvidence::create($payload)->load('uploader:id,name,email');
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Bukti borang berhasil disimpan.',
+            'data' => [
+                'id' => $evidence->id,
+                'metric_id' => $evidence->metric_id,
+                'source_type' => $evidence->source_type,
+                'notes' => $evidence->notes,
+                'link_url' => $evidence->link_url,
+                'original_name' => $evidence->original_name,
+                'stored_name' => $evidence->stored_name,
+                'mime_type' => $evidence->mime_type,
+                'size_bytes' => $evidence->size_bytes,
+                'review_status' => $evidence->review_status,
+                'uploader' => $evidence->uploader ? [
+                    'id' => $evidence->uploader->id,
+                    'name' => $evidence->uploader->name,
+                    'email' => $evidence->uploader->email,
+                ] : null,
+            ],
+        ], 201);
     }
 
     public function store(Request $request): JsonResponse

@@ -86,6 +86,10 @@ function getScheduleStatusPresentation(schedule) {
     };
 }
 
+function canOpenBorang(schedule) {
+    return schedule.auditor_status === 'APPROVED' && schedule.auditee_status === 'APPROVED';
+}
+
 function toDateTimeLocalInput(value) {
     if (!value) {
         return '';
@@ -647,6 +651,16 @@ export default function AuditSchedulePage() {
                                                         </button>
                                                     </>
                                                 )}
+                                                {canOpenBorang(schedule) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => window.location.assign('/borang')}
+                                                        className="inline-flex items-center gap-2 rounded-full border border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 transition hover:bg-sky-100"
+                                                    >
+                                                        <Icon icon={Icons.document} width={14} />
+                                                        Ke Borang
+                                                    </button>
+                                                )}
                                                 {canRespond(schedule) ? (
                                                     <>
                                                     <button
@@ -668,7 +682,7 @@ export default function AuditSchedulePage() {
                                                         Reject
                                                     </button>
                                                     </>
-                                                ) : !isLpmAdmin ? (
+                                                ) : !isLpmAdmin && !canOpenBorang(schedule) ? (
                                                     <span className="text-xs text-gray-400">Tidak ada aksi</span>
                                                 ) : null}
                                             </div>

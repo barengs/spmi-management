@@ -283,10 +283,6 @@ class AuditScheduleController extends Controller
                     $sub->where('lead_auditor_id', $user->id)
                         ->orWhere('auditor_id', $user->id)
                         ->orWhere('auditee_id', $user->id);
-
-                    if ($user->hasRole('Auditee') && $user->unit_id) {
-                        $sub->orWhere('prodi_id', $user->unit_id);
-                    }
                 })
             )
             ->orderBy('scheduled_start')

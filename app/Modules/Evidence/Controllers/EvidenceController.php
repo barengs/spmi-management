@@ -83,20 +83,24 @@ class EvidenceController extends Controller
             ], 422);
         }
 
-        if (in_array($metric->standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Bukti tidak dapat diubah karena standar sedang diajukan atau sudah terbit.',
-            ], 403);
-        }
-
         $validated = $request->validate([
             'source_type' => 'required|in:file,link',
             'title' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
-            'link_url' => 'required_if:source_type,link|nullable|url|max:2048',
-            'file' => 'required_if:source_type,file|nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'link_url' => 'nullable|url|max:2048',
+            'file' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
         ]);
+
+        $hasNotes = filled($validated['notes'] ?? null);
+        $hasLink = filled($validated['link_url'] ?? null);
+        $hasFile = $request->hasFile('file');
+
+        if (! $hasNotes && ! $hasLink && ! $hasFile) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Isi komentar/catatan atau unggah file/tautan bukti terlebih dahulu.',
+            ], 422);
+        }
 
         $payload = [
             'metric_id' => $metric->id,
@@ -116,11 +120,11 @@ class EvidenceController extends Controller
             'reviewed_at' => null,
         ];
 
-        if ($validated['source_type'] === 'link') {
+        if ($validated['source_type'] === 'link' && $hasLink) {
             $payload['link_url'] = $validated['link_url'];
         }
 
-        if ($validated['source_type'] === 'file') {
+        if ($validated['source_type'] === 'file' && $hasFile) {
             $file = $request->file('file');
             $baseName = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'bukti';
             $storedName = sprintf('%s-%s.%s', $baseName, now()->format('YmdHis'), $file->getClientOriginalExtension());
@@ -154,13 +158,6 @@ class EvidenceController extends Controller
         }
 
         $evidence = TrxEvidence::with('metric.standard')->findOrFail($id);
-
-        if (in_array($evidence->metric->standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Bukti tidak dapat dihapus karena standar sedang diajukan atau sudah terbit.',
-            ], 403);
-        }
 
         if ($evidence->file_path) {
             Storage::disk('local')->delete($evidence->file_path);

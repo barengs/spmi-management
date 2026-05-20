@@ -52,7 +52,6 @@ export default function ExecutionRepositoryPage() {
     const user = useSelector((state) => state.auth.user);
     const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
     const hasRole = (roleName) => roleNames.includes(roleName);
-    const isAuditee = hasRole('Auditee');
     const [standards, setStandards] = useState([]);
     const [selectedStandardId, setSelectedStandardId] = useState('');
     const [indicators, setIndicators] = useState([]);
@@ -69,7 +68,7 @@ export default function ExecutionRepositoryPage() {
     const [previewUrl, setPreviewUrl] = useState('');
     const [previewType, setPreviewType] = useState('');
     const [previewLoading, setPreviewLoading] = useState(false);
-    const canManageStandardEvidence = !isAuditee && (
+    const canUploadEvidence = user?.permissions?.includes('evidence.upload') || (
         hasRole('SuperAdmin')
         || hasRole('LPM-Admin')
         || hasRole('Kepala LPMI')
@@ -348,7 +347,7 @@ export default function ExecutionRepositoryPage() {
                             </div>
                         </div>
 
-                        {canManageStandardEvidence ? (
+                        {canUploadEvidence ? (
                             <form onSubmit={handleUpload} className="mt-6 space-y-5">
                                 <div className="flex gap-3">
                                     <button
@@ -385,7 +384,7 @@ export default function ExecutionRepositoryPage() {
                                             value={notes}
                                             onChange={(event) => setNotes(event.target.value)}
                                             className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                                            placeholder="Opsional"
+                                            placeholder="Tambahkan komentar atau keterangan bukti"
                                         />
                                     </div>
                                 </div>
@@ -451,7 +450,7 @@ export default function ExecutionRepositoryPage() {
                             </form>
                         ) : (
                             <div className="mt-6 rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">
-                                Upload dokumen pada penetapan standar hanya tersedia untuk LPMI Admin, Kepala LPMI, Wakil Rektor 1/2/3, dan Rektor. Halaman ini tampil sebagai mode baca.
+                                Anda belum memiliki hak untuk mengunggah bukti pada indikator ini. Halaman ini tampil sebagai mode baca.
                             </div>
                         )}
                     </div>

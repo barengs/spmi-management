@@ -8,18 +8,13 @@ export default function Sidebar({ isOpen, setIsOpen, isOnline = true, pendingQue
     const permissions = useSelector((state) => state.auth.user?.permissions || []);
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
     const isPerumus = hasRole('Perumus');
-    const canAccessNotifications = hasRole('SuperAdmin')
-        || permissions.includes('standard.publish')
-        || permissions.includes('audit.view')
-        || permissions.includes('audit.score.update');
 
     // Menu items based on capabilities/roles
     const [masterOpen, setMasterOpen] = useState(true);
 
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: Icons.dashboard },
-        { label: 'Notifikasi', path: '/notifications', icon: Icons.bell, visible: canAccessNotifications },
-        { label: 'Borang', path: '/borang', icon: Icons.document, permissions: ['standard.update', 'audit.score.update'] },
+        { label: 'Borang', path: '/borang', icon: Icons.document, permissions: ['standard.update', 'audit.score.update', 'audit.view'] },
         { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view'], hideRoles: ['Auditor', 'Lead Auditor'] },
         { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'], hideRoles: ['Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor'] },
         { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, permissions: ['audit.score.update'] },

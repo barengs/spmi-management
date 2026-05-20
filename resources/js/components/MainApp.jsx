@@ -9,6 +9,7 @@ import EvidenceAuditPage from '../pages/audit/EvidenceAuditPage';
 import AuditSchedulePage from '../pages/audit/AuditSchedulePage';
 import StandardAuditReviewPage from '../pages/audit/StandardAuditReviewPage';
 import BorangManagementPage from '../pages/borang/BorangManagementPage';
+import BorangDetailPage from '../pages/borang/BorangDetailPage';
 import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
@@ -46,11 +47,6 @@ const PermissionRoute = ({ permission, permissions: allowedPermissions = [], rol
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
-    const deniesAuditeeExecution = allowedRoles.length > 0 && hasRole('Auditee');
-
-    if (deniesAuditeeExecution) {
-        return <Navigate to="/" replace />;
-    }
 
     if (
         hasRole('SuperAdmin')
@@ -94,8 +90,16 @@ export default function MainApp() {
                         <Route
                             path="borang"
                             element={
-                                <PermissionRoute permissions={['standard.update', 'audit.score.update']}>
+                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
                                     <BorangManagementPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="borang/items/:borangItemId/detail"
+                            element={
+                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
+                                    <BorangDetailPage />
                                 </PermissionRoute>
                             }
                         />
@@ -107,7 +111,7 @@ export default function MainApp() {
                             path="standards/:id/execution"
                             element={
                                 <PermissionRoute
-                                    roles={['LPM-Admin', 'Kepala LPMI', 'Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor']}
+                                    roles={['LPM-Admin', 'Kepala LPMI', 'Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor', 'Auditee']}
                                 >
                                     <ExecutionRepositoryPage />
                                 </PermissionRoute>

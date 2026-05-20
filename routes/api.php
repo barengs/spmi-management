@@ -128,6 +128,8 @@ Route::prefix('v1')->group(function () {
 
         Route::prefix('borang')->group(function () {
             Route::get('/prodis/{prodi}',      [BorangController::class, 'index']);
+            Route::get('/items/{borangItem}',  [BorangController::class, 'show']);
+            Route::post('/items/{borangItem}/evidences', [BorangController::class, 'storeEvidence']);
             Route::post('/',                   [BorangController::class, 'store']);
             Route::delete('/{borangItem}',     [BorangController::class, 'destroy']);
         });
