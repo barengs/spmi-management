@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api, { getCached } from '../../services/api';
@@ -54,9 +55,65 @@ function walkMetrics(nodes, standard, rows = [], ancestors = []) {
     return rows;
 }
 
+function getAuditStatusMeta(status) {
+    if (status === 'ACCEPTED') {
+        return {
+            label: 'Selesai Dicek',
+            className: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+        };
+    }
+
+    if (status === 'PENDING') {
+        return {
+            label: 'Menunggu Review',
+            className: 'bg-amber-100 text-amber-700 border-amber-200',
+        };
+    }
+
+    if (status === 'REJECTED') {
+        return {
+            label: 'Perlu Perbaikan',
+            className: 'bg-rose-100 text-rose-700 border-rose-200',
+        };
+    }
+
+    return {
+        label: 'Belum Ada Bukti',
+        className: 'bg-gray-100 text-gray-700 border-gray-200',
+    };
+}
+
+function formatDateTime(value) {
+    if (!value) {
+        return '-';
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return '-';
+    }
+
+    return date.toLocaleString('id-ID', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    });
+}
+
+function DetailInfoCard({ label, value, hint }) {
+    return (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">{label}</div>
+            <div className="mt-2 text-sm font-semibold text-gray-900">{value || '-'}</div>
+            {hint ? <div className="mt-1 text-xs leading-5 text-gray-500">{hint}</div> : null}
+        </div>
+    );
+}
+
 export default function BorangManagementPage() {
     const dispatch = useDispatch();
     const PAGE_SIZE = 10;
+    const user = useSelector((state) => state.auth.user);
     const {
         units,
         loading,
@@ -80,13 +137,36 @@ export default function BorangManagementPage() {
         selectedPj,
         selectedTargetSasaran,
     } = useSelector((state) => state.borang);
+    const permissions = user?.permissions || [];
+    const roles = user?.roles || [];
+    const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
+    const canManageBorang = hasRole('SuperAdmin') || permissions.includes('standard.update');
+    const canAuditBorang = permissions.includes('audit.score.update');
+    const canCreatePtk = permissions.includes('ptk.create');
+    const canEditAuditSchedule = hasRole('SuperAdmin') || hasRole('LPM-Admin');
+    const [assignedSchedules, setAssignedSchedules] = useState([]);
+    const [creatingPtkId, setCreatingPtkId] = useState(null);
+    const [detailTab, setDetailTab] = useState('information');
+    const [selectedSchedule, setSelectedSchedule] = useState(null);
 
     const fetchPageData = async () => {
         try {
             dispatch(setLoading(true));
 
-            const unitsResponse = await api.get('/units/flat');
-            dispatch(setUnits(unitsResponse.data.data || []));
+            if (canManageBorang) {
+                const [unitsResponse, schedulesResponse] = await Promise.all([
+                    api.get('/units/flat'),
+                    permissions.includes('audit.view') || hasRole('SuperAdmin') || hasRole('LPM-Admin')
+                        ? api.get('/audit-schedules')
+                        : Promise.resolve({ data: { data: [] } }),
+                ]);
+                dispatch(setUnits(unitsResponse.data.data || []));
+                setAssignedSchedules(schedulesResponse.data.data || []);
+            } else if (canAuditBorang) {
+                const schedulesResponse = await api.get('/audit-schedules');
+                setAssignedSchedules(schedulesResponse.data.data || []);
+                dispatch(setUnits([]));
+            }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Data borang gagal dimuat.');
         } finally {
@@ -96,7 +176,7 @@ export default function BorangManagementPage() {
 
     useEffect(() => {
         fetchPageData();
-    }, []);
+    }, [canManageBorang, canAuditBorang, permissions, roles]);
 
     const openAddBorangModal = async () => {
         dispatch(openAddModal());
@@ -145,28 +225,51 @@ export default function BorangManagementPage() {
         dispatch(closeAddModal());
     };
 
-    const facultyRows = useMemo(() => (
-        units
-            .filter((unit) => unit.level === 'faculty')
-            .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'))
-    ), [units]);
+    const facultyRows = useMemo(() => {
+        if (canManageBorang) {
+            return units
+                .filter((unit) => unit.level === 'faculty')
+                .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
+        }
 
-    const facultyProdiRows = useMemo(() => (
-        facultyRows.flatMap((faculty) => (
-            units
-                .filter((unit) => unit.level === 'department' && String(unit.parent_id) === String(faculty.id))
-                .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'))
-                .map((prodi) => ({
-                    faculty,
-                    prodi,
-                }))
-        ))
-    ), [facultyRows, units]);
+        const facultyMap = new Map();
+        assignedSchedules.forEach((schedule) => {
+            if (schedule?.faculty?.id && !facultyMap.has(String(schedule.faculty.id))) {
+                facultyMap.set(String(schedule.faculty.id), schedule.faculty);
+            }
+        });
+
+        return Array.from(facultyMap.values()).sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
+    }, [assignedSchedules, canManageBorang, units]);
+
+    const facultyProdiRows = useMemo(() => {
+        if (canManageBorang) {
+            return facultyRows.flatMap((faculty) => (
+                units
+                    .filter((unit) => unit.level === 'department' && String(unit.parent_id) === String(faculty.id))
+                    .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'))
+                    .map((prodi) => ({
+                        faculty,
+                        prodi,
+                        schedule: null,
+                    }))
+            ));
+        }
+
+        return assignedSchedules
+            .filter((schedule) => schedule?.faculty?.id && schedule?.prodi?.id)
+            .map((schedule) => ({
+                faculty: schedule.faculty,
+                prodi: schedule.prodi,
+                schedule,
+            }))
+            .sort((left, right) => left.prodi.name.localeCompare(right.prodi.name, 'id-ID'));
+    }, [assignedSchedules, canManageBorang, facultyRows, units]);
 
     const filteredFacultyProdiRows = useMemo(() => (
-        facultyProdiRows.filter(({ faculty, prodi }) => (
+        facultyProdiRows.filter(({ faculty, prodi, schedule }) => (
             (pairsFacultyFilter === 'ALL' || String(faculty.id) === pairsFacultyFilter)
-            && `${faculty.name} ${faculty.code || ''} ${prodi.name} ${prodi.code || ''}`.toLowerCase().includes(pairsSearch.trim().toLowerCase())
+            && `${faculty.name} ${faculty.code || ''} ${prodi.name} ${prodi.code || ''} ${schedule?.standard?.name || ''}`.toLowerCase().includes(pairsSearch.trim().toLowerCase())
         ))
     ), [facultyProdiRows, pairsFacultyFilter, pairsSearch]);
 
@@ -229,14 +332,22 @@ export default function BorangManagementPage() {
             indikator: row.indikator,
             targetSasaran: row.target_sasaran,
             pj: row.pj,
+            evidenceSummary: row.evidence_summary,
+            ptkSummary: row.ptk_summary,
         }));
     };
 
-    const openRequirementTable = async (faculty, prodi) => {
+    const openRequirementTable = async (faculty, prodi, scheduleOverride = null) => {
         dispatch(setSelectedFaculty(faculty));
         dispatch(setSelectedProdi(prodi));
         dispatch(setActiveRequirementTab('DEKAN'));
         dispatch(setLoadingRequirements(true));
+        setDetailTab('information');
+        setSelectedSchedule(
+            scheduleOverride
+            || assignedSchedules.find((schedule) => String(schedule?.prodi?.id || '') === String(prodi.id))
+            || null
+        );
 
         try {
             const rows = await loadRequirementRows(prodi.id);
@@ -251,6 +362,8 @@ export default function BorangManagementPage() {
 
     const goBackToPairs = () => {
         dispatch(resetBorangView());
+        setSelectedSchedule(null);
+        setDetailTab('information');
     };
 
     const pageMeta = viewMode === 'pairs'
@@ -259,8 +372,10 @@ export default function BorangManagementPage() {
             description: 'Halaman manajemen borang menampilkan seluruh kombinasi fakultas dan prodi. Detailnya memuat daftar dokumen borang yang dibentuk dari indikator standar oleh LPMI Admin.',
         }
         : {
-            title: `Dokumen Borang ${selectedFaculty?.name || '-'} / ${selectedProdi?.name || '-'}`.trim(),
-            description: 'Daftar berikut menampilkan indikator, target sasaran, dan PJ dokumen borang untuk prodi terpilih.',
+            title: `${canManageBorang ? 'Dokumen Borang' : 'Checklist Audit Borang'} ${selectedFaculty?.name || '-'} / ${selectedProdi?.name || '-'}`.trim(),
+            description: canManageBorang
+                ? 'Daftar berikut menampilkan indikator, target sasaran, dan PJ dokumen borang untuk prodi terpilih.'
+                : 'Auditor dapat melihat status pengecekan tiap indikator, membuka review audit, dan membuat PTK bila diperlukan.',
         };
 
     const filteredIndicators = useMemo(() => {
@@ -329,14 +444,59 @@ export default function BorangManagementPage() {
         }
     };
 
+    const handleCreatePtk = async (row) => {
+        if (!selectedProdi) {
+            toast.error('Prodi belum dipilih.');
+            return;
+        }
+
+        const findingSummary = window.prompt('Tuliskan temuan auditor untuk indikator ini:');
+
+        if (!findingSummary || !findingSummary.trim()) {
+            return;
+        }
+
+        setCreatingPtkId(row.id);
+
+        try {
+            const response = await api.post('/ptk', {
+                metric_id: row.metricId,
+                assigned_unit_id: selectedProdi.id,
+                finding_summary: findingSummary.trim(),
+            });
+
+            toast.success(response.data.message || 'PTK berhasil dibuat.');
+
+            dispatch(setRequirementRows(
+                requirementRows.map((item) => (
+                    item.id === row.id
+                        ? {
+                            ...item,
+                            ptkSummary: {
+                                total: (item.ptkSummary?.total || 0) + 1,
+                                open: (item.ptkSummary?.open || 0) + 1,
+                            },
+                        }
+                        : item
+                ))
+            ));
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'PTK gagal dibuat.');
+        } finally {
+            setCreatingPtkId(null);
+        }
+    };
+
     return (
         <div className="space-y-6 p-6 sm:p-8">
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                        <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
+                        <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${
+                            canManageBorang ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                        }`}>
                             <Icon icon={Icons.document} width={14} />
-                            LPM-Admin
+                            {canManageBorang ? 'LPM-Admin' : 'Audit Mode'}
                         </div>
                         <h1 className="mt-4 text-2xl font-semibold text-gray-900">{pageMeta.title}</h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
@@ -355,7 +515,7 @@ export default function BorangManagementPage() {
                                 Kembali
                             </button>
                         )}
-                        {viewMode === 'requirements' && (
+                        {viewMode === 'requirements' && canManageBorang && (
                             <button
                                 type="button"
                                 onClick={openAddBorangModal}
@@ -373,7 +533,9 @@ export default function BorangManagementPage() {
                 <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
                     <div className="border-b border-gray-200 px-6 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Fakultas dan Prodi</h2>
+                            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                {canManageBorang ? 'Daftar Fakultas dan Prodi' : 'Daftar Prodi Audit'}
+                            </h2>
                             <span className="text-sm text-gray-500">{filteredFacultyProdiRows.length} baris</span>
                         </div>
                     </div>
@@ -394,7 +556,7 @@ export default function BorangManagementPage() {
                             type="text"
                             value={pairsSearch}
                             onChange={(event) => dispatch(setPairsSearch(event.target.value))}
-                            placeholder="Filter faculty name, prodi name, atau kode..."
+                            placeholder={canManageBorang ? 'Filter faculty name, prodi name, atau kode...' : 'Filter fakultas, prodi, standar, atau kode...'}
                             className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
                         />
                     </div>
@@ -405,36 +567,42 @@ export default function BorangManagementPage() {
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Nama Prodi</th>
                                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Nama Fakultas</th>
+                                    {!canManageBorang && (
+                                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Standar</th>
+                                    )}
                                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-white">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-500">
-                                            Memuat data fakultas dan prodi...
+                                        <td colSpan={canManageBorang ? 3 : 4} className="px-6 py-10 text-center text-sm text-gray-500">
+                                            Memuat data borang...
                                         </td>
                                     </tr>
                                 ) : filteredFacultyProdiRows.length === 0 ? (
                                     <tr>
-                                        <td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-500">
-                                            Belum ada data fakultas dan prodi.
+                                        <td colSpan={canManageBorang ? 3 : 4} className="px-6 py-10 text-center text-sm text-gray-500">
+                                            {canManageBorang ? 'Belum ada data fakultas dan prodi.' : 'Belum ada prodi audit yang ditugaskan kepada Anda.'}
                                         </td>
                                     </tr>
                                 ) : (
-                                    paginatedFacultyProdiRows.map(({ faculty, prodi }) => (
-                                        <tr key={`${faculty.id}-${prodi.id}`} className="hover:bg-gray-50">
+                                    paginatedFacultyProdiRows.map(({ faculty, prodi, schedule }) => (
+                                        <tr key={schedule?.id ? `schedule-${schedule.id}` : `${faculty.id}-${prodi.id}`} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 text-sm font-semibold text-gray-900">{prodi.name}</td>
                                             <td className="px-6 py-4 text-sm text-gray-700">{faculty.name}</td>
+                                            {!canManageBorang && (
+                                                <td className="px-6 py-4 text-sm text-gray-700">{schedule?.standard?.name || '-'}</td>
+                                            )}
                                             <td className="px-6 py-4 text-right">
                                                 <button
                                                     type="button"
-                                                    onClick={() => openRequirementTable(faculty, prodi)}
+                                                    onClick={() => openRequirementTable(faculty, prodi, schedule)}
                                                     disabled={loadingRequirements}
                                                     className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
                                                 >
                                                     <Icon icon={Icons.eye} width={16} />
-                                                    {loadingRequirements ? 'Memuat...' : 'Lihat Dokumen'}
+                                                    {loadingRequirements ? 'Memuat...' : canManageBorang ? 'Lihat Dokumen' : 'Lihat Checklist'}
                                                 </button>
                                             </td>
                                         </tr>
@@ -457,129 +625,234 @@ export default function BorangManagementPage() {
                 <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
                     <div className="border-b border-gray-200 px-6 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Dokumen Borang</h2>
-                            <span className="text-sm text-gray-500">{filteredRequirementRows.length} baris</span>
+                            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">
+                                {canManageBorang ? 'Detail Borang Prodi' : 'Detail Checklist Audit'}
+                            </h2>
+                            {detailTab !== 'information' && (
+                                <span className="text-sm text-gray-500">{filteredRequirementRows.length} baris</span>
+                            )}
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-3">
-                            <button
-                                type="button"
-                                onClick={() => dispatch(setActiveRequirementTab('DEKAN'))}
-                                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                                    activeRequirementTab === 'DEKAN'
-                                        ? 'bg-amber-600 text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
-                            >
-                                PJ Dekan
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => dispatch(setActiveRequirementTab('KAPRODI'))}
-                                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                                    activeRequirementTab === 'KAPRODI'
-                                        ? 'bg-amber-600 text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
-                            >
-                                PJ Kaprodi
-                            </button>
-                        </div>
-                    </div>
-                    <div className="grid gap-4 border-b border-gray-200 px-6 py-4 md:grid-cols-[260px_minmax(0,1fr)]">
-                        <select
-                            value={requirementsStandardFilter}
-                            onChange={(event) => dispatch(setRequirementsStandardFilter(event.target.value))}
-                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                        >
-                            <option value="ALL">Semua Standar</option>
-                            {standardOptions.map((standardName) => (
-                                <option key={standardName} value={standardName}>
-                                    {standardName}
-                                </option>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            {[
+                                { id: 'information', label: 'Informasi' },
+                                { id: 'DEKAN', label: 'PJ Dekan' },
+                                { id: 'KAPRODI', label: 'PJ Kaprodi' },
+                            ].map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    type="button"
+                                    onClick={() => {
+                                        setDetailTab(tab.id);
+                                        if (tab.id === 'DEKAN' || tab.id === 'KAPRODI') {
+                                            dispatch(setActiveRequirementTab(tab.id));
+                                        }
+                                    }}
+                                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                        detailTab === tab.id
+                                            ? canManageBorang
+                                                ? 'bg-amber-600 text-white'
+                                                : 'bg-rose-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {tab.label}
+                                </button>
                             ))}
-                        </select>
-                        <input
-                            type="text"
-                            value={requirementsSearch}
-                            onChange={(event) => dispatch(setRequirementsSearch(event.target.value))}
-                            placeholder="Filter standar, IKU, IKT, sasaran mutu, indikator, target..."
-                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                        />
+                        </div>
                     </div>
+                    {detailTab === 'information' ? (
+                        <div className="space-y-5 px-6 py-5">
+                            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                                <DetailInfoCard label="Fakultas" value={selectedFaculty?.name || '-'} />
+                                <DetailInfoCard label="Prodi" value={selectedProdi?.name || '-'} />
+                                <DetailInfoCard label="Jumlah Poin Borang" value={String(requirementRows.length)} hint="Total indikator yang masuk ke borang prodi ini." />
+                                <DetailInfoCard label="Lead Auditor" value={selectedSchedule?.lead_auditor?.name || '-'} hint={selectedSchedule?.lead_auditor?.email || null} />
+                                <DetailInfoCard label="Auditor" value={selectedSchedule?.auditor?.name || '-'} hint={selectedSchedule?.auditor?.email || null} />
+                                <DetailInfoCard label="Auditee" value={selectedSchedule?.auditee?.name || '-'} hint={selectedSchedule?.auditee?.email || null} />
+                                <DetailInfoCard label="Mulai Audit" value={formatDateTime(selectedSchedule?.scheduled_start)} />
+                                <DetailInfoCard label="Selesai Audit" value={formatDateTime(selectedSchedule?.scheduled_end)} />
+                                <DetailInfoCard label="Status Jadwal" value={selectedSchedule?.overall_status || '-'} hint={selectedSchedule?.location || null} />
+                            </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">NO.</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Standar Mutu</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">IKU</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">IKT</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Sasaran Mutu</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Indikator</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Target Sasaran</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">PJ</th>
-                                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Kelola</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 bg-white">
-                                {loadingRequirements ? (
-                                    <tr>
-                                        <td colSpan={9} className="px-6 py-10 text-center text-sm text-gray-500">
-                                            Memuat daftar dokumen borang...
-                                        </td>
-                                    </tr>
-                                ) : loading ? (
-                                    <tr>
-                                        <td colSpan={9} className="px-6 py-10 text-center text-sm text-gray-500">
-                                            Memuat daftar dokumen borang...
-                                        </td>
-                                    </tr>
-                                ) : filteredRequirementRows.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={9} className="px-6 py-10 text-center text-sm text-gray-500">
-                                            Belum ada indikator untuk tab {activeRequirementTab === 'DEKAN' ? 'PJ Dekan' : 'PJ Kaprodi'}.
-                                        </td>
-                                    </tr>
+                            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Catatan Jadwal</div>
+                                <div className="mt-2 text-sm leading-6 text-gray-700">
+                                    {selectedSchedule?.notes || 'Belum ada catatan jadwal audit untuk prodi ini.'}
+                                </div>
+                            </div>
+
+                            <div className={`rounded-2xl border px-5 py-4 text-sm leading-6 ${
+                                canEditAuditSchedule
+                                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                    : 'border-gray-200 bg-gray-50 text-gray-700'
+                            }`}>
+                                {canEditAuditSchedule ? (
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <span>Perubahan auditor, lead auditor, dan jadwal audit hanya dapat dilakukan oleh LPM-Admin atau SuperAdmin melalui halaman Jadwal Audit.</span>
+                                        <Link
+                                            to="/audit/schedules"
+                                            className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+                                        >
+                                            <Icon icon={Icons.schedule} width={14} />
+                                            Buka Jadwal Audit
+                                        </Link>
+                                    </div>
                                 ) : (
-                                    paginatedRequirementRows.map((row) => (
-                                        <tr key={`${row.standardId}-${row.id}-${row.no}`} className="align-top hover:bg-gray-50">
-                                            <td className="px-4 py-4 text-sm text-gray-700">{row.no}</td>
-                                            <td className="px-4 py-4 text-sm font-semibold text-gray-900">{row.standardName}</td>
-                                            <td className="px-4 py-4 text-sm text-gray-700">{row.iku}</td>
-                                            <td className="px-4 py-4 text-sm text-gray-700">{row.ikt}</td>
-                                            <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.sasaranMutu}</td>
-                                            <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.indikator}</td>
-                                            <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.targetSasaran}</td>
-                                            <td className="px-4 py-4 text-sm font-medium text-gray-700">{row.pj}</td>
-                                            <td className="px-4 py-4 text-right">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDeleteBorang(row.id)}
-                                                    className="inline-flex items-center gap-2 rounded-full border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                                                >
-                                                    <Icon icon={Icons.delete} width={14} />
-                                                    Hapus
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
+                                    'Informasi auditor, lead auditor, dan jadwal audit bersifat read-only pada halaman ini. Perubahan hanya dapat dilakukan oleh LPM-Admin atau SuperAdmin.'
                                 )}
-                            </tbody>
-                        </table>
-                    </div>
-                    <TablePagination
-                        page={requirementsPage}
-                        totalPages={requirementTotalPages}
-                        totalItems={filteredRequirementRows.length}
-                        pageSize={PAGE_SIZE}
-                        onPageChange={(page) => dispatch(setRequirementsPage(page))}
-                    />
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid gap-4 border-b border-gray-200 px-6 py-4 md:grid-cols-[260px_minmax(0,1fr)]">
+                                <select
+                                    value={requirementsStandardFilter}
+                                    onChange={(event) => dispatch(setRequirementsStandardFilter(event.target.value))}
+                                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+                                >
+                                    <option value="ALL">Semua Standar</option>
+                                    {standardOptions.map((standardName) => (
+                                        <option key={standardName} value={standardName}>
+                                            {standardName}
+                                        </option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="text"
+                                    value={requirementsSearch}
+                                    onChange={(event) => dispatch(setRequirementsSearch(event.target.value))}
+                                    placeholder="Filter standar, IKU, IKT, sasaran mutu, indikator, target..."
+                                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+                                />
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">NO.</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Standar Mutu</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">IKU</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">IKT</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Sasaran Mutu</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Indikator</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Target Sasaran</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">PJ</th>
+                                            {!canManageBorang && (
+                                                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Checklist</th>
+                                            )}
+                                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                                                {canManageBorang ? 'Kelola' : 'Aksi Audit'}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 bg-white">
+                                        {loadingRequirements ? (
+                                            <tr>
+                                                <td colSpan={canManageBorang ? 9 : 10} className="px-6 py-10 text-center text-sm text-gray-500">
+                                                    Memuat daftar dokumen borang...
+                                                </td>
+                                            </tr>
+                                        ) : loading ? (
+                                            <tr>
+                                                <td colSpan={canManageBorang ? 9 : 10} className="px-6 py-10 text-center text-sm text-gray-500">
+                                                    Memuat daftar dokumen borang...
+                                                </td>
+                                            </tr>
+                                        ) : filteredRequirementRows.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={canManageBorang ? 9 : 10} className="px-6 py-10 text-center text-sm text-gray-500">
+                                                    Belum ada indikator untuk tab {activeRequirementTab === 'DEKAN' ? 'PJ Dekan' : 'PJ Kaprodi'}.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            paginatedRequirementRows.map((row) => (
+                                                <tr key={`${row.standardId}-${row.id}-${row.no}`} className="align-top hover:bg-gray-50">
+                                                    <td className="px-4 py-4 text-sm text-gray-700">{row.no}</td>
+                                                    <td className="px-4 py-4 text-sm font-semibold text-gray-900">{row.standardName}</td>
+                                                    <td className="px-4 py-4 text-sm text-gray-700">{row.iku}</td>
+                                                    <td className="px-4 py-4 text-sm text-gray-700">{row.ikt}</td>
+                                                    <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.sasaranMutu}</td>
+                                                    <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.indikator}</td>
+                                                    <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.targetSasaran}</td>
+                                                    <td className="px-4 py-4 text-sm font-medium text-gray-700">{row.pj}</td>
+                                                    {!canManageBorang && (
+                                                        <td className="px-4 py-4 text-sm">
+                                                            {(() => {
+                                                                const statusMeta = getAuditStatusMeta(row.evidenceSummary?.status);
+                                                                return (
+                                                                    <div className="space-y-2">
+                                                                        <span className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold ${statusMeta.className}`}>
+                                                                            {statusMeta.label}
+                                                                        </span>
+                                                                        <div className="text-xs text-gray-500">
+                                                                            {row.evidenceSummary?.accepted || 0} diterima, {row.evidenceSummary?.pending || 0} menunggu, {row.evidenceSummary?.rejected || 0} ditolak
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </td>
+                                                    )}
+                                                    <td className="px-4 py-4 text-right">
+                                                        {canManageBorang ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteBorang(row.id)}
+                                                                className="inline-flex items-center gap-2 rounded-full border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+                                                            >
+                                                                <Icon icon={Icons.delete} width={14} />
+                                                                Hapus
+                                                            </button>
+                                                        ) : (
+                                                            <div className="flex flex-wrap justify-end gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => window.location.assign(`/audit/standards/${row.standardId}/review`)}
+                                                                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                                                                >
+                                                                    <Icon icon={Icons.eye} width={14} />
+                                                                    Review
+                                                                </button>
+                                                                {canCreatePtk && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleCreatePtk(row)}
+                                                                        disabled={creatingPtkId === row.id}
+                                                                        className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
+                                                                    >
+                                                                        <Icon icon={Icons.add} width={14} />
+                                                                        {creatingPtkId === row.id ? 'Membuat...' : `PTK${row.ptkSummary?.open ? ` (${row.ptkSummary.open})` : ''}`}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <TablePagination
+                                page={requirementsPage}
+                                totalPages={requirementTotalPages}
+                                totalItems={filteredRequirementRows.length}
+                                pageSize={PAGE_SIZE}
+                                onPageChange={(page) => dispatch(setRequirementsPage(page))}
+                            />
+                        </>
+                    )}
                 </section>
             )}
 
-            <section className="rounded-3xl border border-dashed border-amber-200 bg-amber-50/60 p-5 text-sm leading-6 text-amber-900">
-                LPMI Admin menambahkan item borang per prodi dengan memilih indikator dari standar yang sudah disusun. Detail borang hanya menampilkan indikator yang sudah dipilih untuk prodi tersebut.
+            <section className={`rounded-3xl border border-dashed p-5 text-sm leading-6 ${
+                canManageBorang
+                    ? 'border-amber-200 bg-amber-50/60 text-amber-900'
+                    : 'border-rose-200 bg-rose-50/60 text-rose-900'
+            }`}>
+                {canManageBorang
+                    ? 'LPMI Admin menambahkan item borang per prodi dengan memilih indikator dari standar yang sudah disusun. Detail borang hanya menampilkan indikator yang sudah dipilih untuk prodi tersebut.'
+                    : 'Dalam audit mode, auditor hanya melihat borang untuk prodi yang ditugaskan. Setiap poin menampilkan status checklist bukti dan auditor dapat membuat PTK bila indikator memerlukan tindak koreksi.'}
             </section>
 
             {isAddModalOpen && (

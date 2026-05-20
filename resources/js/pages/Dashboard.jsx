@@ -212,15 +212,15 @@ export default function Dashboard() {
             return {
                 currentStep: 'head_lpmi_approval',
                 headline: 'Proses saat ini menunggu Pimpinan / Rektor',
-                helper: 'Seluruh persetujuan Kepala LPMI dan Wakil Rektor sudah lengkap, lalu menunggu keputusan final.',
+                helper: 'Persetujuan Kepala LPMI dan Wakil Rektor terkait sudah lengkap, lalu menunggu keputusan final.',
             };
         }
 
         if (waitingWr) {
             return {
                 currentStep: 'head_lpmi_approval',
-                headline: 'Proses saat ini menunggu Wakil Rektor 1, 2, dan 3',
-                helper: 'Kepala LPMI sudah menyetujui dan dokumen sedang menunggu persetujuan seluruh Wakil Rektor.',
+                headline: 'Proses saat ini menunggu Wakil Rektor terkait',
+                helper: 'Kepala LPMI sudah menyetujui dan dokumen sedang menunggu persetujuan Wakil Rektor sesuai kategori standar.',
             };
         }
 
@@ -274,7 +274,7 @@ export default function Dashboard() {
             },
             head_lpmi_approval: {
                 startedAt: getEarliest(submittedToHeadItems, 'head_lpmi_approved_at') || getEarliest(waitingItems.filter((item) => item.approval_stage === 'RECTOR'), 'wr1_approved_at'),
-                finishedAt: getEarliest(publishedItems, 'updated_at') || getEarliest(waitingItems.filter((item) => item.approval_stage === 'RECTOR'), 'wr3_approved_at') || null,
+                finishedAt: getEarliest(publishedItems, 'updated_at') || getEarliest(waitingItems.filter((item) => item.approval_stage === 'RECTOR'), 'wr1_approved_at') || null,
             },
             published: {
                 startedAt: getEarliest(publishedItems, 'updated_at') || getEarliest(publishedItems, 'created_at'),

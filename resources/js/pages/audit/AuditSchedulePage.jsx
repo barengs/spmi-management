@@ -201,6 +201,37 @@ export default function AuditSchedulePage() {
         fetchMetadata();
     }, []);
 
+    const selectedProdiMeta = useMemo(() => {
+        if (!form.prodi_id) {
+            return null;
+        }
+
+        if (editingSchedule?.prodi && String(editingSchedule.prodi.id) === String(form.prodi_id)) {
+            return {
+                id: editingSchedule.prodi.id,
+                parent_id: editingSchedule.faculty?.id || null,
+                name: editingSchedule.prodi.name,
+                code: editingSchedule.prodi.code,
+            };
+        }
+
+        return metadata.prodis.find((prodi) => String(prodi.id) === String(form.prodi_id)) || null;
+    }, [editingSchedule, form.prodi_id, metadata.prodis]);
+
+    const selectedFacultyMeta = useMemo(() => {
+        const derivedFacultyId = selectedProdiMeta?.parent_id || form.faculty_id;
+
+        if (!derivedFacultyId) {
+            return null;
+        }
+
+        if (editingSchedule?.faculty && String(editingSchedule.faculty.id) === String(derivedFacultyId)) {
+            return editingSchedule.faculty;
+        }
+
+        return metadata.faculties.find((faculty) => String(faculty.id) === String(derivedFacultyId)) || null;
+    }, [editingSchedule, form.faculty_id, metadata.faculties, selectedProdiMeta]);
+
     const prodiOptions = useMemo(() => {
         const filtered = metadata.prodis.filter((prodi) => !form.faculty_id || String(prodi.parent_id) === String(form.faculty_id));
 
@@ -680,26 +711,35 @@ export default function AuditSchedulePage() {
                             <div className="grid gap-4 md:grid-cols-2">
                                 <label className="space-y-2">
                                     <span className="text-sm font-medium text-gray-700">Fakultas</span>
-                                    <select
-                                        value={form.faculty_id}
-                                        onChange={(event) => setForm((current) => ({ ...current, faculty_id: event.target.value, prodi_id: '' }))}
-                                        className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                                    >
-                                        <option value="">Pilih fakultas</option>
-                                        {metadata.faculties.map((faculty) => (
-                                            <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
-                                        ))}
-                                    </select>
+                                    <input
+                                        type="text"
+                                        value={selectedFacultyMeta?.name || ''}
+                                        readOnly
+                                        placeholder="Akan terisi otomatis dari prodi"
+                                        className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 outline-none"
+                                    />
+                                    <div className="text-xs text-gray-500">
+                                        Fakultas ditentukan otomatis berdasarkan prodi yang dipilih.
+                                    </div>
                                 </label>
                                 <label className="space-y-2">
                                     <span className="text-sm font-medium text-gray-700">Prodi</span>
                                     <select
                                         value={form.prodi_id}
-                                        onChange={(event) => setForm((current) => ({ ...current, prodi_id: event.target.value }))}
+                                        onChange={(event) => {
+                                            const nextProdiId = event.target.value;
+                                            const nextProdi = metadata.prodis.find((prodi) => String(prodi.id) === String(nextProdiId));
+
+                                            setForm((current) => ({
+                                                ...current,
+                                                prodi_id: nextProdiId,
+                                                faculty_id: nextProdi?.parent_id ? String(nextProdi.parent_id) : '',
+                                            }));
+                                        }}
                                         className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
                                     >
                                         <option value="">Pilih prodi</option>
-                                        {prodiOptions.map((prodi) => (
+                                        {metadata.prodis.map((prodi) => (
                                             <option key={prodi.id} value={prodi.id}>{prodi.name}</option>
                                         ))}
                                     </select>

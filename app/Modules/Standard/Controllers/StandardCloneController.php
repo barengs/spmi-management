@@ -7,11 +7,182 @@ use Illuminate\Http\Request;
 use App\Modules\Standard\Models\MstStandard;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MetricTarget;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class StandardCloneController extends Controller
 {
+    private function denyUnless(Request $request, string $permission, string $message): ?JsonResponse
+    {
+        if (! $request->user()?->can($permission)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        return null;
+    }
+
+    private function normalizeIdentity(string|null $name, string|null $category): string
+    {
+        return mb_strtolower(trim((string) $name)) . '|' . mb_strtolower(trim((string) $category));
+    }
+
+    private function cloneStandardTree(MstStandard $sourceStandard, array $overrides): MstStandard
+    {
+        $newStandard = $sourceStandard->replicate();
+        $newStandard->fill($overrides);
+        $newStandard->status = 'DRAFT';
+        $newStandard->approval_stage = 'DRAFT';
+        $newStandard->submitted_by = null;
+        $newStandard->approved_by = null;
+        $newStandard->review_submitted_by = null;
+        $newStandard->review_submitted_at = null;
+        $newStandard->head_lpmi_approved_by = null;
+        $newStandard->head_lpmi_approved_at = null;
+        $newStandard->wr1_approved_by = null;
+        $newStandard->wr1_approved_at = null;
+        $newStandard->wr2_approved_by = null;
+        $newStandard->wr2_approved_at = null;
+        $newStandard->wr3_approved_by = null;
+        $newStandard->wr3_approved_at = null;
+        $newStandard->rector_approved_by = null;
+        $newStandard->rector_approved_at = null;
+        $newStandard->reject_reason = null;
+        $newStandard->is_active = true;
+        $newStandard->save();
+
+        $rootMetrics = MstMetric::where('standard_id', $sourceStandard->id)
+            ->whereNull('parent_id')
+            ->orderBy('order', 'asc')
+            ->get();
+
+        foreach ($rootMetrics as $rootMetric) {
+            $this->cloneMetricRecursive($rootMetric, $newStandard->id, null);
+        }
+
+        return $newStandard;
+    }
+
+    public function cycleImportCandidates(Request $request): JsonResponse
+    {
+        if ($denied = $this->denyUnless($request, 'standard.create', 'Anda tidak memiliki hak akses untuk mengimpor standar dari siklus lama.')) {
+            return $denied;
+        }
+
+        $validated = $request->validate([
+            'target_period' => 'required|integer',
+        ]);
+
+        $targetPeriod = (int) $validated['target_period'];
+
+        $currentStandards = MstStandard::query()
+            ->where('periode_tahun', $targetPeriod)
+            ->get(['name', 'category']);
+
+        $existingIdentities = $currentStandards
+            ->map(fn (MstStandard $standard) => $this->normalizeIdentity($standard->name, $standard->category))
+            ->all();
+
+        $latestHistoricalStandards = MstStandard::query()
+            ->whereNotNull('periode_tahun')
+            ->where('periode_tahun', '<', $targetPeriod)
+            ->orderByDesc('periode_tahun')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->get()
+            ->unique(fn (MstStandard $standard) => $this->normalizeIdentity($standard->name, $standard->category))
+            ->reject(fn (MstStandard $standard) => in_array(
+                $this->normalizeIdentity($standard->name, $standard->category),
+                $existingIdentities,
+                true
+            ))
+            ->values();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $latestHistoricalStandards->map(fn (MstStandard $standard) => [
+                'source_standard_id' => $standard->id,
+                'name' => $standard->name,
+                'category' => $standard->category,
+                'source_period' => $standard->periode_tahun,
+                'source_status' => $standard->status,
+                'referensi_regulasi' => $standard->referensi_regulasi,
+            ])->values(),
+        ]);
+    }
+
+    public function cycleImport(Request $request): JsonResponse
+    {
+        if ($denied = $this->denyUnless($request, 'standard.create', 'Anda tidak memiliki hak akses untuk mengimpor standar dari siklus lama.')) {
+            return $denied;
+        }
+
+        $validated = $request->validate([
+            'target_period' => 'required|integer',
+            'source_standard_ids' => 'required|array|min:1',
+            'source_standard_ids.*' => 'integer|distinct|exists:mst_standards,id',
+        ]);
+
+        $targetPeriod = (int) $validated['target_period'];
+        $sourceIds = collect($validated['source_standard_ids'])->map(fn ($id) => (int) $id)->values();
+
+        $sourceStandards = MstStandard::query()
+            ->whereIn('id', $sourceIds)
+            ->get()
+            ->keyBy('id');
+
+        foreach ($sourceIds as $sourceId) {
+            $sourceStandard = $sourceStandards->get($sourceId);
+
+            if (! $sourceStandard || (int) $sourceStandard->periode_tahun >= $targetPeriod) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Daftar standar yang dipilih tidak valid untuk periode tujuan.',
+                ], 422);
+            }
+        }
+
+        $existingIdentities = MstStandard::query()
+            ->where('periode_tahun', $targetPeriod)
+            ->get(['name', 'category'])
+            ->map(fn (MstStandard $standard) => $this->normalizeIdentity($standard->name, $standard->category));
+
+        $importedStandards = new Collection();
+
+        DB::transaction(function () use ($sourceIds, $sourceStandards, $targetPeriod, &$existingIdentities, &$importedStandards) {
+            foreach ($sourceIds as $sourceId) {
+                $sourceStandard = $sourceStandards->get($sourceId);
+                $identity = $this->normalizeIdentity($sourceStandard->name, $sourceStandard->category);
+
+                if ($existingIdentities->contains($identity)) {
+                    continue;
+                }
+
+                $importedStandard = $this->cloneStandardTree($sourceStandard, [
+                    'periode_tahun' => $targetPeriod,
+                    'name' => $sourceStandard->name,
+                    'category' => $sourceStandard->category,
+                    'referensi_regulasi' => $sourceStandard->referensi_regulasi,
+                ]);
+
+                $existingIdentities->push($identity);
+                $importedStandards->push($importedStandard->fresh());
+            }
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $importedStandards->isEmpty()
+                ? 'Tidak ada standar baru yang perlu diimpor ke periode ini.'
+                : 'Standar dari siklus lama berhasil diimpor ke periode aktif.',
+            'data' => $importedStandards->values(),
+        ], 201);
+    }
+
     /**
      * Copy / Clone keseluruhan MstStandard beserta hirarki MstMetric dan MetricTargets di dalamnya.
      */
@@ -40,27 +211,11 @@ class StandardCloneController extends Controller
         try {
             DB::beginTransaction();
 
-            // 1. Gandakan Tabel Induk (MstStandard)
-            $newStandard = $sourceStandard->replicate();
-            $newStandard->name = $request->name;
-            $newStandard->periode_tahun = $request->periode_tahun;
-            if ($request->has('category')) {
-                $newStandard->category = $request->category;
-            }
-            $newStandard->status = 'DRAFT'; // Paksa status DRAFT pada standar copy
-            $newStandard->is_active = true;
-            $newStandard->save();
-
-            // 2. Persiapkan Rekursi untuk Deep Copy Metrics (Struktur Hirarkis)
-            // Hanya ambil metrics root (parent_id = null)
-            $rootMetrics = MstMetric::where('standard_id', $sourceStandard->id)
-                                    ->whereNull('parent_id')
-                                    ->orderBy('order', 'asc')
-                                    ->get();
-
-            foreach ($rootMetrics as $rootMetric) {
-                $this->cloneMetricRecursive($rootMetric, $newStandard->id, null);
-            }
+            $newStandard = $this->cloneStandardTree($sourceStandard, [
+                'name' => $request->name,
+                'periode_tahun' => $request->periode_tahun,
+                'category' => $request->has('category') ? $request->category : $sourceStandard->category,
+            ]);
 
             DB::commit();
 

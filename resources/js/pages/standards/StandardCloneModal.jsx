@@ -6,7 +6,7 @@ export default function StandardCloneModal({ isOpen, onClose, originalStandard, 
     const [formData, setFormData] = useState({
         name: '',
         periode_tahun: new Date().getFullYear() + 1,
-        category: 'Institusi'
+        category: 'Tambahan'
     });
     const [submitting, setSubmitting] = useState(false);
 
@@ -15,7 +15,7 @@ export default function StandardCloneModal({ isOpen, onClose, originalStandard, 
             setFormData({
                 name: originalStandard.name + ' (Copy)',
                 periode_tahun: (parseInt(originalStandard.periode_tahun) || new Date().getFullYear()) + 1,
-                category: originalStandard.category || 'Institusi'
+                category: originalStandard.category || 'Tambahan'
             });
         }
     }, [originalStandard, isOpen]);
@@ -93,8 +93,10 @@ export default function StandardCloneModal({ isOpen, onClose, originalStandard, 
                                         onChange={e => setFormData({ ...formData, category: e.target.value })}
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                     >
-                                        <option value="SN-Dikti">SN-Dikti</option>
-                                        <option value="Institusi">Institusi (Pelampauan)</option>
+                                        <option value="Pendidikan">Pendidikan</option>
+                                        <option value="Penelitian">Penelitian</option>
+                                        <option value="Pengabdian">Pengabdian</option>
+                                        <option value="Tambahan">Tambahan</option>
                                     </select>
                                 </div>
                             </div>

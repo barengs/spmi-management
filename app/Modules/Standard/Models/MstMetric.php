@@ -2,6 +2,8 @@
 
 namespace App\Modules\Standard\Models;
 
+use App\Modules\Evidence\Models\TrxEvidence;
+use App\Modules\Ptk\Models\TrxPtk;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -63,5 +65,15 @@ class MstMetric extends Model
     public function targets(): HasMany
     {
         return $this->hasMany(MetricTarget::class, 'metric_id');
+    }
+
+    public function evidences(): HasMany
+    {
+        return $this->hasMany(TrxEvidence::class, 'metric_id');
+    }
+
+    public function ptks(): HasMany
+    {
+        return $this->hasMany(TrxPtk::class, 'metric_id');
     }
 }

@@ -10,6 +10,18 @@ use Illuminate\Validation\Rule;
 
 class UnitController extends Controller
 {
+    private function denyUnless(Request $request, string $permission, string $message): ?JsonResponse
+    {
+        if (! $request->user()?->can($permission)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        return null;
+    }
+
     /**
      * GET /api/v1/units
      * Return full tree structure.
@@ -50,6 +62,10 @@ class UnitController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        if ($denied = $this->denyUnless($request, 'unit.create', 'Anda tidak memiliki hak akses untuk menambah master unit.')) {
+            return $denied;
+        }
+
         $validated = $request->validate([
             'parent_id' => 'nullable|exists:ref_units,id',
             'name'      => 'required|string|max:200',
@@ -102,6 +118,10 @@ class UnitController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
+        if ($denied = $this->denyUnless($request, 'unit.update', 'Anda tidak memiliki hak akses untuk mengubah master unit.')) {
+            return $denied;
+        }
+
         $unit = Unit::findOrFail($id);
 
         $validated = $request->validate([
@@ -143,8 +163,12 @@ class UnitController extends Controller
     /**
      * DELETE /api/v1/units/{id}
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
+        if ($denied = $this->denyUnless($request, 'unit.delete', 'Anda tidak memiliki hak akses untuk menghapus master unit.')) {
+            return $denied;
+        }
+
         $unit = Unit::findOrFail($id);
 
         // Prevent deletion if unit has active users

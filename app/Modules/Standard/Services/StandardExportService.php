@@ -7,6 +7,15 @@ use App\Modules\Standard\Models\MstStandard;
 
 class StandardExportService
 {
+    private function getWrApprovalRow(MstStandard $standard): array
+    {
+        return match ($standard->category) {
+            'Pendidikan' => ['Wakil Rektor 3', $standard->wr3_approved_at?->format('d F Y H:i')],
+            'Penelitian' => ['Wakil Rektor 2', $standard->wr2_approved_at?->format('d F Y H:i')],
+            default => ['Wakil Rektor 1', $standard->wr1_approved_at?->format('d F Y H:i')],
+        };
+    }
+
     public function buildWordHtml(MstStandard $standard): string
     {
         $standard->loadMissing('metrics');
@@ -107,9 +116,7 @@ HTML;
     {
         $rows = [
             ['Kepala LPMI', $standard->head_lpmi_approved_at?->format('d F Y H:i')],
-            ['Wakil Rektor 1', $standard->wr1_approved_at?->format('d F Y H:i')],
-            ['Wakil Rektor 2', $standard->wr2_approved_at?->format('d F Y H:i')],
-            ['Wakil Rektor 3', $standard->wr3_approved_at?->format('d F Y H:i')],
+            $this->getWrApprovalRow($standard),
             ['Rektor', $standard->rector_approved_at?->format('d F Y H:i')],
         ];
 

@@ -1,4 +1,4 @@
-import { getPendingWrLabels } from './standardStatus';
+import { getPendingWrLabels, getStandardWrLabel } from './standardStatus';
 
 export function buildScheduleNotifications(user, schedules = []) {
     const userId = user?.id ? String(user.id) : null;
@@ -109,11 +109,8 @@ export function buildStandardNotifications(user, standards = []) {
 
         if (
             standard.approval_stage === 'WR'
-            && (
-                (hasRole(user, 'Wakil Rektor 1') && !standard.wr1_approved_at)
-                || (hasRole(user, 'Wakil Rektor 2') && !standard.wr2_approved_at)
-                || (hasRole(user, 'Wakil Rektor 3') && !standard.wr3_approved_at)
-            )
+            && hasRole(user, getStandardWrLabel(standard))
+            && getPendingWrLabels(standard).length > 0
         ) {
             items.push({
                 id: `standard-${standard.id}-wr`,
@@ -135,7 +132,7 @@ export function buildStandardNotifications(user, standards = []) {
                 id: `standard-${standard.id}-rector`,
                 type: 'standard_approval',
                 title: 'Approval Final Standar Menunggu Anda',
-                message: `${label} sudah melewati Kepala LPMI dan Wakil Rektor 1, 2, 3, lalu menunggu keputusan final pimpinan.`,
+                message: `${label} sudah melewati Kepala LPMI dan ${getStandardWrLabel(standard)}, lalu menunggu keputusan final pimpinan.`,
                 href,
                 created_at: createdAt,
                 tone: 'warning',

@@ -16,10 +16,47 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StandardController extends Controller
 {
+    private const CATEGORY_WR_ROLE_MAP = [
+        'Pendidikan' => 'Wakil Rektor 3',
+        'Penelitian' => 'Wakil Rektor 2',
+        'Pengabdian' => 'Wakil Rektor 1',
+        'Tambahan' => 'Wakil Rektor 1',
+    ];
+
     public function __construct(
         private readonly StandardDocumentImportService $documentImportService,
         private readonly StandardExportService $standardExportService,
     ) {
+    }
+
+    private function allowedCategories(): string
+    {
+        return implode(',', array_keys(self::CATEGORY_WR_ROLE_MAP));
+    }
+
+    private function getRequiredWrRole(MstStandard $standard): string
+    {
+        return self::CATEGORY_WR_ROLE_MAP[$standard->category] ?? 'Wakil Rektor 1';
+    }
+
+    private function markWrApproval(MstStandard $standard, int|string $userId): void
+    {
+        $role = $this->getRequiredWrRole($standard);
+
+        if ($role === 'Wakil Rektor 3') {
+            $standard->wr3_approved_by = $userId;
+            $standard->wr3_approved_at = now();
+            return;
+        }
+
+        if ($role === 'Wakil Rektor 2') {
+            $standard->wr2_approved_by = $userId;
+            $standard->wr2_approved_at = now();
+            return;
+        }
+
+        $standard->wr1_approved_by = $userId;
+        $standard->wr1_approved_at = now();
     }
 
     private function denyUnless(Request $request, string $permission, string $message): ?JsonResponse
@@ -89,7 +126,7 @@ class StandardController extends Controller
     {
         return match ($standard->approval_stage) {
             'HEAD_LPMI' => 'Kepala LPMI',
-            'WR' => 'Wakil Rektor 1, 2, dan 3',
+            'WR' => $this->getRequiredWrRole($standard),
             'RECTOR' => 'Rektor',
             default => 'Tahap awal',
         };
@@ -108,12 +145,7 @@ class StandardController extends Controller
             }
 
             if ($standard->approval_stage === 'WR') {
-                $standard->wr1_approved_by ??= $user->id;
-                $standard->wr1_approved_at ??= now();
-                $standard->wr2_approved_by ??= $user->id;
-                $standard->wr2_approved_at ??= now();
-                $standard->wr3_approved_by ??= $user->id;
-                $standard->wr3_approved_at ??= now();
+                $this->markWrApproval($standard, $user->id);
                 $standard->approval_stage = 'RECTOR';
                 return null;
             }
@@ -140,25 +172,17 @@ class StandardController extends Controller
         }
 
         if ($standard->approval_stage === 'WR') {
-            if ($user->hasRole('Wakil Rektor 1')) {
-                $standard->wr1_approved_by = $user->id;
-                $standard->wr1_approved_at = now();
-            } elseif ($user->hasRole('Wakil Rektor 2')) {
-                $standard->wr2_approved_by = $user->id;
-                $standard->wr2_approved_at = now();
-            } elseif ($user->hasRole('Wakil Rektor 3')) {
-                $standard->wr3_approved_by = $user->id;
-                $standard->wr3_approved_at = now();
-            } else {
+            $requiredRole = $this->getRequiredWrRole($standard);
+
+            if (! $user->hasRole($requiredRole)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Standar saat ini menunggu persetujuan Wakil Rektor 1, 2, dan 3.',
+                    'message' => "Standar saat ini menunggu persetujuan {$requiredRole}.",
                 ], 403);
             }
 
-            if ($standard->wr1_approved_at && $standard->wr2_approved_at && $standard->wr3_approved_at) {
-                $standard->approval_stage = 'RECTOR';
-            }
+            $this->markWrApproval($standard, $user->id);
+            $standard->approval_stage = 'RECTOR';
 
             return null;
         }
@@ -288,7 +312,7 @@ class StandardController extends Controller
 
         $validated = $request->validate([
             'name'               => 'required|string|max:255',
-            'category'           => 'required|in:SN-Dikti,Institusi',
+            'category'           => 'required|in:' . $this->allowedCategories(),
             'periode_tahun'      => 'nullable|integer',
             'is_active'          => 'boolean',
             'referensi_regulasi' => 'nullable|string',
@@ -313,7 +337,7 @@ class StandardController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'category' => 'required|in:SN-Dikti,Institusi',
+            'category' => 'required|in:' . $this->allowedCategories(),
             'periode_tahun' => 'nullable|integer',
             'is_active' => 'boolean',
             'referensi_regulasi' => 'nullable|string',
@@ -469,7 +493,7 @@ class StandardController extends Controller
 
         $validated = $request->validate([
             'name'               => 'sometimes|required|string|max:255',
-            'category'           => 'sometimes|required|in:SN-Dikti,Institusi',
+            'category'           => 'sometimes|required|in:' . $this->allowedCategories(),
             'periode_tahun'      => 'nullable|integer',
             'is_active'          => 'boolean',
             'referensi_regulasi' => 'nullable|string',

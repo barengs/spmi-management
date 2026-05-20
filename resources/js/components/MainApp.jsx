@@ -12,6 +12,7 @@ import BorangManagementPage from '../pages/borang/BorangManagementPage';
 import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
+import StandardDetailPage from '../pages/standards/StandardDetailPage';
 import StandardReviewPage from '../pages/standards/StandardReviewPage';
 import PermissionMatrixPage from '../pages/settings/PermissionMatrixPage';
 import UserManagementPage from '../pages/settings/UserManagementPage';
@@ -19,6 +20,7 @@ import FacultyMasterPage from '../pages/settings/FacultyMasterPage';
 import ProdiMasterPage from '../pages/settings/ProdiMasterPage';
 import PtkPage from '../pages/ptk/PtkPage';
 import ReportPage from '../pages/report/ReportPage';
+import ReportDetailPage from '../pages/report/ReportDetailPage';
 import NotificationPage from '../pages/notifications/NotificationPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -39,7 +41,7 @@ const GuestRoute = ({ children }) => {
     return children;
 };
 
-const PermissionRoute = ({ permission, roles: allowedRoles = [], children }) => {
+const PermissionRoute = ({ permission, permissions: allowedPermissions = [], roles: allowedRoles = [], children }) => {
     const user = useSelector((state) => state.auth.user);
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
@@ -54,6 +56,7 @@ const PermissionRoute = ({ permission, roles: allowedRoles = [], children }) => 
         hasRole('SuperAdmin')
         || allowedRoles.some((roleName) => hasRole(roleName))
         || (permission && permissions.includes(permission))
+        || allowedPermissions.some((permissionName) => permissions.includes(permissionName))
     ) {
         return children;
     }
@@ -91,12 +94,13 @@ export default function MainApp() {
                         <Route
                             path="borang"
                             element={
-                                <PermissionRoute permission="standard.update">
+                                <PermissionRoute permissions={['standard.update', 'audit.score.update']}>
                                     <BorangManagementPage />
                                 </PermissionRoute>
                             }
                         />
                         <Route path="standards" element={<StandardIndex />} />
+                        <Route path="standards/:id/detail" element={<StandardDetailPage />} />
                         <Route path="standards/:id/builder" element={<StandardBuilder />} />
                         <Route path="standards/:id/review" element={<StandardReviewPage />} />
                         <Route
@@ -146,6 +150,14 @@ export default function MainApp() {
                             element={
                                 <PermissionRoute permission="report.view">
                                     <ReportPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="report/:id"
+                            element={
+                                <PermissionRoute permission="report.view">
+                                    <ReportDetailPage />
                                 </PermissionRoute>
                             }
                         />

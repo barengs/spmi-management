@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api, { getCached } from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
-import { getApprovalStageLabel, getStandardStatusLabel } from '../../utils/standardStatus';
+import { getApprovalStageLabel, getStandardStatusLabel, getStandardWrLabel } from '../../utils/standardStatus';
 
 const getNodeTypeLabel = (type) => {
     if (type === 'Header') return 'Bab';
@@ -830,7 +830,7 @@ export default function StandardReviewPage() {
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Keputusan Review</div>
                     <h2 className="mt-2 text-xl font-semibold text-gray-900">Persetujuan Berjenjang</h2>
                     <p className="mt-2 text-sm leading-6 text-gray-600">
-                        Alur penetapan standar berjalan dari Kepala LPMI, lalu Wakil Rektor 1, 2, dan 3, kemudian Rektor. Standar baru langsung berlaku setelah Rektor menyetujui.
+                        Alur penetapan standar berjalan dari Kepala LPMI, lalu Wakil Rektor sesuai kategori standar, kemudian Rektor. Standar baru langsung berlaku setelah Rektor menyetujui.
                     </p>
 
                     <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-700">
@@ -840,9 +840,19 @@ export default function StandardReviewPage() {
                         <div className="mt-1">Total node standar diajukan: {totalCurrentNodes}</div>
                         <div className="mt-1">Tahap persetujuan aktif: {getApprovalStageLabel(standard?.approval_stage, standard)}</div>
                         <div className="mt-1">Kepala LPMI: {approvalProgressLabel(standard?.head_lpmi_approved_at, standard?.approval_stage, 'WR')}</div>
-                        <div className="mt-1">Wakil Rektor 1: {approvalProgressLabel(standard?.wr1_approved_at, standard?.approval_stage, 'RECTOR')}</div>
-                        <div className="mt-1">Wakil Rektor 2: {approvalProgressLabel(standard?.wr2_approved_at, standard?.approval_stage, 'RECTOR')}</div>
-                        <div className="mt-1">Wakil Rektor 3: {approvalProgressLabel(standard?.wr3_approved_at, standard?.approval_stage, 'RECTOR')}</div>
+                        <div className="mt-1">
+                            {getStandardWrLabel(standard)}: {
+                                approvalProgressLabel(
+                                    getStandardWrLabel(standard) === 'Wakil Rektor 3'
+                                        ? standard?.wr3_approved_at
+                                        : getStandardWrLabel(standard) === 'Wakil Rektor 2'
+                                            ? standard?.wr2_approved_at
+                                            : standard?.wr1_approved_at,
+                                    standard?.approval_stage,
+                                    'RECTOR'
+                                )
+                            }
+                        </div>
                         <div className="mt-1">Rektor: {standard?.rector_approved_at ? 'Sudah setuju' : 'Belum setuju'}</div>
                     </div>
 

@@ -5,6 +5,7 @@ use App\Modules\Core\Controllers\RolePermissionController;
 use App\Modules\Core\Controllers\UnitController;
 use App\Modules\Core\Controllers\UserController;
 use App\Modules\Audit\Controllers\AuditScheduleController;
+use App\Modules\Audit\Controllers\AuditReportController;
 use App\Modules\Borang\Controllers\BorangController;
 use App\Modules\Evidence\Controllers\EvidenceController;
 use App\Modules\Ptk\Controllers\PtkController;
@@ -71,6 +72,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/',                     [\App\Modules\Standard\Controllers\StandardController::class, 'index']);
             Route::post('/',                    [\App\Modules\Standard\Controllers\StandardController::class, 'store']);
             Route::post('/import',             [\App\Modules\Standard\Controllers\StandardController::class, 'import']);
+            Route::get('/cycle-import/candidates', [\App\Modules\Standard\Controllers\StandardCloneController::class, 'cycleImportCandidates']);
+            Route::post('/cycle-import',       [\App\Modules\Standard\Controllers\StandardCloneController::class, 'cycleImport']);
             Route::get('/{id}',                 [\App\Modules\Standard\Controllers\StandardController::class, 'show']);
             Route::get('/{id}/export',          [\App\Modules\Standard\Controllers\StandardController::class, 'export']);
             Route::get('/{id}/source-document/download', [\App\Modules\Standard\Controllers\StandardController::class, 'downloadSourceDocument']);
@@ -117,6 +120,10 @@ Route::prefix('v1')->group(function () {
             Route::put('/{auditSchedule}',     [AuditScheduleController::class, 'update']);
             Route::delete('/{auditSchedule}',  [AuditScheduleController::class, 'destroy']);
             Route::patch('/{auditSchedule}/respond', [AuditScheduleController::class, 'respond']);
+        });
+
+        Route::prefix('audit-reports')->group(function () {
+            Route::get('/',                    [AuditReportController::class, 'index']);
         });
 
         Route::prefix('borang')->group(function () {

@@ -2,15 +2,77 @@
 
 namespace App\Modules\Borang\Controllers;
 
+use App\Modules\Audit\Models\AuditSchedule;
 use App\Http\Controllers\Controller;
 use App\Modules\Borang\Models\BorangItem;
 use App\Modules\Core\Models\Unit;
 use App\Modules\Standard\Models\MstMetric;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class BorangController extends Controller
 {
+    private function activeProdis()
+    {
+        return Unit::query()
+            ->where('level', 'department')
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->get(['id']);
+    }
+
+    private function syncSharedBorangTemplate(?int $createdBy = null): void
+    {
+        $allProdis = $this->activeProdis();
+
+        if ($allProdis->isEmpty()) {
+            return;
+        }
+
+        $templateItems = BorangItem::query()
+            ->select('id', 'metric_id', 'pj', 'target_sasaran', 'created_by')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('metric_id')
+            ->values();
+
+        if ($templateItems->isEmpty()) {
+            return;
+        }
+
+        DB::transaction(function () use ($allProdis, $templateItems, $createdBy): void {
+            foreach ($templateItems as $templateItem) {
+                $existingItems = BorangItem::query()
+                    ->where('metric_id', $templateItem->metric_id)
+                    ->get()
+                    ->keyBy(fn (BorangItem $item) => (string) $item->prodi_id);
+
+                foreach ($allProdis as $department) {
+                    $existingItem = $existingItems->get((string) $department->id);
+
+                    if ($existingItem) {
+                        $existingItem->update([
+                            'pj' => $templateItem->pj,
+                            'target_sasaran' => $templateItem->target_sasaran,
+                        ]);
+
+                        continue;
+                    }
+
+                    BorangItem::create([
+                        'prodi_id' => $department->id,
+                        'metric_id' => $templateItem->metric_id,
+                        'pj' => $templateItem->pj,
+                        'target_sasaran' => $templateItem->target_sasaran,
+                        'created_by' => $createdBy ?? $templateItem->created_by,
+                    ]);
+                }
+            }
+        });
+    }
+
     private function denyUnless(Request $request, string $permission, string $message): ?JsonResponse
     {
         if (! $request->user()?->can($permission)) {
@@ -25,15 +87,44 @@ class BorangController extends Controller
 
     public function index(Request $request, Unit $prodi): JsonResponse
     {
-        if ($denied = $this->denyUnless($request, 'standard.update', 'Anda tidak memiliki hak akses untuk melihat borang.')) {
-            return $denied;
+        $user = $request->user();
+
+        $canManageBorang = $user?->can('standard.update');
+        $canAuditBorang = $user?->can('audit.score.update');
+
+        if (! $canManageBorang && ! $canAuditBorang) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk melihat borang.',
+            ], 403);
         }
 
         abort_if($prodi->level !== 'department', 404);
 
+        if (! $canManageBorang && $canAuditBorang) {
+            $isAssigned = AuditSchedule::query()
+                ->where('prodi_id', $prodi->id)
+                ->where(function ($query) use ($user) {
+                    $query->where('auditor_id', $user->id)
+                        ->orWhere('lead_auditor_id', $user->id);
+                })
+                ->exists();
+
+            if (! $isAssigned) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda hanya dapat melihat borang untuk prodi yang ditugaskan kepada Anda.',
+                ], 403);
+            }
+        }
+
+        $this->syncSharedBorangTemplate($user?->id);
+
         $items = BorangItem::with([
             'metric.standard',
             'metric.parent',
+            'metric.evidences:id,metric_id,review_status,reviewed_at,created_at',
+            'metric.ptks:id,metric_id,status',
         ])
             ->where('prodi_id', $prodi->id)
             ->orderBy('id')
@@ -84,30 +175,51 @@ class BorangController extends Controller
             ], 422);
         }
 
-        $existing = BorangItem::where('prodi_id', $prodi->id)
-            ->where('metric_id', $metric->id)
-            ->first();
+        $allProdis = $this->activeProdis();
 
-        if ($existing) {
+        if ($allProdis->isEmpty()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Indikator ini sudah ditambahkan pada borang prodi.',
+                'message' => 'Belum ada prodi aktif untuk menerima borang.',
             ], 422);
         }
 
-        $item = BorangItem::create([
-            'prodi_id' => $prodi->id,
-            'metric_id' => $metric->id,
-            'pj' => $validated['pj'],
-            'target_sasaran' => trim($validated['target_sasaran']),
-            'created_by' => $request->user()?->id,
-        ]);
+        $existingItems = BorangItem::query()
+            ->where('metric_id', $metric->id)
+            ->get()
+            ->keyBy(fn (BorangItem $item) => (string) $item->prodi_id);
 
-        $item->load(['metric.standard', 'metric.parent']);
+        DB::transaction(function () use ($allProdis, $existingItems, $metric, $validated, $request): void {
+            foreach ($allProdis as $department) {
+                $existingItem = $existingItems->get((string) $department->id);
+
+                if ($existingItem) {
+                    $existingItem->update([
+                        'pj' => $validated['pj'],
+                        'target_sasaran' => trim($validated['target_sasaran']),
+                    ]);
+
+                    continue;
+                }
+
+                BorangItem::create([
+                    'prodi_id' => $department->id,
+                    'metric_id' => $metric->id,
+                    'pj' => $validated['pj'],
+                    'target_sasaran' => trim($validated['target_sasaran']),
+                    'created_by' => $request->user()?->id,
+                ]);
+            }
+        });
+
+        $item = BorangItem::with(['metric.standard', 'metric.parent'])
+            ->where('prodi_id', $prodi->id)
+            ->where('metric_id', $metric->id)
+            ->firstOrFail();
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Borang berhasil ditambahkan ke prodi.',
+            'message' => 'Borang berhasil diterapkan ke seluruh prodi.',
             'data' => $this->transformItem($item),
         ], 201);
     }
@@ -118,11 +230,13 @@ class BorangController extends Controller
             return $denied;
         }
 
-        $borangItem->delete();
+        BorangItem::query()
+            ->where('metric_id', $borangItem->metric_id)
+            ->delete();
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Borang berhasil dihapus.',
+            'message' => 'Borang berhasil dihapus dari seluruh prodi.',
             'data' => null,
         ]);
     }
@@ -130,6 +244,21 @@ class BorangController extends Controller
     private function transformItem(BorangItem $item): array
     {
         $metric = $item->metric;
+        $evidences = $metric?->evidences ?? collect();
+        $ptks = $metric?->ptks ?? collect();
+
+        $acceptedCount = $evidences->where('review_status', 'ACCEPTED')->count();
+        $pendingCount = $evidences->where('review_status', 'PENDING')->count();
+        $rejectedCount = $evidences->where('review_status', 'REJECTED')->count();
+
+        $evidenceStatus = 'MISSING';
+        if ($acceptedCount > 0) {
+            $evidenceStatus = 'ACCEPTED';
+        } elseif ($pendingCount > 0) {
+            $evidenceStatus = 'PENDING';
+        } elseif ($rejectedCount > 0) {
+            $evidenceStatus = 'REJECTED';
+        }
 
         return [
             'id' => $item->id,
@@ -143,6 +272,17 @@ class BorangController extends Controller
             'indikator' => $metric?->content ?: '-',
             'target_sasaran' => $item->target_sasaran ?: '-',
             'pj' => $item->pj ?: 'Kaprodi',
+            'evidence_summary' => [
+                'status' => $evidenceStatus,
+                'total' => $evidences->count(),
+                'accepted' => $acceptedCount,
+                'pending' => $pendingCount,
+                'rejected' => $rejectedCount,
+            ],
+            'ptk_summary' => [
+                'total' => $ptks->count(),
+                'open' => $ptks->whereIn('status', ['OPEN', 'REVISION_REQUIRED', 'RESPONDED', 'VERIFIED'])->count(),
+            ],
         ];
     }
 }

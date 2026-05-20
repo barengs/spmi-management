@@ -4,8 +4,9 @@ import { useSelector } from 'react-redux';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import StandardCloneModal from './StandardCloneModal';
+import StandardCycleImportModal from './StandardCycleImportModal';
 import Icon, { Icons } from '../../components/ui/Icon';
-import { getStandardStatusLabel } from '../../utils/standardStatus';
+import { getStandardStatusLabel, normalizeStandardCategory } from '../../utils/standardStatus';
 import * as pdfjsLib from 'pdfjs-dist';
 import {
     createColumnHelper,
@@ -288,6 +289,7 @@ export default function StandardIndex() {
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isCycleImportModalOpen, setIsCycleImportModalOpen] = useState(false);
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [cloneTarget, setCloneTarget] = useState(null);
     const [editingStandard, setEditingStandard] = useState(null);
@@ -298,7 +300,7 @@ export default function StandardIndex() {
     const [isParsingImportFile, setIsParsingImportFile] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
-        category: 'Institusi',
+        category: 'Tambahan',
         periode_tahun: new Date().getFullYear(),
         is_active: true,
         referensi_regulasi: ''
@@ -456,7 +458,7 @@ export default function StandardIndex() {
             setEditingStandard(null);
             setFormData({
                 name: '',
-                category: 'Institusi',
+                category: 'Tambahan',
                 periode_tahun: new Date().getFullYear(),
                 is_active: true,
                 referensi_regulasi: ''
@@ -476,7 +478,7 @@ export default function StandardIndex() {
         setImportSummary(null);
         setFormData({
             name: '',
-            category: 'Institusi',
+            category: 'Tambahan',
             periode_tahun: selectedPeriod || new Date().getFullYear(),
             is_active: true,
             referensi_regulasi: '',
@@ -497,6 +499,20 @@ export default function StandardIndex() {
         setImportExtractedText('');
         setImportStructureTree([]);
         setImportSummary(null);
+    };
+
+    const handleCycleImportSuccess = (importedStandards) => {
+        const importedList = Array.isArray(importedStandards) ? importedStandards : [];
+
+        importedList.forEach((standard) => {
+            upsertStandard(standard);
+        });
+
+        if (selectedPeriod) {
+            setSelectedPeriod(String(selectedPeriod));
+        }
+
+        fetchStandards();
     };
 
     const extractTextFromPdf = async (file) => {
@@ -645,7 +661,7 @@ export default function StandardIndex() {
     };
 
     const handleSubmitForApproval = async (id) => {
-        if (window.confirm('Ajukan Standar Mutu ini ke Kepala LPMI? Setelah itu approval akan berlanjut ke Wakil Rektor 1, 2, 3, lalu Rektor.')) {
+        if (window.confirm('Ajukan Standar Mutu ini ke Kepala LPMI? Setelah itu approval akan berlanjut ke Wakil Rektor 1, lalu Rektor.')) {
             try {
                 const response = await api.patch(`/standards/${id}/submit`);
                 upsertStandard(response.data.data);
@@ -699,9 +715,17 @@ export default function StandardIndex() {
         columnHelper.accessor('category', {
             header: 'Kategori',
             cell: info => {
-                const val = info.getValue();
+                const val = normalizeStandardCategory(info.getValue());
                 return (
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold leading-5 ${val === 'SN-Dikti' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300' : 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'}`}>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold leading-5 ${
+                        val === 'Pendidikan'
+                            ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300'
+                            : val === 'Penelitian'
+                                ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300'
+                                : val === 'Pengabdian'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300'
+                    }`}>
                         {val}
                     </span>
                 );
@@ -804,56 +828,19 @@ export default function StandardIndex() {
             enableSorting: false,
             cell: info => {
                 const item = info.row.original;
-                const isLockedForAdmin = item.status === 'WAITING_APPROVAL' || item.status === 'TERBIT';
-                const pendingAuditCount = pendingAuditCounts[item.id] || 0;
-                const canShowStructure = !isPimpinan || item.status !== 'DRAFT';
                 const actionButtons = [];
 
-                if (canShowStructure) {
-                    actionButtons.push(
-                        <Link
-                            key="structure"
-                            to={`/standards/${item.id}/builder`}
-                            className="rounded px-2 py-1 text-indigo-600 transition hover:bg-indigo-50 hover:text-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
-                        >
-                            Struktur
-                        </Link>
-                    );
-                }
+                actionButtons.push(
+                    <Link
+                        key="detail"
+                        to={`/standards/${item.id}/detail`}
+                        className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700 transition hover:bg-slate-200 hover:text-slate-900"
+                    >
+                        Detail
+                    </Link>
+                );
 
-                // if (canManageStandardEvidence) {
-                //     actionButtons.push(
-                //         <Link
-                //             key="upload-evidence"
-                //             to={`/standards/${item.id}/execution`}
-                //             className="rounded bg-sky-50 px-2 py-1 font-semibold text-sky-700 transition hover:bg-sky-100 hover:text-sky-900"
-                //         >
-                //             Dokumen Auditee
-                //         </Link>
-                //     );
-                // }
-
-                if (canReviewAudit && pendingAuditCount > 0) {
-                    actionButtons.push(
-                        <Link
-                            key="start-review"
-                            to={`/audit/standards/${item.id}/review`}
-                            className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
-                        >
-                            Mulai Review ({pendingAuditCount})
-                        </Link>
-                    );
-                } else if (canReviewStandards && item.status === 'WAITING_APPROVAL') {
-                    actionButtons.push(
-                        <Link
-                            key="detail-review"
-                            to={`/standards/${item.id}/review`}
-                            className="rounded bg-blue-50 px-2 py-1 font-semibold text-blue-700 transition hover:bg-blue-100 hover:text-blue-900"
-                        >
-                            Detail Review
-                        </Link>
-                    );
-                } else if (canSubmitStandards && !isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI')) {
+                if (canSubmitStandards && !isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI')) {
                     actionButtons.push(
                         <button
                             key="submit"
@@ -866,43 +853,6 @@ export default function StandardIndex() {
                     );
                 }
 
-                if (canManageStandards && !isPimpinan) {
-                    actionButtons.push(
-                        <button
-                            key="edit"
-                            onClick={() => handleOpenModal(item)}
-                            disabled={isLockedForAdmin}
-                            className={`rounded px-2 py-1 transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-blue-600 hover:bg-blue-50 hover:text-blue-900 dark:text-blue-400 dark:hover:bg-blue-950/40 dark:hover:text-blue-300'}`}
-                        >
-                            Edit
-                        </button>
-                    );
-
-                    actionButtons.push(
-                        <button
-                            key="delete"
-                            onClick={() => handleDelete(item.id)}
-                            disabled={isLockedForAdmin}
-                            className={`rounded px-2 py-1 transition-colors ${isLockedForAdmin ? 'text-gray-400 cursor-not-allowed opacity-50 dark:text-gray-600' : 'text-red-600 hover:bg-red-50 hover:text-red-900 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300'}`}
-                        >
-                            Hapus
-                        </button>
-                    );
-                }
-
-                if (canExportStandards && item.status === 'TERBIT') {
-                    actionButtons.push(
-                        <button
-                            key="export"
-                            onClick={() => handleExport(item)}
-                            className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-900"
-                        >
-                            <Icon icon={Icons.document} width={14} />
-                            Unduh
-                        </button>
-                    );
-                }
-
                 return (
                     <div className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm font-medium">
                         {actionButtons}
@@ -910,7 +860,7 @@ export default function StandardIndex() {
                 );
             }
         })
-    ], [standards, canReviewAudit, pendingAuditCounts, isPimpinan, canManageStandards, canSubmitStandards, canReviewStandards, canManageStandardEvidence, canExportStandards]);
+    ], [canSubmitStandards, isPimpinan]);
 
     const table = useReactTable({
         data: filteredStandards,
@@ -939,11 +889,19 @@ export default function StandardIndex() {
                 <div className="sm:flex-auto">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dokumen Standar Mutu</h1>
                     <p className="mt-2 text-sm text-gray-700 dark:text-gray-400">
-                        Pilih periode terlebih dahulu, lalu lihat seluruh dokumen SN-Dikti dan Standar Institusi yang terdaftar pada periode tersebut.
+                        Pilih periode terlebih dahulu, lalu lihat seluruh dokumen Pendidikan, Penelitian, Pengabdian, dan Tambahan yang terdaftar pada periode tersebut.
                     </p>
                 </div>
                 {canManageStandards && (
                 <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex gap-3">
+                    <button
+                        onClick={() => setIsCycleImportModalOpen(true)}
+                        disabled={!selectedPeriod}
+                        className="inline-flex items-center gap-1 justify-center rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-gray-900 dark:text-blue-300 dark:hover:bg-gray-800"
+                    >
+                        <Icon icon={Icons.refresh} width={18} />
+                        Impor Siklus Lama
+                    </button>
                     <button
                         onClick={() => handleOpenModal()}
                         className="inline-flex items-center gap-1 justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:w-auto"
@@ -954,6 +912,13 @@ export default function StandardIndex() {
                 </div>
                 )}
             </div>
+
+            <StandardCycleImportModal
+                isOpen={isCycleImportModalOpen}
+                onClose={() => setIsCycleImportModalOpen(false)}
+                targetPeriod={selectedPeriod}
+                onSuccess={handleCycleImportSuccess}
+            />
 
             {error && (
                 <div className="mt-4 p-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-200 dark:text-red-800" role="alert">
@@ -1187,8 +1152,10 @@ export default function StandardIndex() {
                                                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                                                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
                                             >
-                                                <option value="SN-Dikti">SN-Dikti</option>
-                                                <option value="Institusi">Standar Institusi (Pelampauan)</option>
+                                                <option value="Pendidikan">Pendidikan</option>
+                                                <option value="Penelitian">Penelitian</option>
+                                                <option value="Pengabdian">Pengabdian</option>
+                                                <option value="Tambahan">Tambahan</option>
                                             </select>
                                         </div>
                                         <div>
@@ -1293,8 +1260,10 @@ export default function StandardIndex() {
                                             onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
                                         >
-                                            <option value="Institusi">Institusi</option>
-                                            <option value="SN-Dikti">SN-Dikti</option>
+                                            <option value="Pendidikan">Pendidikan</option>
+                                            <option value="Penelitian">Penelitian</option>
+                                            <option value="Pengabdian">Pengabdian</option>
+                                            <option value="Tambahan">Tambahan</option>
                                         </select>
                                     </div>
                                     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

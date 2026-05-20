@@ -1,6 +1,23 @@
+export function normalizeStandardCategory(category) {
+    if (category === 'SN-Dikti') return 'Pendidikan';
+    if (category === 'Institusi') return 'Tambahan';
+    return category || '-';
+}
+
+export function getStandardWrLabel(item) {
+    const category = normalizeStandardCategory(item?.category);
+
+    if (category === 'Pendidikan') return 'Wakil Rektor 3';
+    if (category === 'Penelitian') return 'Wakil Rektor 2';
+    if (category === 'Pengabdian') return 'Wakil Rektor 1';
+    if (category === 'Tambahan') return 'Wakil Rektor 1';
+
+    return 'Wakil Rektor 1';
+}
+
 function formatWrList(labels) {
     if (labels.length === 0) {
-        return 'Wakil Rektor';
+        return 'Wakil Rektor 1';
     }
 
     if (labels.length === 1) {
@@ -17,9 +34,11 @@ function formatWrList(labels) {
 export function getPendingWrLabels(item) {
     const pending = [];
 
-    if (!item?.wr1_approved_at) pending.push('Wakil Rektor 1');
-    if (!item?.wr2_approved_at) pending.push('Wakil Rektor 2');
-    if (!item?.wr3_approved_at) pending.push('Wakil Rektor 3');
+    const wrLabel = getStandardWrLabel(item);
+
+    if (wrLabel === 'Wakil Rektor 3' && !item?.wr3_approved_at) pending.push(wrLabel);
+    else if (wrLabel === 'Wakil Rektor 2' && !item?.wr2_approved_at) pending.push(wrLabel);
+    else if (wrLabel === 'Wakil Rektor 1' && !item?.wr1_approved_at) pending.push(wrLabel);
 
     return pending;
 }
