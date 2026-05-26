@@ -389,6 +389,7 @@ Setelah menjalankan `php artisan db:seed`, login dengan:
 |-------|----------|------|
 | `admin@espmi.dev` | `Password@123` | SuperAdmin |
 | `lpm@espmi.dev` | `Password@123` | LPM-Admin |
+| `perumus@espmi.dev` | `Password@123` | Perumus |
 | `ratna.kusuma@espmi.dev` | `Password@123` | Lead Auditor |
 | `auditor@espmi.dev` | `Password@123` | Auditor |
 | `sari.wulandari@espmi.dev` | `Password@123` | Auditor |
@@ -420,6 +421,8 @@ Setelah menjalankan `php artisan db:seed`, login dengan:
 
 ### Demo Accounts Notes
 
+- `perumus@espmi.dev` dipakai untuk role Perumus yang hanya fokus membuat dan menyusun draft standar mutu secara manual.
+- akun `Perumus` memiliki menu `Akun Saya` untuk mengubah nama akun, password, dan tanda tangan virtual sendiri.
 - `ratna.kusuma@espmi.dev` digunakan sebagai contoh Lead Auditor untuk penjadwalan audit.
 - `auditor@espmi.dev`, `sari.wulandari@espmi.dev`, dan `andi.pratama@espmi.dev` digunakan sebagai contoh Auditor.
 - akun auditee personal per prodi dipakai untuk assignment otomatis saat prodi dipilih di jadwal audit.
