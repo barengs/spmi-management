@@ -69,7 +69,7 @@ class StandardCloneController extends Controller
 
     public function cycleImportCandidates(Request $request): JsonResponse
     {
-        if ($denied = $this->denyUnless($request, 'standard.create', 'Anda tidak memiliki hak akses untuk mengimpor standar dari siklus lama.')) {
+        if ($denied = $this->denyUnless($request, 'standard.clone', 'Anda tidak memiliki hak akses untuk mengimpor standar dari siklus lama.')) {
             return $denied;
         }
 
@@ -117,7 +117,7 @@ class StandardCloneController extends Controller
 
     public function cycleImport(Request $request): JsonResponse
     {
-        if ($denied = $this->denyUnless($request, 'standard.create', 'Anda tidak memiliki hak akses untuk mengimpor standar dari siklus lama.')) {
+        if ($denied = $this->denyUnless($request, 'standard.clone', 'Anda tidak memiliki hak akses untuk mengimpor standar dari siklus lama.')) {
             return $denied;
         }
 
@@ -188,6 +188,10 @@ class StandardCloneController extends Controller
      */
     public function clone(Request $request, $id)
     {
+        if ($denied = $this->denyUnless($request, 'standard.clone', 'Anda tidak memiliki hak akses untuk mengkloning standar.')) {
+            return $denied;
+        }
+
         $validator = Validator::make($request->all(), [
             'name'          => 'required|string|max:255',
             'periode_tahun' => 'required|string|max:4',

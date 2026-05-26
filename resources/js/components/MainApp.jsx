@@ -23,6 +23,7 @@ import PtkPage from '../pages/ptk/PtkPage';
 import ReportPage from '../pages/report/ReportPage';
 import ReportDetailPage from '../pages/report/ReportDetailPage';
 import NotificationPage from '../pages/notifications/NotificationPage';
+import AccountPage from '../pages/account/AccountPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -86,6 +87,7 @@ export default function MainApp() {
                         }
                     >
                         <Route index element={<Dashboard />} />
+                        <Route path="account" element={<AccountPage />} />
                         <Route path="notifications" element={<NotificationPage />} />
                         <Route
                             path="borang"
@@ -103,10 +105,38 @@ export default function MainApp() {
                                 </PermissionRoute>
                             }
                         />
-                        <Route path="standards" element={<StandardIndex />} />
-                        <Route path="standards/:id/detail" element={<StandardDetailPage />} />
-                        <Route path="standards/:id/builder" element={<StandardBuilder />} />
-                        <Route path="standards/:id/review" element={<StandardReviewPage />} />
+                        <Route
+                            path="standards"
+                            element={
+                                <PermissionRoute permissions={['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export']}>
+                                    <StandardIndex />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="standards/:id/detail"
+                            element={
+                                <PermissionRoute permissions={['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export']}>
+                                    <StandardDetailPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="standards/:id/builder"
+                            element={
+                                <PermissionRoute permissions={['standard.create', 'standard.update']}>
+                                    <StandardBuilder />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="standards/:id/review"
+                            element={
+                                <PermissionRoute permissions={['standard.publish']} roles={['Pimpinan', 'Kepala LPMI', 'Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor']}>
+                                    <StandardReviewPage />
+                                </PermissionRoute>
+                            }
+                        />
                         <Route
                             path="standards/:id/execution"
                             element={

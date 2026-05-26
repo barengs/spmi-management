@@ -15,7 +15,7 @@ export default function Sidebar({ isOpen, setIsOpen, isOnline = true, pendingQue
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: Icons.dashboard },
         { label: 'Borang', path: '/borang', icon: Icons.document, permissions: ['standard.update', 'audit.score.update', 'audit.view'] },
-        { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view'], hideRoles: ['Auditor', 'Lead Auditor'] },
+        { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export'], hideRoles: ['Auditor', 'Lead Auditor'] },
         { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'], hideRoles: ['Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor'] },
         { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, permissions: ['audit.score.update'] },
         { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, permissions: ['ptk.view'] },

@@ -248,7 +248,9 @@ export default function StandardIndex() {
 
     const user = useSelector(state => state.auth.user);
     const roles = user?.roles || [];
+    const permissions = user?.permissions || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
+    const isPerumus = hasRole('Perumus');
     const isAuditee = hasRole('Auditee');
     const canManageStandardEvidence = !isAuditee && (
         hasRole('SuperAdmin')
@@ -266,12 +268,14 @@ export default function StandardIndex() {
         || hasRole('Wakil Rektor 3')
         || hasRole('Rektor');
     const canManageStandards = hasRole('SuperAdmin')
-        || user?.permissions?.includes('standard.create')
-        || user?.permissions?.includes('standard.update')
-        || user?.permissions?.includes('standard.delete')
-        || user?.permissions?.includes('standard.publish');
+        || permissions.includes('standard.create')
+        || permissions.includes('standard.update')
+        || permissions.includes('standard.delete')
+        || permissions.includes('standard.publish');
+    const canCreateStandards = hasRole('SuperAdmin') || permissions.includes('standard.create');
+    const canDraftStandards = hasRole('SuperAdmin') || permissions.includes('standard.create') || permissions.includes('standard.update');
     const canSubmitStandards = hasRole('SuperAdmin')
-        || user?.permissions?.includes('standard.publish');
+        || permissions.includes('standard.publish');
     const canReviewAudit = hasRole('SuperAdmin')
         || hasRole('Auditor')
         || hasRole('LPM-Admin')
@@ -285,7 +289,7 @@ export default function StandardIndex() {
         || hasRole('Rektor')
         || user?.permissions?.includes('standard.publish');
     const canExportStandards = hasRole('SuperAdmin')
-        || user?.permissions?.includes('report.export');
+        || permissions.includes('report.export');
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -441,7 +445,22 @@ export default function StandardIndex() {
 
     const handleOpenModal = (standard = null) => {
         if (!standard) {
-            handleOpenImportModal();
+            if (!isPerumus) {
+                handleOpenImportModal();
+                return;
+            }
+
+            setEditingStandard(null);
+            setCloneTarget(null);
+            setCloneSourceId('');
+            setFormData({
+                name: '',
+                category: 'Tambahan',
+                periode_tahun: selectedPeriod || new Date().getFullYear(),
+                is_active: true,
+                referensi_regulasi: ''
+            });
+            setIsModalOpen(true);
             return;
         }
 
@@ -683,11 +702,21 @@ export default function StandardIndex() {
             const response = await api.get(`/standards/${standard.id}/export`, {
                 responseType: 'blob',
             });
-            const blob = new Blob([response.data], { type: 'application/msword' });
+            const contentType = response.headers['content-type'] || 'application/octet-stream';
+            const contentDisposition = response.headers['content-disposition'] || '';
+            const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+            const fallbackExtension = contentType.includes('pdf')
+                ? 'pdf'
+                : contentType.includes('word') || contentType.includes('msword')
+                    ? 'doc'
+                    : 'bin';
+            const fileName = fileNameMatch?.[1]
+                || `${(standard.name || 'standar').replace(/[\\/:*?"<>|]+/g, '-')}-${standard.periode_tahun || 'tanpa-periode'}.${fallbackExtension}`;
+            const blob = new Blob([response.data], { type: contentType });
             const downloadUrl = window.URL.createObjectURL(blob);
             const anchor = document.createElement('a');
             anchor.href = downloadUrl;
-            anchor.download = `${(standard.name || 'standar').replace(/[\\/:*?"<>|]+/g, '-')}-${standard.periode_tahun || 'tanpa-periode'}.doc`;
+            anchor.download = fileName;
             document.body.appendChild(anchor);
             anchor.click();
             anchor.remove();
@@ -840,6 +869,18 @@ export default function StandardIndex() {
                     </Link>
                 );
 
+                if (canDraftStandards && (item.status === 'DRAFT' || item.status === 'REVISI')) {
+                    actionButtons.push(
+                        <Link
+                            key="builder"
+                            to={`/standards/${item.id}/builder`}
+                            className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-700 transition hover:bg-amber-100 hover:text-amber-900"
+                        >
+                            Builder
+                        </Link>
+                    );
+                }
+
                 if (canSubmitStandards && !isPimpinan && (item.status === 'DRAFT' || item.status === 'REVISI')) {
                     actionButtons.push(
                         <button
@@ -853,6 +894,18 @@ export default function StandardIndex() {
                     );
                 }
 
+                if (canExportStandards && item.status === 'TERBIT') {
+                    actionButtons.push(
+                        <button
+                            key="export"
+                            onClick={() => handleExport(item)}
+                            className="rounded bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-900"
+                        >
+                            Export
+                        </button>
+                    );
+                }
+
                 return (
                     <div className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm font-medium">
                         {actionButtons}
@@ -860,7 +913,7 @@ export default function StandardIndex() {
                 );
             }
         })
-    ], [canSubmitStandards, isPimpinan]);
+    ], [canDraftStandards, canExportStandards, canSubmitStandards, isPimpinan]);
 
     const table = useReactTable({
         data: filteredStandards,
@@ -889,21 +942,26 @@ export default function StandardIndex() {
                 <div className="sm:flex-auto">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dokumen Standar Mutu</h1>
                     <p className="mt-2 text-sm text-gray-700 dark:text-gray-400">
-                        Pilih periode terlebih dahulu, lalu lihat seluruh dokumen Pendidikan, Penelitian, Pengabdian, dan Tambahan yang terdaftar pada periode tersebut.
+                        {isPerumus
+                            ? 'Role Perumus hanya difokuskan untuk membuat dan menyusun draft standar mutu secara manual.'
+                            : 'Pilih periode terlebih dahulu, lalu lihat seluruh dokumen Pendidikan, Penelitian, Pengabdian, dan Tambahan yang terdaftar pada periode tersebut.'}
                     </p>
                 </div>
                 {canManageStandards && (
                 <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex gap-3">
-                    <button
-                        onClick={() => setIsCycleImportModalOpen(true)}
-                        disabled={!selectedPeriod}
-                        className="inline-flex items-center gap-1 justify-center rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-gray-900 dark:text-blue-300 dark:hover:bg-gray-800"
-                    >
-                        <Icon icon={Icons.refresh} width={18} />
-                        Impor Siklus Lama
-                    </button>
+                    {!isPerumus && (
+                        <button
+                            onClick={() => setIsCycleImportModalOpen(true)}
+                            disabled={!selectedPeriod}
+                            className="inline-flex items-center gap-1 justify-center rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-gray-900 dark:text-blue-300 dark:hover:bg-gray-800"
+                        >
+                            <Icon icon={Icons.refresh} width={18} />
+                            Impor Siklus Lama
+                        </button>
+                    )}
                     <button
                         onClick={() => handleOpenModal()}
+                        disabled={!canCreateStandards}
                         className="inline-flex items-center gap-1 justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:w-auto"
                     >
                         <Icon icon={Icons.add} width={18} />
@@ -913,12 +971,14 @@ export default function StandardIndex() {
                 )}
             </div>
 
-            <StandardCycleImportModal
-                isOpen={isCycleImportModalOpen}
-                onClose={() => setIsCycleImportModalOpen(false)}
-                targetPeriod={selectedPeriod}
-                onSuccess={handleCycleImportSuccess}
-            />
+            {!isPerumus && (
+                <StandardCycleImportModal
+                    isOpen={isCycleImportModalOpen}
+                    onClose={() => setIsCycleImportModalOpen(false)}
+                    targetPeriod={selectedPeriod}
+                    onSuccess={handleCycleImportSuccess}
+                />
+            )}
 
             {error && (
                 <div className="mt-4 p-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-200 dark:text-red-800" role="alert">

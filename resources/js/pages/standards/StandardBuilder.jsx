@@ -326,6 +326,7 @@ export default function StandardBuilder() {
     const [expandedIds, setExpandedIds] = useState(new Set());
     const nodeRefs = useRef({});
     const canManageStructure = hasRole('SuperAdmin')
+        || user?.permissions?.includes('standard.create')
         || user?.permissions?.includes('standard.update')
         || user?.permissions?.includes('standard.delete');
 

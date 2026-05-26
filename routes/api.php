@@ -36,6 +36,11 @@ Route::prefix('v1')->group(function () {
             Route::get('/me',    [AuthController::class, 'me']);
             Route::post('/logout', [AuthController::class, 'logout']);
             Route::post('/refresh', [AuthController::class, 'refresh']);
+            Route::put('/profile', [AuthController::class, 'updateProfile']);
+            Route::put('/password', [AuthController::class, 'updatePassword']);
+            Route::post('/signature', [AuthController::class, 'updateSignature']);
+            Route::delete('/signature', [AuthController::class, 'removeSignature']);
+            Route::get('/signature/download', [AuthController::class, 'downloadSignature']);
         });
 
         // Organisasi / Unit

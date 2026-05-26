@@ -70,10 +70,10 @@ class RolePermissionSeeder extends Seeder
             'system.audit_log.view',
         ]);
 
-        // Perumus — draft and maintain standard content without approval authority
+        // Perumus — author standards manually without access to approval or other modules
         $perumus = Role::firstOrCreate(['name' => 'Perumus', 'guard_name' => 'web']);
         $perumus->syncPermissions([
-            'standard.view', 'standard.create', 'standard.update',
+            'standard.create',
         ]);
 
         // Auditor — can score and create findings, read-only on others

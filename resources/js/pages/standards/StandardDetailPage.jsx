@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
@@ -204,6 +205,14 @@ function StructureNode({ node, depth = 0 }) {
 export default function StandardDetailPage() {
     const navigate = useNavigate();
     const { id } = useParams();
+    const user = useSelector((state) => state.auth.user);
+    const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
+    const hasRole = (roleName) => roleNames.includes(roleName);
+    const canDraftStandard = hasRole('SuperAdmin')
+        || user?.permissions?.includes('standard.create')
+        || user?.permissions?.includes('standard.update');
+    const canDeleteStandard = hasRole('SuperAdmin') || user?.permissions?.includes('standard.delete');
+    const canExportStandard = hasRole('SuperAdmin') || user?.permissions?.includes('report.export');
     const [standard, setStandard] = useState(null);
     const [tree, setTree] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -308,6 +317,39 @@ export default function StandardDetailPage() {
     const historyItems = useMemo(() => buildHistoryItems(standard), [standard]);
     const isDraft = standard?.status === 'DRAFT';
 
+    const handleExport = async () => {
+        if (!standard) {
+            return;
+        }
+
+        try {
+            const response = await api.get(`/standards/${standard.id}/export`, {
+                responseType: 'blob',
+            });
+            const contentType = response.headers['content-type'] || 'application/octet-stream';
+            const contentDisposition = response.headers['content-disposition'] || '';
+            const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+            const fallbackExtension = contentType.includes('pdf')
+                ? 'pdf'
+                : contentType.includes('word') || contentType.includes('msword')
+                    ? 'doc'
+                    : 'bin';
+            const fileName = fileNameMatch?.[1]
+                || `${(standard.name || 'standar').replace(/[\\/:*?"<>|]+/g, '-')}-${standard.periode_tahun || 'tanpa-periode'}.${fallbackExtension}`;
+            const blob = new Blob([response.data], { type: contentType });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = downloadUrl;
+            anchor.download = fileName;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Ekspor standar gagal dijalankan.');
+        }
+    };
+
     const handleSettingsChange = (field, value) => {
         setSettingsForm((current) => ({
             ...current,
@@ -386,8 +428,29 @@ export default function StandardDetailPage() {
                         {normalizeStandardCategory(standard.category)} | Periode {standard.periode_tahun || '-'} | {getStandardStatusLabel(standard)}
                     </p>
                 </div>
-                <div className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-300 shadow-sm">
-                    {getApprovalStageLabel(standard.approval_stage, standard)}
+                <div className="flex flex-wrap items-center gap-3">
+                    {canDraftStandard && (standard.status === 'DRAFT' || standard.status === 'REVISI') && (
+                        <Link
+                            to={`/standards/${standard.id}/builder`}
+                            className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-amber-700 transition hover:bg-amber-100"
+                        >
+                            <Icon icon={Icons.edit} width={14} />
+                            Builder
+                        </Link>
+                    )}
+                    {canExportStandard && standard.status === 'TERBIT' && (
+                        <button
+                            type="button"
+                            onClick={handleExport}
+                            className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700 transition hover:bg-emerald-100"
+                        >
+                            <Icon icon={Icons.document} width={14} />
+                            Export
+                        </button>
+                    )}
+                    <div className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-300 shadow-sm">
+                        {getApprovalStageLabel(standard.approval_stage, standard)}
+                    </div>
                 </div>
             </div>
 
@@ -628,14 +691,16 @@ export default function StandardDetailPage() {
                                     >
                                         Simpan Perubahan
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleDeleteStandard}
-                                        disabled={!isDraft || settingsSubmitting}
-                                        className="rounded-full border border-rose-700 bg-rose-950/60 px-5 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-900 disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                        Hapus Standar
-                                    </button>
+                                    {canDeleteStandard && (
+                                        <button
+                                            type="button"
+                                            onClick={handleDeleteStandard}
+                                            disabled={!isDraft || settingsSubmitting}
+                                            className="rounded-full border border-rose-700 bg-rose-950/60 px-5 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-900 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            Hapus Standar
+                                        </button>
+                                    )}
                                 </div>
                             </form>
 

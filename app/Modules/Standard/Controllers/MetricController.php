@@ -45,6 +45,49 @@ class MetricController extends Controller
         return null;
     }
 
+    private function denyUnlessCanDraft(Request $request, string $message): ?JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! ($user->can('standard.create') || $user->can('standard.update') || $user->can('standard.delete'))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        return null;
+    }
+
+    private function denyUnlessCanReadStandards(Request $request, string $message): ?JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        if (
+            $user->hasRole('SuperAdmin')
+            || $user->can('standard.view')
+            || $user->can('standard.create')
+            || $user->can('standard.update')
+            || $user->can('standard.delete')
+            || $user->can('standard.publish')
+            || $user->can('report.export')
+        ) {
+            return null;
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => $message,
+        ], 403);
+    }
+
     private function hierarchyValidationError(array $payload, ?MstMetric $metric = null): ?JsonResponse
     {
         $resolvedParentId = array_key_exists('parent_id', $payload)
@@ -152,8 +195,12 @@ class MetricController extends Controller
     /**
      * Dapatkan hirarki indikator/metrik dari sebuah standar.
      */
-    public function tree($standard_id): JsonResponse
+    public function tree(Request $request, $standard_id): JsonResponse
     {
+        if ($denied = $this->denyUnlessCanReadStandards($request, 'Anda tidak memiliki hak akses untuk melihat struktur standar.')) {
+            return $denied;
+        }
+
         // Pastikan standar ada
         MstStandard::findOrFail($standard_id);
 
@@ -174,7 +221,7 @@ class MetricController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        if ($denied = $this->denyUnless($request, 'standard.update', 'Anda tidak memiliki hak akses untuk mengubah struktur standar.')) {
+        if ($denied = $this->denyUnlessCanDraft($request, 'Anda tidak memiliki hak akses untuk mengubah struktur standar.')) {
             return $denied;
         }
 
@@ -221,7 +268,7 @@ class MetricController extends Controller
      */
     public function update(Request $request, $id): JsonResponse
     {
-        if ($denied = $this->denyUnless($request, 'standard.update', 'Anda tidak memiliki hak akses untuk mengubah struktur standar.')) {
+        if ($denied = $this->denyUnlessCanDraft($request, 'Anda tidak memiliki hak akses untuk mengubah struktur standar.')) {
             return $denied;
         }
 
@@ -279,7 +326,7 @@ class MetricController extends Controller
      */
     public function destroy(Request $request, $id): JsonResponse
     {
-        if ($denied = $this->denyUnless($request, 'standard.delete', 'Anda tidak memiliki hak akses untuk menghapus struktur standar.')) {
+        if ($denied = $this->denyUnlessCanDraft($request, 'Anda tidak memiliki hak akses untuk menghapus struktur standar.')) {
             return $denied;
         }
 
@@ -418,6 +465,10 @@ class MetricController extends Controller
 
     public function timeline($id): JsonResponse
     {
+        if ($denied = $this->denyUnlessCanReadStandards(request(), 'Anda tidak memiliki hak akses untuk melihat riwayat perubahan standar.')) {
+            return $denied;
+        }
+
         $metric = MstMetric::findOrFail($id);
 
         $logs = ActivityLog::with('user:id,name,email')

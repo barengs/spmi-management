@@ -71,6 +71,54 @@ class StandardController extends Controller
         return null;
     }
 
+    private function canReadStandards(Request $request): bool
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasRole('SuperAdmin')) {
+            return true;
+        }
+
+        return collect([
+            'standard.view',
+            'standard.create',
+            'standard.update',
+            'standard.delete',
+            'standard.publish',
+            'report.export',
+        ])->contains(fn (string $permission) => $user->can($permission));
+    }
+
+    private function denyUnlessCanReadStandards(Request $request, string $message): ?JsonResponse
+    {
+        if (! $this->canReadStandards($request)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        return null;
+    }
+
+    private function denyUnlessCanDraft(Request $request, string $message): ?JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! ($user->can('standard.create') || $user->can('standard.update'))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $message,
+            ], 403);
+        }
+
+        return null;
+    }
+
     private function denyUnlessCanAudit(Request $request, string $message): ?JsonResponse
     {
         $user = $request->user();
@@ -282,6 +330,10 @@ class StandardController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        if ($denied = $this->denyUnlessCanReadStandards($request, 'Anda tidak memiliki hak akses untuk melihat daftar standar.')) {
+            return $denied;
+        }
+
         $query = MstStandard::query();
 
         if ($request->has('category')) {
@@ -333,6 +385,13 @@ class StandardController extends Controller
     {
         if ($denied = $this->denyUnless($request, 'standard.create', 'Anda tidak memiliki hak akses untuk mengimpor standar.')) {
             return $denied;
+        }
+
+        if ($request->user()?->hasRole('Perumus')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Role Perumus hanya dapat membuat standar manual dan tidak dapat mengimpor dokumen.',
+            ], 403);
         }
 
         $validated = $request->validate([
@@ -425,8 +484,12 @@ class StandardController extends Controller
     /**
      * Display the specified standard.
      */
-    public function show($id): JsonResponse
+    public function show(Request $request, $id): JsonResponse
     {
+        if ($denied = $this->denyUnlessCanReadStandards($request, 'Anda tidak memiliki hak akses untuk melihat detail standar.')) {
+            return $denied;
+        }
+
         $standard = MstStandard::findOrFail($id);
 
         return response()->json([
@@ -450,6 +513,13 @@ class StandardController extends Controller
             ], 422);
         }
 
+        if ($standard->source_document_path && Storage::disk('local')->exists($standard->source_document_path)) {
+            return Storage::disk('local')->download(
+                $standard->source_document_path,
+                $standard->source_document_original_name ?? $standard->source_document_stored_name
+            );
+        }
+
         $html = $this->standardExportService->buildWordHtml($standard);
         $fileName = sprintf('%s-%s.doc', Str::slug($standard->name) ?: 'standar', $standard->periode_tahun ?: 'tanpa-periode');
 
@@ -460,8 +530,12 @@ class StandardController extends Controller
         ]);
     }
 
-    public function downloadSourceDocument($id): StreamedResponse
+    public function downloadSourceDocument(Request $request, $id): StreamedResponse|JsonResponse
     {
+        if ($denied = $this->denyUnlessCanReadStandards($request, 'Anda tidak memiliki hak akses untuk mengunduh dokumen sumber standar.')) {
+            return $denied;
+        }
+
         $standard = MstStandard::findOrFail($id);
 
         abort_unless($standard->source_document_path, 404);
@@ -478,7 +552,7 @@ class StandardController extends Controller
      */
     public function update(Request $request, $id): JsonResponse
     {
-        if ($denied = $this->denyUnless($request, 'standard.update', 'Anda tidak memiliki hak akses untuk mengubah standar.')) {
+        if ($denied = $this->denyUnlessCanDraft($request, 'Anda tidak memiliki hak akses untuk mengubah standar.')) {
             return $denied;
         }
 

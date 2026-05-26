@@ -40,6 +40,17 @@ class DatabaseSeeder extends Seeder
         );
         $lpm->assignRole('LPM-Admin');
 
+        $perumus = User::firstOrCreate(
+            ['email' => 'perumus@espmi.dev'],
+            [
+                'nidn_npk' => 'PRM001',
+                'name' => 'Perumus Standar',
+                'password' => Hash::make('Password@123'),
+                'is_active' => true,
+            ]
+        );
+        $perumus->syncRoles(['Perumus']);
+
         $this->call([
             RefEducationLevelSeeder::class,
             StandardSeeder::class,
