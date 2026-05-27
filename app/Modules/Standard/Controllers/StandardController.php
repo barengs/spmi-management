@@ -3,6 +3,8 @@
 namespace App\Modules\Standard\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Borang\Models\BorangItem;
+use App\Modules\Evidence\Models\TrxEvidence;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
 use App\Modules\Standard\Models\StandardImprovement;
@@ -524,9 +526,32 @@ class StandardController extends Controller
             'improvements.newStandard:id,name,periode_tahun,version_number,status',
         ])->findOrFail($id);
 
+        $metricIds = MstMetric::query()
+            ->where('standard_id', $standard->id)
+            ->pluck('id');
+
+        $borangItemIds = $metricIds->isEmpty()
+            ? collect()
+            : BorangItem::query()
+                ->whereIn('metric_id', $metricIds)
+                ->pluck('id');
+
+        $implementationEvidenceCount = $borangItemIds->isEmpty()
+            ? 0
+            : TrxEvidence::query()
+                ->whereIn('borang_item_id', $borangItemIds)
+                ->count();
+
         return response()->json([
             'status' => 'success',
-            'data'   => $standard,
+            'data'   => [
+                ...$standard->toArray(),
+                'implementation_summary' => [
+                    'is_published' => $standard->status === 'TERBIT',
+                    'evidence_count' => $implementationEvidenceCount,
+                    'is_implemented' => $implementationEvidenceCount > 0,
+                ],
+            ],
         ]);
     }
 

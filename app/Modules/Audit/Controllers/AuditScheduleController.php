@@ -304,6 +304,16 @@ class AuditScheduleController extends Controller
             ], 403);
         }
 
+        $occupiedAuditorIds = AuditSchedule::query()
+            ->get(['lead_auditor_id', 'auditor_id'])
+            ->flatMap(fn (AuditSchedule $schedule) => [
+                $schedule->lead_auditor_id,
+                $schedule->auditor_id,
+            ])
+            ->filter()
+            ->unique()
+            ->values();
+
         $faculties = Unit::query()
             ->where('level', 'faculty')
             ->where('is_active', true)
@@ -325,6 +335,7 @@ class AuditScheduleController extends Controller
             ->whereDoesntHave('roles', function ($query) {
                 $query->whereIn('name', ['Auditee', 'LPM-Admin']);
             })
+            ->whereNotIn('id', $occupiedAuditorIds)
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'unit_id']);
 
@@ -333,7 +344,7 @@ class AuditScheduleController extends Controller
                 $query->role('Auditor');
             })
             ->where('is_active', true)
-            ->whereNotIn('id', AuditSchedule::query()->whereNotNull('auditor_id')->pluck('auditor_id'))
+            ->whereNotIn('id', $occupiedAuditorIds)
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'unit_id']);
 

@@ -251,8 +251,22 @@ export default function AuditSchedulePage() {
         return filtered;
     }, [editingSchedule, form.faculty_id, metadata.prodis]);
 
+    const occupiedAuditorIds = useMemo(() => {
+        const excludedScheduleId = editingSchedule?.id ? String(editingSchedule.id) : null;
+
+        return new Set(
+            schedules
+                .filter((schedule) => !excludedScheduleId || String(schedule.id) !== excludedScheduleId)
+                .flatMap((schedule) => [
+                    schedule.lead_auditor?.id ? String(schedule.lead_auditor.id) : null,
+                    schedule.auditor?.id ? String(schedule.auditor.id) : null,
+                ])
+                .filter(Boolean)
+        );
+    }, [editingSchedule?.id, schedules]);
+
     const auditorOptions = useMemo(() => {
-        const filtered = [...metadata.auditors];
+        const filtered = metadata.auditors.filter((item) => !occupiedAuditorIds.has(String(item.id)));
 
         if (editingSchedule?.auditor && !filtered.some((item) => String(item.id) === String(editingSchedule.auditor.id))) {
             filtered.push({
@@ -262,8 +276,27 @@ export default function AuditSchedulePage() {
             });
         }
 
-        return filtered.sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
-    }, [editingSchedule, metadata.auditors]);
+        return filtered
+            .filter((item) => !form.lead_auditor_id || String(item.id) !== String(form.lead_auditor_id))
+            .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
+    }, [editingSchedule, form.lead_auditor_id, metadata.auditors, occupiedAuditorIds]);
+
+    const leadAuditorOptions = useMemo(() => {
+        const filtered = metadata.lead_auditors.filter((item) => !occupiedAuditorIds.has(String(item.id)));
+
+        if (editingSchedule?.lead_auditor && !filtered.some((item) => String(item.id) === String(editingSchedule.lead_auditor.id))) {
+            filtered.push({
+                id: editingSchedule.lead_auditor.id,
+                name: editingSchedule.lead_auditor.name,
+                email: editingSchedule.lead_auditor.email,
+                unit_id: null,
+            });
+        }
+
+        return filtered
+            .filter((item) => !form.auditor_id || String(item.id) !== String(form.auditor_id))
+            .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
+    }, [editingSchedule, form.auditor_id, metadata.lead_auditors, occupiedAuditorIds]);
 
     const openModal = () => {
         setForm(initialForm);
@@ -770,7 +803,7 @@ export default function AuditSchedulePage() {
                                         className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
                                     >
                                         <option value="">Pilih lead auditor</option>
-                                        {metadata.lead_auditors.map((item) => (
+                                        {leadAuditorOptions.map((item) => (
                                             <option key={item.id} value={item.id}>{item.name} ({item.email})</option>
                                         ))}
                                     </select>

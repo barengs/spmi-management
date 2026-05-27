@@ -355,6 +355,7 @@ export default function StandardDetailPage() {
     const flattenedTree = useMemo(() => flattenNodes(tree), [tree]);
     const historyItems = useMemo(() => buildHistoryItems(standard), [standard]);
     const isDraft = standard?.status === 'DRAFT';
+    const isImprovementLocked = standard?.status !== 'TERBIT' || !standard?.implementation_summary?.is_implemented;
     const improvementActionLabels = {
         REVISI: 'Perlu diperbaiki dan diterapkan lagi',
         PERTAHANKAN: 'Tetap dipakai pada siklus berikutnya',
@@ -734,6 +735,31 @@ export default function StandardDetailPage() {
                                 </div>
                             </div>
 
+                            {isImprovementLocked && (
+                                <div className="relative overflow-hidden rounded-3xl border border-white/15 bg-white/10 p-6 text-sm text-white shadow-2xl backdrop-blur-xl">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-slate-900/80 via-amber-950/55 to-slate-950/80" />
+                                    <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-300/20 blur-3xl" />
+                                    <div className="absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-sky-300/10 blur-3xl" />
+                                    <div className="relative flex items-start gap-4">
+                                        <div className="rounded-2xl border border-white/20 bg-white/10 p-3 text-amber-200">
+                                            <Icon icon={Icons.locked} width={20} />
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200/90">
+                                                Feature Locked
+                                            </div>
+                                            <div className="mt-2 text-base font-semibold text-white">
+                                                Standar ini masih belum di implementasi
+                                            </div>
+                                            <div className="mt-2 max-w-2xl leading-6 text-slate-200">
+                                                Fitur baru dibuka setelah standar ini diimplementasi.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!isImprovementLocked && (
                             <form onSubmit={handleImprovementSubmit} className="space-y-4 rounded-3xl border border-slate-700 bg-slate-900 p-5">
                                 <div>
                                     <label className="mb-2 block text-sm font-medium text-slate-200">Keputusan Siklus Berikutnya</label>
@@ -798,6 +824,7 @@ export default function StandardDetailPage() {
                                     </button>
                                 </div>
                             </form>
+                            )}
 
                             <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
                                 <div className="mb-4 flex items-center justify-between">

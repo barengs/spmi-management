@@ -45,7 +45,7 @@ export default function Navbar({ toggleSidebar }) {
         }
 
         if (path === '/standards') {
-            return ['Standar Mutu'];
+            return ['Standar'];
         }
 
         if (path === '/borang') {
@@ -69,15 +69,15 @@ export default function Navbar({ toggleSidebar }) {
         }
 
         if (/^\/standards\/[^/]+\/builder$/.test(path)) {
-            return ['Standar Mutu', 'Builder Struktur'];
+            return ['Standar', 'Builder Struktur'];
         }
 
         if (/^\/standards\/[^/]+\/review$/.test(path)) {
-            return ['Standar Mutu', 'Review Standar'];
+            return ['Standar', 'Review Standar'];
         }
 
         if (/^\/standards\/[^/]+\/execution$/.test(path)) {
-            return ['Standar Mutu', 'Dokumen Auditee'];
+            return ['Standar', 'Dokumen Auditee'];
         }
 
         if (path === '/audit') {
