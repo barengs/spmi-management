@@ -7,7 +7,6 @@ export default function Sidebar({ isOpen, setIsOpen, isOnline = true, pendingQue
     const roles = useSelector((state) => state.auth.user?.roles || []);
     const permissions = useSelector((state) => state.auth.user?.permissions || []);
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
-    const isPerumus = hasRole('Perumus');
 
     // Menu items based on capabilities/roles
     const [masterOpen, setMasterOpen] = useState(true);
@@ -15,17 +14,21 @@ export default function Sidebar({ isOpen, setIsOpen, isOnline = true, pendingQue
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: Icons.dashboard },
         { label: 'Borang', path: '/borang', icon: Icons.document, permissions: ['standard.update', 'audit.score.update', 'audit.view'] },
+        { label: 'Pelaksanaan', path: '/pelaksanaan', icon: Icons.execution, permissions: ['standard.update', 'audit.score.update', 'audit.view'] },
         { label: 'Penetapan Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export'], hideRoles: ['Auditor', 'Lead Auditor'] },
         { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'], hideRoles: ['Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor'] },
         { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, permissions: ['audit.score.update'] },
         { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, permissions: ['ptk.view'] },
         { label: 'Laporan Audit', path: '/report', icon: Icons.report, permissions: ['report.view'], hideRoles: ['Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor'] },
-        { label: 'Manajemen Pengguna', path: '/settings/users', icon: Icons.shield, roles: ['SuperAdmin'], permissions: ['user.view'] },
     ];
 
     const masterItems = [
         { label: 'Fakultas', path: '/settings/master/faculties', icon: Icons.folder, roles: ['SuperAdmin'], permissions: ['user.view'] },
         { label: 'Prodi', path: '/settings/master/prodis', icon: Icons.document, roles: ['SuperAdmin'], permissions: ['user.view'] },
+        { label: 'Pengaturan Siklus', path: '/settings/cycle', icon: Icons.schedule, roles: ['SuperAdmin'], permissions: ['role.manage'] },
+        { label: 'Manajemen Pengguna', path: '/settings/users', icon: Icons.shield, roles: ['SuperAdmin'], permissions: ['user.view'] },
+        { label: 'Manajemen Role', path: '/settings', icon: Icons.settings, roles: ['SuperAdmin'], permissions: ['role.manage'] },
+        { label: 'Manajemen Permission', path: '/settings/permissions', icon: Icons.target, roles: ['SuperAdmin'], permissions: ['role.manage'] },
     ];
 
     // Filter menu items based on user role
@@ -128,6 +131,7 @@ export default function Sidebar({ isOpen, setIsOpen, isOnline = true, pendingQue
                                             <NavLink
                                                 key={item.path}
                                                 to={item.path}
+                                                end={item.path === '/settings' || item.path === '/settings/permissions'}
                                                 onClick={() => setIsOpen(false)}
                                                 className={({ isActive }) =>
                                                     `flex items-center rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${isActive
@@ -142,12 +146,6 @@ export default function Sidebar({ isOpen, setIsOpen, isOnline = true, pendingQue
                                         ))}
                                     </div>
                                 )}
-                            </div>
-                        )}
-
-                        {isPerumus && (
-                            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-900">
-                                Role Perumus difokuskan untuk membuat dan menyusun dokumen standar mutu.
                             </div>
                         )}
                     </nav>

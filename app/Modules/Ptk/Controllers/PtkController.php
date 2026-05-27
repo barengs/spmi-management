@@ -29,6 +29,7 @@ class PtkController extends Controller
             'metric_id' => 'required|exists:mst_metrics,id',
             'evidence_id' => 'nullable|exists:trx_evidences,id',
             'finding_summary' => 'required|string',
+            'target_completion_date' => 'required|date|after_or_equal:today',
             'assigned_unit_id' => 'nullable|exists:ref_units,id',
             'assigned_user_id' => 'nullable|exists:users,id',
         ]);
@@ -81,6 +82,8 @@ class PtkController extends Controller
             'created_by' => $user->id,
             'status' => 'OPEN',
             'finding_summary' => trim($validated['finding_summary']),
+            'target_completion_date' => $validated['target_completion_date'],
+            'target_date_status' => 'PENDING',
         ]);
 
         return response()->json([
@@ -107,6 +110,7 @@ class PtkController extends Controller
                 'assignedUser:id,name,email,unit_id',
                 'assignedUnit:id,parent_id,name,code,level',
                 'creator:id,name,email',
+                'targetDateResponder:id,name,email',
                 'responder:id,name,email',
                 'verifier:id,name,email',
                 'closer:id,name,email',
@@ -162,6 +166,13 @@ class PtkController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Tindak koreksi ini tidak dapat direspons pada status saat ini.',
+            ], 422);
+        }
+
+        if ($ptk->target_date_status !== 'ACCEPTED') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Auditee harus menyetujui target tanggal dari auditor sebelum mengirim tindak lanjut.',
             ], 422);
         }
 
@@ -231,6 +242,96 @@ class PtkController extends Controller
         ]);
     }
 
+    public function respondTargetDate(Request $request, TrxPtk $ptk): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user?->can('ptk.respond')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk merespons target tanggal tindak koreksi.',
+            ], 403);
+        }
+
+        if (! $this->canRespond($user, $ptk)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Tindak koreksi ini tidak ditugaskan ke akun atau unit Anda.',
+            ], 403);
+        }
+
+        if (! in_array($ptk->status, ['OPEN', 'REVISION_REQUIRED'], true)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Target tanggal PTK tidak dapat direspons pada status saat ini.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['accept', 'reject'])],
+            'note' => 'nullable|string',
+        ]);
+
+        if ($validated['action'] === 'reject' && blank($validated['note'] ?? null)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Catatan alasan penolakan target tanggal wajib diisi.',
+            ], 422);
+        }
+
+        $ptk->forceFill([
+            'target_date_status' => $validated['action'] === 'accept' ? 'ACCEPTED' : 'REJECTED',
+            'target_date_response_note' => $validated['note'] ?? null,
+            'target_date_responded_at' => now(),
+            'target_date_responded_by' => $user->id,
+        ])->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $validated['action'] === 'accept'
+                ? 'Target tanggal tindak koreksi telah Anda setujui.'
+                : 'Target tanggal tindak koreksi telah Anda tolak dan dikembalikan ke auditor.',
+            'data' => $this->transformPtk($ptk->fresh($this->relations())),
+        ]);
+    }
+
+    public function updateTargetDate(Request $request, TrxPtk $ptk): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user?->can('ptk.create')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk mengubah target tanggal tindak koreksi.',
+            ], 403);
+        }
+
+        if (! in_array($ptk->status, ['OPEN', 'REVISION_REQUIRED'], true)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Target tanggal hanya dapat diubah selama PTK masih aktif.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'target_completion_date' => 'required|date|after_or_equal:today',
+        ]);
+
+        $ptk->forceFill([
+            'target_completion_date' => $validated['target_completion_date'],
+            'target_date_status' => 'PENDING',
+            'target_date_response_note' => null,
+            'target_date_responded_at' => null,
+            'target_date_responded_by' => null,
+        ])->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Target tanggal PTK berhasil diperbarui dan menunggu persetujuan auditee.',
+            'data' => $this->transformPtk($ptk->fresh($this->relations())),
+        ]);
+    }
+
     public function close(Request $request, TrxPtk $ptk): JsonResponse
     {
         $user = $request->user();
@@ -286,6 +387,7 @@ class PtkController extends Controller
             'assignedUser:id,name,email,unit_id',
             'assignedUnit:id,parent_id,name,code,level',
             'creator:id,name,email',
+            'targetDateResponder:id,name,email',
             'responder:id,name,email',
             'verifier:id,name,email',
             'closer:id,name,email',
@@ -302,6 +404,10 @@ class PtkController extends Controller
             'id' => $ptk->id,
             'status' => $ptk->status,
             'finding_summary' => $ptk->finding_summary,
+            'target_completion_date' => $ptk->target_completion_date?->toDateString(),
+            'target_date_status' => $ptk->target_date_status,
+            'target_date_response_note' => $ptk->target_date_response_note,
+            'target_date_responded_at' => $ptk->target_date_responded_at?->toISOString(),
             'response_note' => $ptk->response_note,
             'responded_at' => $ptk->responded_at?->toISOString(),
             'verification_note' => $ptk->verification_note,
@@ -335,6 +441,10 @@ class PtkController extends Controller
             'creator' => $ptk->creator ? [
                 'id' => $ptk->creator->id,
                 'name' => $ptk->creator->name,
+            ] : null,
+            'target_date_responder' => $ptk->targetDateResponder ? [
+                'id' => $ptk->targetDateResponder->id,
+                'name' => $ptk->targetDateResponder->name,
             ] : null,
             'responder' => $ptk->responder ? [
                 'id' => $ptk->responder->id,

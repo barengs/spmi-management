@@ -192,11 +192,18 @@ export default function StandardAuditReviewPage() {
             });
 
             if (action === 'reject' && createPtkOnReject) {
+                const targetCompletionDate = window.prompt('Masukkan target tanggal koreksi untuk auditee (format YYYY-MM-DD):');
+
+                if (!targetCompletionDate || !targetCompletionDate.trim()) {
+                    throw new Error('Target tanggal koreksi wajib diisi untuk membuat PTK.');
+                }
+
                 await api.post('/ptk', {
                     metric_id: selectedEvidence.metric?.id,
                     evidence_id: selectedEvidence.id,
                     assigned_user_id: selectedEvidence.uploader?.id || null,
                     assigned_unit_id: selectedEvidence.uploader?.unit?.id || selectedEvidence.uploader?.unit_id || null,
+                    target_completion_date: targetCompletionDate.trim(),
                     finding_summary: reviewComment.trim(),
                 });
             }
@@ -204,7 +211,7 @@ export default function StandardAuditReviewPage() {
             toast.success(response.data.message);
             navigate('/audit');
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Aksi review gagal diproses.');
+            toast.error(error.response?.data?.message || error.message || 'Aksi review gagal diproses.');
         } finally {
             setSubmittingAction('');
         }

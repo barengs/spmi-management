@@ -67,6 +67,9 @@ export default function PtkPage() {
     const [selectedId, setSelectedId] = useState(null);
     const [submittingAction, setSubmittingAction] = useState('');
     const [creatingPtk, setCreatingPtk] = useState(false);
+    const [updatingTargetDate, setUpdatingTargetDate] = useState(false);
+    const [targetDateNote, setTargetDateNote] = useState('');
+    const [targetCompletionDate, setTargetCompletionDate] = useState('');
     const [responseNote, setResponseNote] = useState('');
     const [verificationNote, setVerificationNote] = useState('');
     const [closureNote, setClosureNote] = useState('');
@@ -74,6 +77,7 @@ export default function PtkPage() {
         standardId: '',
         metricId: '',
         assignedUnitId: '',
+        targetCompletionDate: '',
         findingSummary: '',
     });
 
@@ -149,6 +153,8 @@ export default function PtkPage() {
     );
 
     useEffect(() => {
+        setTargetCompletionDate(selectedPtk?.target_completion_date || '');
+        setTargetDateNote(selectedPtk?.target_date_response_note || '');
         setResponseNote(selectedPtk?.response_note || '');
         setVerificationNote(selectedPtk?.verification_note || '');
         setClosureNote(selectedPtk?.closure_note || '');
@@ -188,6 +194,42 @@ export default function PtkPage() {
         submitAction('respond', { response_note: responseNote });
     };
 
+    const handleRespondTargetDate = (action) => {
+        if (action === 'reject' && !targetDateNote.trim()) {
+            toast.warning('Catatan alasan penolakan target tanggal wajib diisi.');
+            return;
+        }
+
+        submitAction('target-date/respond', {
+            action,
+            note: targetDateNote.trim() || null,
+        });
+    };
+
+    const handleUpdateTargetDate = async () => {
+        if (!selectedPtk) {
+            return;
+        }
+
+        if (!targetCompletionDate) {
+            toast.warning('Target tanggal koreksi wajib diisi.');
+            return;
+        }
+
+        try {
+            setUpdatingTargetDate(true);
+            const response = await api.patch(`/ptk/${selectedPtk.id}/target-date`, {
+                target_completion_date: targetCompletionDate,
+            });
+            toast.success(response.data.message);
+            await loadPtk();
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Target tanggal PTK gagal diperbarui.');
+        } finally {
+            setUpdatingTargetDate(false);
+        }
+    };
+
     const handleVerify = (action) => {
         if (!verificationNote.trim()) {
             toast.warning('Catatan verifikasi wajib diisi.');
@@ -212,8 +254,8 @@ export default function PtkPage() {
     const handleCreatePtk = async (event) => {
         event.preventDefault();
 
-        if (!createForm.standardId || !createForm.metricId || !createForm.assignedUnitId || !createForm.findingSummary.trim()) {
-            toast.warning('Standar, indikator, unit tujuan, dan temuan auditor wajib diisi.');
+        if (!createForm.standardId || !createForm.metricId || !createForm.assignedUnitId || !createForm.targetCompletionDate || !createForm.findingSummary.trim()) {
+            toast.warning('Standar, indikator, unit tujuan, target tanggal, dan temuan auditor wajib diisi.');
             return;
         }
 
@@ -223,6 +265,7 @@ export default function PtkPage() {
             const response = await api.post('/ptk', {
                 metric_id: createForm.metricId,
                 assigned_unit_id: createForm.assignedUnitId,
+                target_completion_date: createForm.targetCompletionDate,
                 finding_summary: createForm.findingSummary.trim(),
             });
 
@@ -232,6 +275,7 @@ export default function PtkPage() {
                 standardId: '',
                 metricId: '',
                 assignedUnitId: '',
+                targetCompletionDate: '',
                 findingSummary: '',
             });
             setIndicatorOptions([]);
@@ -307,6 +351,16 @@ export default function PtkPage() {
                                     <option key={item.id} value={item.id}>{item.name}</option>
                                 ))}
                             </select>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-sm font-medium text-gray-700">Target Tanggal Koreksi</span>
+                            <input
+                                type="date"
+                                value={createForm.targetCompletionDate}
+                                onChange={(event) => setCreateForm((current) => ({ ...current, targetCompletionDate: event.target.value }))}
+                                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+                            />
                         </label>
 
                         <label className="space-y-2 lg:col-span-2">
@@ -454,6 +508,90 @@ export default function PtkPage() {
                                 </div>
                             </div>
 
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">Persetujuan Target Tanggal</div>
+                                    <div className="mt-3 grid gap-4 md:grid-cols-3">
+                                    <div>
+                                        <div className="text-xs text-amber-700">Target Auditor</div>
+                                        <div className="mt-1 text-sm font-semibold text-amber-900">{selectedPtk.target_completion_date ? formatDateTime(selectedPtk.target_completion_date) : '-'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-amber-700">Status</div>
+                                        <div className="mt-1 text-sm font-semibold text-amber-900">{selectedPtk.target_date_status || 'PENDING'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-amber-700">Direspons</div>
+                                        <div className="mt-1 text-sm font-semibold text-amber-900">{formatDateTime(selectedPtk.target_date_responded_at)}</div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4">
+                                    {selectedPtk.target_date_status === 'REJECTED' && selectedPtk.target_date_response_note && (
+                                        <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+                                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">
+                                                Komentar Penolakan Auditee
+                                            </div>
+                                            <div className="mt-2 text-sm leading-6 text-rose-900">
+                                                {selectedPtk.target_date_response_note}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {canCreate && ['OPEN', 'REVISION_REQUIRED'].includes(selectedPtk.status) && (
+                                        <div className="mb-4 flex flex-wrap items-end gap-3">
+                                            <label className="min-w-[220px] flex-1 space-y-2">
+                                                <span className="text-sm font-medium text-amber-900">Ubah Target Tanggal Auditor</span>
+                                                <input
+                                                    type="date"
+                                                    value={targetCompletionDate}
+                                                    onChange={(event) => setTargetCompletionDate(event.target.value)}
+                                                    className="w-full rounded-2xl border border-amber-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+                                                />
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={handleUpdateTargetDate}
+                                                disabled={updatingTargetDate}
+                                                className="inline-flex items-center gap-2 rounded-2xl bg-amber-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                            >
+                                                <Icon icon={Icons.save} width={16} />
+                                                {updatingTargetDate ? 'Menyimpan...' : 'Perbarui Target'}
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    <label className="mb-2 block text-sm font-medium text-amber-900">Catatan Persetujuan Target Tanggal</label>
+                                    <textarea
+                                        value={targetDateNote}
+                                        onChange={(event) => setTargetDateNote(event.target.value)}
+                                        rows={3}
+                                        disabled={!canRespond || !['OPEN', 'REVISION_REQUIRED'].includes(selectedPtk.status) || selectedPtk.target_date_status === 'ACCEPTED' || submittingAction === 'target-date/respond'}
+                                        className="w-full rounded-2xl border border-amber-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100 disabled:bg-amber-50/50"
+                                        placeholder="Isi alasan jika target tanggal perlu ditolak atau beri catatan persetujuan."
+                                    />
+                                    <div className="mt-3 flex flex-wrap justify-end gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRespondTargetDate('reject')}
+                                            disabled={!canRespond || !['OPEN', 'REVISION_REQUIRED'].includes(selectedPtk.status) || selectedPtk.target_date_status === 'ACCEPTED' || submittingAction === 'target-date/respond'}
+                                            className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            <Icon icon={Icons.delete} width={16} />
+                                            Tolak Tanggal
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRespondTargetDate('accept')}
+                                            disabled={!canRespond || !['OPEN', 'REVISION_REQUIRED'].includes(selectedPtk.status) || selectedPtk.target_date_status === 'ACCEPTED' || submittingAction === 'target-date/respond'}
+                                            className="inline-flex items-center gap-2 rounded-2xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            <Icon icon={Icons.check} width={16} />
+                                            {submittingAction === 'target-date/respond' ? 'Memproses...' : 'Setujui Tanggal'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="space-y-4">
                                 <div>
                                     <label className="mb-2 block text-sm font-medium text-gray-700">Tindak Lanjut Auditee</label>
@@ -461,7 +599,7 @@ export default function PtkPage() {
                                         value={responseNote}
                                         onChange={(event) => setResponseNote(event.target.value)}
                                         rows={4}
-                                        disabled={!canRespond || !['OPEN', 'REVISION_REQUIRED'].includes(selectedPtk.status) || submittingAction === 'respond'}
+                                        disabled={!canRespond || !['OPEN', 'REVISION_REQUIRED'].includes(selectedPtk.status) || selectedPtk.target_date_status !== 'ACCEPTED' || submittingAction === 'respond'}
                                         className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100 disabled:bg-gray-50"
                                         placeholder="Jelaskan tindakan koreksi yang sudah dilakukan unit terkait."
                                     />
@@ -469,7 +607,7 @@ export default function PtkPage() {
                                         <button
                                             type="button"
                                             onClick={handleRespond}
-                                            disabled={!canRespond || !['OPEN', 'REVISION_REQUIRED'].includes(selectedPtk.status) || submittingAction === 'respond'}
+                                            disabled={!canRespond || !['OPEN', 'REVISION_REQUIRED'].includes(selectedPtk.status) || selectedPtk.target_date_status !== 'ACCEPTED' || submittingAction === 'respond'}
                                             className="inline-flex items-center gap-2 rounded-2xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             <Icon icon={Icons.save} width={16} />

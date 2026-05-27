@@ -220,6 +220,11 @@ Roles are defined in `RolePermissionSeeder.php`:
 |------|-------------|
 | SuperAdmin | Full system access |
 | LPM-Admin | Quality assurance admin |
+| Perumus | Can create and draft standards manually |
+| Pemeriksa | Standard read/review-facing role without audit assignment |
+| Persetujuan | Standard approval-facing governance role |
+| Pertimbangan | Standard consideration/read-only governance role |
+| Pengendalian | Standard control/monitoring read-only role |
 | Kepala LPMI | First approver for standard publication flow |
 | Wakil Rektor 1 | Parallel approver at vice rector stage |
 | Wakil Rektor 2 | Parallel approver at vice rector stage |
@@ -245,6 +250,11 @@ Permissions follow the pattern `{resource}.{action}`:
 - Uses `HasRoles` trait from Spatie
 - Soft deletes enabled
 - Fields: `nidn_npk`, `name`, `email`, `password`, `unit_id`, `is_active`
+- Also stores optional virtual signature metadata:
+  - `signature_path`
+  - `signature_original_name`
+  - `signature_mime_type`
+  - `signature_size_bytes`
 
 ### Unit (ref_units table)
 - Self-referencing tree structure (parent/children)
@@ -290,6 +300,11 @@ Permissions follow the pattern `{resource}.{action}`:
 | POST | `/api/v1/auth/login` | Login, returns JWT token |
 | POST | `/api/v1/auth/logout` | Logout (authenticated) |
 | GET | `/api/v1/auth/me` | Get current user info |
+| PUT | `/api/v1/auth/profile` | Update own account name |
+| PUT | `/api/v1/auth/password` | Update own password |
+| POST | `/api/v1/auth/signature` | Upload or replace own virtual signature |
+| DELETE | `/api/v1/auth/signature` | Remove own virtual signature |
+| GET | `/api/v1/auth/signature/download` | Download own virtual signature |
 
 ### Users
 | Method | Endpoint | Description |
@@ -300,6 +315,17 @@ Permissions follow the pattern `{resource}.{action}`:
 | PUT | `/api/v1/users/{id}` | Update user |
 | DELETE | `/api/v1/users/{id}` | Soft delete user |
 | POST | `/api/v1/users/{id}/force-reset` | Send password reset link |
+
+### RBAC / Permissions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/rbac/matrix` | Get roles plus all permissions |
+| POST | `/api/v1/rbac/roles` | Create a new role with optional initial permissions |
+| PUT | `/api/v1/rbac/roles/{role}` | Update permissions assigned to a role |
+| GET | `/api/v1/rbac/permissions` | List permissions |
+| POST | `/api/v1/rbac/permissions` | Create permission using `module.action` shape |
+| GET | `/api/v1/rbac/permissions/{permission}` | Get one permission |
+| PUT | `/api/v1/rbac/permissions/{permission}` | Update one permission |
 
 ### Units
 | Method | Endpoint | Description |
@@ -549,6 +575,24 @@ The repository currently contains several additions and implementation details b
 - `@iconify/react` wrapped by `resources/js/components/ui/Icon.jsx`
 - `zustand` is installed in `package.json` but currently not used in `resources/js`
 
+### Additional Frontend Pages / Flows Now Present
+- Self-account page is active at `resources/js/pages/account/AccountPage.jsx`
+  - route: `/account`
+  - supports updating own name, password, and virtual signature
+- Role management page remains at:
+  - route: `/settings`
+  - current focus is `Tambah Role Baru`
+- Permission management is now separated into dedicated pages:
+  - `resources/js/pages/settings/PermissionIndexPage.jsx`
+  - `resources/js/pages/settings/PermissionFormPage.jsx`
+  - routes:
+    - `/settings/permissions`
+    - `/settings/permissions/add`
+    - `/settings/permissions/:id/edit`
+- Sidebar navigation changed:
+  - `Manajemen Pengguna` moved under dropdown `Master`
+  - `Manajemen Role` and `Manajemen Permission` live under the same dropdown
+
 ### Structural Notes
 - There are duplicate/legacy placeholder paths:
   - `app/Http/Controllers/Modules/...`
@@ -583,11 +627,25 @@ The repository currently contains several additions and implementation details b
      - imported standards whose source documents may contain tables that should remain table-shaped in exported output
 9. **Legacy IKU/IKT references remain outside standard builder**
    - Borang/audit/report pages still contain `IKU`/`IKT` references in some tables and filters even though builder authoring has removed them from new standard node creation.
+10. **Seeder mismatch still present**
+   - Full `DatabaseSeeder` can still fail on PostgreSQL environments if legacy seed data uses old standard categories such as `SN-Dikti` that no longer satisfy the current DB constraint / category mapping.
+11. **Standard governance roles vs approval logic**
+   - New governance roles (`Pemeriksa`, `Persetujuan`, `Pertimbangan`, `Pengendalian`) now exist for account assignment and RBAC management, but current approval controller logic is still hardcoded to role names like `Kepala LPMI`, `Wakil Rektor 1/2/3`, and `Rektor`.
+12. **Role page naming drift**
+   - `resources/js/pages/settings/PermissionMatrixPage.jsx` is no longer a matrix-style page in practice; it now acts as the role creation page for `/settings`.
 
 ### Quick Verification Paths
 - API routing truth source: `routes/api.php`
 - SPA routing truth source: `resources/js/components/MainApp.jsx`
 - Auth flow: `app/Modules/Core/Controllers/AuthController.php`, `resources/js/store/authSlice.js`, `resources/js/services/api.js`
+- Self-account UI flow:
+  - `resources/js/pages/account/AccountPage.jsx`
+  - `app/Modules/Core/Controllers/AuthController.php`
+- Role / permission management flow:
+  - `app/Modules/Core/Controllers/RolePermissionController.php`
+  - `resources/js/pages/settings/PermissionMatrixPage.jsx`
+  - `resources/js/pages/settings/PermissionIndexPage.jsx`
+  - `resources/js/pages/settings/PermissionFormPage.jsx`
 - Standard import logic:
   - `app/Modules/Standard/Controllers/StandardController.php`
   - `app/Modules/Standard/Services/StandardDocumentImportService.php`

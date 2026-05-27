@@ -5,6 +5,7 @@ namespace App\Modules\Standard\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
+use App\Modules\Standard\Models\StandardImprovement;
 use App\Modules\Standard\Services\StandardDocumentImportService;
 use App\Modules\Standard\Services\StandardExportService;
 use Illuminate\Http\JsonResponse;
@@ -180,6 +181,31 @@ class StandardController extends Controller
         };
     }
 
+    private function activateRevisedStandard(MstStandard $standard): void
+    {
+        if (! $standard->previous_standard_id) {
+            return;
+        }
+
+        $previousStandard = MstStandard::find($standard->previous_standard_id);
+
+        if (! $previousStandard) {
+            return;
+        }
+
+        $previousStandard->is_active = false;
+        $previousStandard->superseded_by_standard_id = $standard->id;
+        $previousStandard->save();
+
+        $standard->is_active = true;
+
+        StandardImprovement::query()
+            ->where('new_standard_id', $standard->id)
+            ->update([
+                'cycle_year' => $standard->periode_tahun,
+            ]);
+    }
+
     private function approveAsCurrentActor(Request $request, MstStandard $standard): ?JsonResponse
     {
         $user = $request->user();
@@ -334,7 +360,7 @@ class StandardController extends Controller
             return $denied;
         }
 
-        $query = MstStandard::query();
+        $query = MstStandard::query()->with(['previousStandard:id,name,version_number,periode_tahun', 'supersededByStandard:id,name,version_number,periode_tahun']);
 
         if ($request->has('category')) {
             $query->where('category', $request->category);
@@ -490,7 +516,13 @@ class StandardController extends Controller
             return $denied;
         }
 
-        $standard = MstStandard::findOrFail($id);
+        $standard = MstStandard::with([
+            'previousStandard:id,name,version_number,periode_tahun,status',
+            'supersededByStandard:id,name,version_number,periode_tahun,status',
+            'newerVersions:id,name,periode_tahun,version_number,status,previous_standard_id',
+            'improvements.finding:id,standard_id,metric_id,status,finding_summary,created_at',
+            'improvements.newStandard:id,name,periode_tahun,version_number,status',
+        ])->findOrFail($id);
 
         return response()->json([
             'status' => 'success',
@@ -680,6 +712,7 @@ class StandardController extends Controller
             $standard->approval_stage = 'FINAL';
             $standard->approved_by = auth()->id();
             $standard->reject_reason = null;
+            $this->activateRevisedStandard($standard);
             $standard->save();
 
             return response()->json([

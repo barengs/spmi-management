@@ -33,6 +33,7 @@ export default function NotificationPage() {
     const roleNames = roles.map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
     const [schedules, setSchedules] = useState([]);
     const [standards, setStandards] = useState([]);
+    const [ptks, setPtks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const hasRole = (roleName) => roleNames.includes(roleName);
@@ -42,12 +43,18 @@ export default function NotificationPage() {
     const canAccessNotifications = hasRole('SuperAdmin')
         || permissions.includes('standard.publish')
         || permissions.includes('audit.view')
-        || permissions.includes('audit.score.update');
+        || permissions.includes('audit.score.update')
+        || permissions.includes('ptk.view')
+        || permissions.includes('ptk.respond')
+        || permissions.includes('ptk.create')
+        || permissions.includes('ptk.verify')
+        || permissions.includes('ptk.close');
 
     useEffect(() => {
         if (!canAccessNotifications) {
             setSchedules([]);
             setStandards([]);
+            setPtks([]);
             setLoading(false);
             return undefined;
         }
@@ -55,21 +62,24 @@ export default function NotificationPage() {
         const fetchNotifications = async () => {
             try {
                 setLoading(true);
-                const requests = [api.get('/standards')];
+                const requests = [api.get('/standards'), api.get('/ptk')];
 
                 if (shouldFetchSchedules) {
                     requests.unshift(api.get('/audit-schedules'));
                 }
 
                 const responses = await Promise.all(requests);
-                const standardResponse = responses[responses.length - 1];
-                const scheduleResponse = responses.length > 1 ? responses[0] : null;
+                const standardResponse = responses[responses.length - 2];
+                const ptkResponse = responses[responses.length - 1];
+                const scheduleResponse = responses.length > 2 ? responses[0] : null;
 
                 setSchedules(scheduleResponse?.data?.data || []);
                 setStandards(standardResponse.data.data || []);
+                setPtks(ptkResponse.data.data || []);
             } catch (error) {
                 setSchedules([]);
                 setStandards([]);
+                setPtks([]);
                 toast.error(error.response?.data?.message || 'Notifikasi gagal dimuat.');
             } finally {
                 setLoading(false);
@@ -86,8 +96,8 @@ export default function NotificationPage() {
     }, [canAccessNotifications, shouldFetchSchedules]);
 
     const notifications = useMemo(
-        () => buildNotifications(user, schedules, standards),
-        [schedules, standards, user]
+        () => buildNotifications(user, schedules, standards, ptks),
+        [ptks, schedules, standards, user]
     );
     const filteredNotifications = useMemo(() => (
         notifications.filter((item) => (
@@ -104,13 +114,14 @@ export default function NotificationPage() {
                 </div>
                 <h1 className="mt-4 text-2xl font-semibold text-gray-900">Daftar Notifikasi</h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                    Halaman ini menampilkan seluruh notifikasi masuk yang terkait dengan jadwal audit dan persetujuan yang perlu ditindaklanjuti.
+                    Halaman ini menampilkan notifikasi jadwal audit, approval standar, dan tindak koreksi yang perlu segera ditindaklanjuti.
                 </p>
             </section>
 
             {!canAccessNotifications && (
                 <section className="rounded-3xl border border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-500 shadow-sm">
                     Role Anda tidak memiliki fitur notifikasi audit atau approval standar.
+                    
                 </section>
             )}
 

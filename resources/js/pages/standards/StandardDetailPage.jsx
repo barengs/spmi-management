@@ -11,6 +11,7 @@ const tabs = [
     { id: 'structure', label: 'Struktur' },
     { id: 'history', label: 'Riwayat' },
     { id: 'document', label: 'Dokumen' },
+    { id: 'improvement', label: 'Peningkatan' },
     { id: 'settings', label: 'Pengaturan' },
 ];
 
@@ -220,6 +221,15 @@ export default function StandardDetailPage() {
     const [documentBlobUrl, setDocumentBlobUrl] = useState(null);
     const [documentLoading, setDocumentLoading] = useState(false);
     const [settingsSubmitting, setSettingsSubmitting] = useState(false);
+    const [improvementLoading, setImprovementLoading] = useState(false);
+    const [improvementSubmitting, setImprovementSubmitting] = useState(false);
+    const [improvementContext, setImprovementContext] = useState({ findings: [], improvements: [] });
+    const [improvementForm, setImprovementForm] = useState({
+        action: 'REVISI',
+        justification: '',
+        target_period_year: String(new Date().getFullYear() + 1),
+        finding_ptk_id: '',
+    });
     const [settingsForm, setSettingsForm] = useState({
         name: '',
         category: 'Tambahan',
@@ -313,9 +323,43 @@ export default function StandardDetailPage() {
         };
     }, [standard?.id, standard?.source_document_path]);
 
+    useEffect(() => {
+        if (activeTab !== 'improvement') {
+            return;
+        }
+
+        const fetchImprovementContext = async () => {
+            try {
+                setImprovementLoading(true);
+                const response = await api.get(`/improvements?standard_id=${id}`);
+                const payload = response.data.data || {};
+                setImprovementContext({
+                    findings: payload.findings || [],
+                    improvements: payload.improvements || [],
+                });
+                setImprovementForm((current) => ({
+                    ...current,
+                    finding_ptk_id: current.finding_ptk_id || String(payload.findings?.[0]?.id || ''),
+                    target_period_year: current.target_period_year || String((standard?.periode_tahun || new Date().getFullYear()) + 1),
+                }));
+            } catch (error) {
+                toast.error(error.response?.data?.message || 'Data peningkatan standar gagal dimuat.');
+            } finally {
+                setImprovementLoading(false);
+            }
+        };
+
+        fetchImprovementContext();
+    }, [activeTab, id, standard?.periode_tahun]);
+
     const flattenedTree = useMemo(() => flattenNodes(tree), [tree]);
     const historyItems = useMemo(() => buildHistoryItems(standard), [standard]);
     const isDraft = standard?.status === 'DRAFT';
+    const improvementActionLabels = {
+        REVISI: 'Perlu diperbaiki dan diterapkan lagi',
+        PERTAHANKAN: 'Tetap dipakai pada siklus berikutnya',
+        HAPUS: 'Tidak dipakai lagi pada siklus berikutnya',
+    };
 
     const handleExport = async () => {
         if (!standard) {
@@ -396,6 +440,48 @@ export default function StandardDetailPage() {
             toast.error(error.response?.data?.message || 'Standar gagal dihapus.');
         } finally {
             setSettingsSubmitting(false);
+        }
+    };
+
+    const handleImprovementSubmit = async (event) => {
+        event.preventDefault();
+
+        if (!improvementForm.justification.trim()) {
+            toast.warning('Catatan peningkatan wajib diisi.');
+            return;
+        }
+
+        try {
+            setImprovementSubmitting(true);
+            const response = await api.post('/improvements', {
+                standard_id: Number(id),
+                finding_ptk_id: improvementForm.finding_ptk_id ? Number(improvementForm.finding_ptk_id) : null,
+                action: improvementForm.action,
+                justification: improvementForm.justification.trim(),
+                target_period_year: improvementForm.action === 'REVISI' ? Number(improvementForm.target_period_year) : null,
+            });
+
+            toast.success(response.data.message || 'Catatan peningkatan berhasil disimpan.');
+
+            const [standardResponse, improvementResponse] = await Promise.all([
+                api.get(`/standards/${id}`),
+                api.get(`/improvements?standard_id=${id}`),
+            ]);
+
+            setStandard(standardResponse.data.data || null);
+            setImprovementContext({
+                findings: improvementResponse.data.data?.findings || [],
+                improvements: improvementResponse.data.data?.improvements || [],
+            });
+            setImprovementForm((current) => ({
+                ...current,
+                justification: '',
+                finding_ptk_id: '',
+            }));
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Catatan peningkatan gagal disimpan.');
+        } finally {
+            setImprovementSubmitting(false);
         }
     };
 
@@ -484,8 +570,11 @@ export default function StandardDetailPage() {
                     {activeTab === 'information' && (
                         <section className="grid gap-4 lg:grid-cols-2">
                             <SummaryCard label="Nama Standar" value={standard.name} />
+                            <SummaryCard label="Versi" value={`v${standard.version_number || 1}`} hint={standard.root_standard_id ? 'Tersambung ke histori versi standar' : 'Versi awal standar'} />
                             <SummaryCard label="Kategori" value={normalizeStandardCategory(standard.category)} />
                             <SummaryCard label="Periode Tahun" value={String(standard.periode_tahun || '-')} />
+                            <SummaryCard label="Versi Sebelumnya" value={standard.previous_standard ? `${standard.previous_standard.name} (v${standard.previous_standard.version_number || 1})` : '-'} />
+                            <SummaryCard label="Versi Pengganti" value={standard.superseded_by_standard ? `${standard.superseded_by_standard.name} (v${standard.superseded_by_standard.version_number || 1})` : '-'} />
                             <SummaryCard label="Referensi Regulasi" value={standard.referensi_regulasi || '-'} />
                             <SummaryCard label="Dibuat" value={formatDateTime(standard.created_at)} />
                             <SummaryCard label="Terakhir Diubah" value={formatDateTime(standard.updated_at)} />
@@ -499,6 +588,12 @@ export default function StandardDetailPage() {
                                 <div className="rounded-3xl border border-rose-900 bg-rose-950/60 p-5 text-sm text-rose-100 shadow-sm lg:col-span-2">
                                     <div className="text-xs font-semibold uppercase tracking-[0.16em] text-rose-300">Catatan Revisi</div>
                                     <div className="mt-2 leading-6">{standard.reject_reason}</div>
+                                </div>
+                            ) : null}
+                            {standard.improvement_justification ? (
+                                <div className="rounded-3xl border border-emerald-900 bg-emerald-950/60 p-5 text-sm text-emerald-100 shadow-sm lg:col-span-2">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">Justifikasi Peningkatan</div>
+                                    <div className="mt-2 leading-6">{standard.improvement_justification}</div>
                                 </div>
                             ) : null}
                         </section>
@@ -526,6 +621,24 @@ export default function StandardDetailPage() {
 
                     {activeTab === 'history' && (
                         <section className="space-y-6">
+                            {(standard.previous_standard || (standard.newer_versions || []).length > 0 || (standard.improvements || []).length > 0) && (
+                                <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
+                                    <div className="text-sm font-semibold text-slate-100">Riwayat Versi dan Peningkatan</div>
+                                    <div className="mt-3 space-y-3 text-sm text-slate-300">
+                                        {standard.previous_standard ? (
+                                            <div>Versi sebelumnya: {standard.previous_standard.name} (v{standard.previous_standard.version_number || 1})</div>
+                                        ) : null}
+                                        {(standard.newer_versions || []).map((item) => (
+                                            <div key={item.id}>Versi lanjutan: {item.name} (v{item.version_number || 1}) • periode {item.periode_tahun || '-'}</div>
+                                        ))}
+                                        {(standard.improvements || []).map((item) => (
+                                            <div key={item.id}>
+                                                Keputusan {item.action} • {item.justification}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {historyItems.map((item, index) => (
                                 <div key={item.key} className="flex gap-4">
                                     <div className="flex w-8 flex-col items-center">
@@ -609,6 +722,122 @@ export default function StandardDetailPage() {
                                     Standar ini tidak memiliki dokumen sumber yang diunggah.
                                 </div>
                             )}
+                        </section>
+                    )}
+
+                    {activeTab === 'improvement' && (
+                        <section className="space-y-6">
+                            <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
+                                <div className="text-sm font-semibold text-slate-100">Catatan Peningkatan Siklus Berikutnya</div>
+                                <div className="mt-2 text-sm leading-6 text-slate-400">
+                                    Gunakan tab ini untuk mencatat apa yang perlu diperbaiki pada standar, serta memutuskan apakah standar akan diterapkan kembali pada siklus berikutnya atau tidak.
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleImprovementSubmit} className="space-y-4 rounded-3xl border border-slate-700 bg-slate-900 p-5">
+                                <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-200">Keputusan Siklus Berikutnya</label>
+                                    <select
+                                        value={improvementForm.action}
+                                        onChange={(event) => setImprovementForm((current) => ({ ...current, action: event.target.value }))}
+                                        className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-950"
+                                    >
+                                        {Object.entries(improvementActionLabels).map(([value, label]) => (
+                                            <option key={value} value={value}>{label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {improvementForm.action === 'REVISI' && (
+                                    <div>
+                                        <label className="mb-2 block text-sm font-medium text-slate-200">Periode Re-Implementasi</label>
+                                        <input
+                                            type="number"
+                                            value={improvementForm.target_period_year}
+                                            onChange={(event) => setImprovementForm((current) => ({ ...current, target_period_year: event.target.value }))}
+                                            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-950"
+                                        />
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-200">Temuan Audit Terkait</label>
+                                    <select
+                                        value={improvementForm.finding_ptk_id}
+                                        onChange={(event) => setImprovementForm((current) => ({ ...current, finding_ptk_id: event.target.value }))}
+                                        className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-950"
+                                    >
+                                        <option value="">Tanpa temuan spesifik</option>
+                                        {(improvementContext.findings || []).map((finding) => (
+                                            <option key={finding.id} value={finding.id}>
+                                                {finding.metric?.content || 'Temuan audit'} 
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-200">Catatan yang Perlu Diperbaiki</label>
+                                    <textarea
+                                        rows={5}
+                                        value={improvementForm.justification}
+                                        onChange={(event) => setImprovementForm((current) => ({ ...current, justification: event.target.value }))}
+                                        className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-950"
+                                        placeholder="Tuliskan apa yang perlu diperbaiki, dipertahankan, atau alasan standar tidak diterapkan lagi di siklus berikutnya."
+                                    />
+                                </div>
+
+                                <div className="flex justify-end">
+                                    <button
+                                        type="submit"
+                                        disabled={improvementSubmitting}
+                                        className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                                    >
+                                        <Icon icon={Icons.save} width={16} />
+                                        {improvementSubmitting ? 'Menyimpan...' : 'Simpan Catatan Peningkatan'}
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
+                                <div className="mb-4 flex items-center justify-between">
+                                    <div className="text-sm font-semibold text-slate-100">Riwayat Peningkatan Standar Ini</div>
+                                    <span className="text-xs text-slate-400">{improvementContext.improvements?.length || 0} catatan</span>
+                                </div>
+
+                                {improvementLoading ? (
+                                    <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950 px-4 py-8 text-sm text-slate-400">
+                                        Memuat riwayat peningkatan...
+                                    </div>
+                                ) : (improvementContext.improvements?.length || 0) === 0 ? (
+                                    <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950 px-4 py-8 text-sm text-slate-400">
+                                        Belum ada catatan peningkatan untuk standar ini.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {improvementContext.improvements.map((item) => (
+                                            <div key={item.id} className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4">
+                                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-sm font-semibold text-slate-100">
+                                                            {improvementActionLabels[item.action] || item.action}
+                                                        </div>
+                                                        <div className="mt-1 text-xs text-slate-400">
+                                                            {item.cycle_year ? `Siklus ${item.cycle_year}` : '-'} • {formatDateTime(item.decided_at)}
+                                                        </div>
+                                                    </div>
+                                                    {item.new_standard ? (
+                                                        <Link to={`/standards/${item.new_standard.id}/detail`} className="text-xs font-semibold text-emerald-300 underline">
+                                                            Buka versi revisi
+                                                        </Link>
+                                                    ) : null}
+                                                </div>
+                                                <div className="mt-3 text-sm leading-6 text-slate-300">{item.justification}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </section>
                     )}
 

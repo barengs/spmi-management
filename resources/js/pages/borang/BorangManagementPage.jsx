@@ -460,12 +460,19 @@ export default function BorangManagementPage() {
             return;
         }
 
+        const targetCompletionDate = window.prompt('Masukkan target tanggal koreksi untuk auditee (format YYYY-MM-DD):');
+
+        if (!targetCompletionDate || !targetCompletionDate.trim()) {
+            return;
+        }
+
         setCreatingPtkId(row.id);
 
         try {
             const response = await api.post('/ptk', {
                 metric_id: row.metricId,
                 assigned_unit_id: selectedProdi.id,
+                target_completion_date: targetCompletionDate.trim(),
                 finding_summary: findingSummary.trim(),
             });
 

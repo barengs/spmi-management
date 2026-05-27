@@ -2,13 +2,16 @@
 
 use App\Modules\Core\Controllers\AuthController;
 use App\Modules\Core\Controllers\RolePermissionController;
+use App\Modules\Core\Controllers\AppSettingController;
 use App\Modules\Core\Controllers\UnitController;
 use App\Modules\Core\Controllers\UserController;
 use App\Modules\Audit\Controllers\AuditScheduleController;
 use App\Modules\Audit\Controllers\AuditReportController;
 use App\Modules\Borang\Controllers\BorangController;
+use App\Modules\Borang\Controllers\PelaksanaanController;
 use App\Modules\Evidence\Controllers\EvidenceController;
 use App\Modules\Ptk\Controllers\PtkController;
+use App\Modules\Standard\Controllers\StandardImprovementController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -69,7 +72,17 @@ Route::prefix('v1')->group(function () {
         // Role & Permission Matrix
         Route::prefix('rbac')->group(function () {
             Route::get('/matrix',               [RolePermissionController::class, 'index']);
+            Route::post('/roles',              [RolePermissionController::class, 'store']);
             Route::put('/roles/{role}',         [RolePermissionController::class, 'update']);
+            Route::get('/permissions',         [RolePermissionController::class, 'permissionIndex']);
+            Route::post('/permissions',        [RolePermissionController::class, 'permissionStore']);
+            Route::get('/permissions/{permission}', [RolePermissionController::class, 'permissionShow']);
+            Route::put('/permissions/{permission}', [RolePermissionController::class, 'permissionUpdate']);
+        });
+
+        Route::prefix('settings')->group(function () {
+            Route::get('/cycle-duration', [AppSettingController::class, 'showCycleDuration']);
+            Route::put('/cycle-duration', [AppSettingController::class, 'updateCycleDuration']);
         });
 
         // Dokumen Standar Mutu (MstStandard)
@@ -94,6 +107,12 @@ Route::prefix('v1')->group(function () {
             
             // Hirarki Metrik/Indikator di dalam suatu standar
             Route::get('/{standard_id}/metrics/tree', [\App\Modules\Standard\Controllers\MetricController::class, 'tree']);
+        });
+
+        Route::prefix('improvements')->group(function () {
+            Route::get('/', [StandardImprovementController::class, 'index']);
+            Route::post('/', [StandardImprovementController::class, 'store']);
+            Route::get('/summary', [StandardImprovementController::class, 'summary']);
         });
 
         // Metrik / Indikator CRUD & Target
@@ -139,9 +158,18 @@ Route::prefix('v1')->group(function () {
             Route::delete('/{borangItem}',     [BorangController::class, 'destroy']);
         });
 
+        Route::prefix('pelaksanaan')->group(function () {
+            Route::get('/prodis', [PelaksanaanController::class, 'prodis']);
+            Route::get('/prodis/{prodi}', [PelaksanaanController::class, 'index']);
+            Route::get('/items/{borangItem}', [PelaksanaanController::class, 'show']);
+            Route::put('/items/{borangItem}', [PelaksanaanController::class, 'update']);
+        });
+
         Route::prefix('ptk')->group(function () {
             Route::get('/',                    [PtkController::class, 'index']);
             Route::post('/',                   [PtkController::class, 'store']);
+            Route::patch('/{ptk}/target-date', [PtkController::class, 'updateTargetDate']);
+            Route::patch('/{ptk}/target-date/respond', [PtkController::class, 'respondTargetDate']);
             Route::patch('/{ptk}/respond',     [PtkController::class, 'respond']);
             Route::patch('/{ptk}/verify',      [PtkController::class, 'verify']);
             Route::patch('/{ptk}/close',       [PtkController::class, 'close']);

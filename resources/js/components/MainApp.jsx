@@ -10,15 +10,19 @@ import AuditSchedulePage from '../pages/audit/AuditSchedulePage';
 import StandardAuditReviewPage from '../pages/audit/StandardAuditReviewPage';
 import BorangManagementPage from '../pages/borang/BorangManagementPage';
 import BorangDetailPage from '../pages/borang/BorangDetailPage';
+import PelaksanaanPage from '../pages/pelaksanaan/PelaksanaanPage';
 import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
 import StandardDetailPage from '../pages/standards/StandardDetailPage';
 import StandardReviewPage from '../pages/standards/StandardReviewPage';
 import PermissionMatrixPage from '../pages/settings/PermissionMatrixPage';
+import PermissionIndexPage from '../pages/settings/PermissionIndexPage';
+import PermissionFormPage from '../pages/settings/PermissionFormPage';
 import UserManagementPage from '../pages/settings/UserManagementPage';
 import FacultyMasterPage from '../pages/settings/FacultyMasterPage';
 import ProdiMasterPage from '../pages/settings/ProdiMasterPage';
+import CycleSettingPage from '../pages/settings/CycleSettingPage';
 import PtkPage from '../pages/ptk/PtkPage';
 import ReportPage from '../pages/report/ReportPage';
 import ReportDetailPage from '../pages/report/ReportDetailPage';
@@ -138,6 +142,14 @@ export default function MainApp() {
                             }
                         />
                         <Route
+                            path="pelaksanaan"
+                            element={
+                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
+                                    <PelaksanaanPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
                             path="standards/:id/execution"
                             element={
                                 <PermissionRoute
@@ -220,10 +232,42 @@ export default function MainApp() {
                             }
                         />
                         <Route
+                            path="settings/cycle"
+                            element={
+                                <PermissionRoute permission="role.manage">
+                                    <CycleSettingPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
                             path="settings"
                             element={
                                 <PermissionRoute permission="role.manage">
                                     <PermissionMatrixPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="settings/permissions"
+                            element={
+                                <PermissionRoute permission="role.manage">
+                                    <PermissionIndexPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="settings/permissions/add"
+                            element={
+                                <PermissionRoute permission="role.manage">
+                                    <PermissionFormPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="settings/permissions/:id/edit"
+                            element={
+                                <PermissionRoute permission="role.manage">
+                                    <PermissionFormPage />
                                 </PermissionRoute>
                             }
                         />

@@ -27,6 +27,11 @@ class TrxPtk extends Model
         'created_by',
         'status',
         'finding_summary',
+        'target_completion_date',
+        'target_date_status',
+        'target_date_response_note',
+        'target_date_responded_at',
+        'target_date_responded_by',
         'response_note',
         'responded_at',
         'responded_by',
@@ -41,6 +46,8 @@ class TrxPtk extends Model
     protected function casts(): array
     {
         return [
+            'target_completion_date' => 'date',
+            'target_date_responded_at' => 'datetime',
             'responded_at' => 'datetime',
             'verified_at' => 'datetime',
             'closed_at' => 'datetime',
@@ -90,5 +97,10 @@ class TrxPtk extends Model
     public function closer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'closed_by');
+    }
+
+    public function targetDateResponder(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'target_date_responded_by');
     }
 }

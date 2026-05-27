@@ -76,6 +76,30 @@ class RolePermissionSeeder extends Seeder
             'standard.create',
         ]);
 
+        // Pemeriksa — read and inspect standard content without audit assignment
+        $pemeriksa = Role::firstOrCreate(['name' => 'Pemeriksa', 'guard_name' => 'web']);
+        $pemeriksa->syncPermissions([
+            'standard.view',
+        ]);
+
+        // Persetujuan — reserved approval-facing role for standard governance
+        $persetujuan = Role::firstOrCreate(['name' => 'Persetujuan', 'guard_name' => 'web']);
+        $persetujuan->syncPermissions([
+            'standard.view',
+        ]);
+
+        // Pertimbangan — read-only role for giving consideration in standard governance
+        $pertimbangan = Role::firstOrCreate(['name' => 'Pertimbangan', 'guard_name' => 'web']);
+        $pertimbangan->syncPermissions([
+            'standard.view',
+        ]);
+
+        // Pengendalian — read-only role for monitoring and controlling standard governance
+        $pengendalian = Role::firstOrCreate(['name' => 'Pengendalian', 'guard_name' => 'web']);
+        $pengendalian->syncPermissions([
+            'standard.view',
+        ]);
+
         // Auditor — can score and create findings, read-only on others
         $auditor = Role::firstOrCreate(['name' => 'Auditor', 'guard_name' => 'web']);
         $auditor->syncPermissions([

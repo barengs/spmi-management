@@ -143,9 +143,76 @@ export function buildStandardNotifications(user, standards = []) {
     });
 }
 
-export function buildNotifications(user, schedules = [], standards = []) {
+export function buildPtkNotifications(user, ptks = []) {
+    const userId = user?.id ? String(user.id) : null;
+    const userUnitId = user?.unit?.id ? String(user.unit.id) : null;
+
+    if (!userId) {
+        return [];
+    }
+
+    return ptks.flatMap((ptk) => {
+        const items = [];
+        const isAssignedAuditee = String(ptk.assigned_user?.id || '') === userId
+            || (userUnitId && String(ptk.assigned_unit?.id || '') === userUnitId);
+        const isAuditorActor = String(ptk.creator?.id || '') === userId;
+
+        if (isAssignedAuditee && ptk.target_date_status === 'PENDING') {
+            items.push({
+                id: `ptk-${ptk.id}-target-date-pending`,
+                type: 'ptk_target_date',
+                title: 'Target Tanggal PTK Menunggu Persetujuan',
+                message: `Auditor menetapkan target tindak koreksi pada ${ptk.target_completion_date || '-'}. Anda perlu menyetujui atau menolaknya.`,
+                href: '/ptk',
+                created_at: ptk.created_at,
+                tone: 'warning',
+            });
+        }
+
+        if (isAuditorActor && ptk.target_date_status === 'REJECTED') {
+            items.push({
+                id: `ptk-${ptk.id}-target-date-rejected`,
+                type: 'ptk_target_date',
+                title: 'Target Tanggal PTK Ditolak Auditee',
+                message: `Auditee menolak target tanggal PTK.${ptk.target_date_response_note ? ` Komentar: ${ptk.target_date_response_note}` : ' Silakan tinjau ulang target koreksi.'}`,
+                href: '/ptk',
+                created_at: ptk.target_date_responded_at || ptk.updated_at,
+                tone: 'error',
+            });
+        }
+
+        if (isAuditorActor && ptk.status === 'RESPONDED') {
+            items.push({
+                id: `ptk-${ptk.id}-response-waiting`,
+                type: 'ptk_response',
+                title: 'Tindak Lanjut PTK Menunggu Verifikasi',
+                message: 'Auditee sudah mengirim tindak lanjut PTK dan menunggu verifikasi auditor.',
+                href: '/ptk',
+                created_at: ptk.responded_at || ptk.updated_at,
+                tone: 'warning',
+            });
+        }
+
+        if (isAssignedAuditee && ptk.status === 'REVISION_REQUIRED') {
+            items.push({
+                id: `ptk-${ptk.id}-revision-required`,
+                type: 'ptk_revision',
+                title: 'PTK Dikembalikan untuk Revisi',
+                message: 'Auditor meminta perbaikan lanjutan pada tindak koreksi yang Anda kirim.',
+                href: '/ptk',
+                created_at: ptk.verified_at || ptk.updated_at,
+                tone: 'error',
+            });
+        }
+
+        return items;
+    });
+}
+
+export function buildNotifications(user, schedules = [], standards = [], ptks = []) {
     return [
         ...buildScheduleNotifications(user, schedules),
         ...buildStandardNotifications(user, standards),
+        ...buildPtkNotifications(user, ptks),
     ].sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0));
 }

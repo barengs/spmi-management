@@ -5,6 +5,7 @@ namespace App\Modules\Borang\Controllers;
 use App\Modules\Audit\Models\AuditSchedule;
 use App\Http\Controllers\Controller;
 use App\Modules\Borang\Models\BorangItem;
+use App\Modules\Core\Models\ActivityLog;
 use App\Modules\Core\Models\Unit;
 use App\Modules\Evidence\Models\TrxEvidence;
 use App\Modules\Standard\Models\MstMetric;
@@ -131,7 +132,7 @@ class BorangController extends Controller
         $items = BorangItem::with([
             'metric.standard',
             'metric.parent',
-            'metric.evidences:id,metric_id,review_status,reviewed_at,created_at',
+            'evidences:id,metric_id,borang_item_id,review_status,reviewed_at,created_at',
             'metric.ptks:id,metric_id,status',
         ])
             ->where('prodi_id', $prodi->id)
@@ -154,7 +155,7 @@ class BorangController extends Controller
             'prodi.parent',
             'metric.standard',
             'metric.parent',
-            'metric.evidences:id,metric_id,review_status,reviewed_at,created_at',
+            'evidences:id,metric_id,borang_item_id,uploaded_by,source_type,notes,link_url,original_name,stored_name,mime_type,size_bytes,review_status,review_comment,created_at',
             'metric.ptks:id,metric_id,status',
         ]);
 
@@ -171,8 +172,7 @@ class BorangController extends Controller
         $latestSubmission = null;
         if ($borangItem->metric_id && $user?->id) {
             $latestEvidence = TrxEvidence::query()
-                ->where('metric_id', $borangItem->metric_id)
-                ->where('uploaded_by', $user->id)
+                ->where('borang_item_id', $borangItem->id)
                 ->latest()
                 ->first();
 
@@ -267,6 +267,7 @@ class BorangController extends Controller
 
         $payload = [
             'metric_id' => $metric->id,
+            'borang_item_id' => $borangItem->id,
             'uploaded_by' => $user->id,
             'source_type' => $validated['source_type'],
             'title' => null,
@@ -303,6 +304,20 @@ class BorangController extends Controller
         }
 
         $evidence = TrxEvidence::create($payload)->load('uploader:id,name,email');
+
+        ActivityLog::record(
+            'pelaksanaan.evidence_uploaded',
+            TrxEvidence::class,
+            $evidence->id,
+            null,
+            [
+                'borang_item_id' => $borangItem->id,
+                'metric_id' => $metric->id,
+                'source_type' => $evidence->source_type,
+                'title' => $evidence->title,
+                'review_status' => $evidence->review_status,
+            ]
+        );
 
         return response()->json([
             'status' => 'success',
@@ -433,7 +448,7 @@ class BorangController extends Controller
     private function transformItem(BorangItem $item): array
     {
         $metric = $item->metric;
-        $evidences = $metric?->evidences ?? collect();
+        $evidences = $item->evidences ?? collect();
         $ptks = $metric?->ptks ?? collect();
 
         $acceptedCount = $evidences->where('review_status', 'ACCEPTED')->count();

@@ -31,12 +31,18 @@ class StandardCloneController extends Controller
         return mb_strtolower(trim((string) $name)) . '|' . mb_strtolower(trim((string) $category));
     }
 
-    private function cloneStandardTree(MstStandard $sourceStandard, array $overrides): MstStandard
+    public function cloneStandardTree(MstStandard $sourceStandard, array $overrides): MstStandard
     {
         $newStandard = $sourceStandard->replicate();
         $newStandard->fill($overrides);
         $newStandard->status = 'DRAFT';
         $newStandard->approval_stage = 'DRAFT';
+        $newStandard->version_number = $overrides['version_number'] ?? (($sourceStandard->version_number ?? 1));
+        $newStandard->root_standard_id = $overrides['root_standard_id'] ?? ($sourceStandard->root_standard_id ?: $sourceStandard->id);
+        $newStandard->previous_standard_id = $overrides['previous_standard_id'] ?? null;
+        $newStandard->superseded_by_standard_id = null;
+        $newStandard->improved_from_ptk_id = $overrides['improved_from_ptk_id'] ?? null;
+        $newStandard->improvement_justification = $overrides['improvement_justification'] ?? null;
         $newStandard->submitted_by = null;
         $newStandard->approved_by = null;
         $newStandard->review_submitted_by = null;

@@ -48,7 +48,7 @@ export default function ReportPage() {
     const permissions = user?.permissions || [];
     const [auditReports, setAuditReports] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selectedProdi, setSelectedProdi] = useState('');
+    const [selectedProdi, setSelectedProdi] = useState(null);
 
     const canExport = permissions.includes('report.export');
 
@@ -83,7 +83,12 @@ export default function ReportPage() {
             return;
         }
 
-        if (!selectedProdi || !prodiOptions.some((prodi) => String(prodi.id) === selectedProdi)) {
+        if (selectedProdi === null) {
+            setSelectedProdi(String(prodiOptions[0].id));
+            return;
+        }
+
+        if (selectedProdi !== '' && !prodiOptions.some((prodi) => String(prodi.id) === selectedProdi)) {
             setSelectedProdi(String(prodiOptions[0].id));
         }
     }, [prodiOptions, selectedProdi]);
@@ -109,7 +114,7 @@ export default function ReportPage() {
                 <label className="grid gap-2 md:max-w-sm">
                     <span className="text-sm font-medium text-slate-700">Filter Program Studi</span>
                     <select
-                        value={selectedProdi}
+                        value={selectedProdi ?? ''}
                         onChange={(event) => setSelectedProdi(event.target.value)}
                         className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
                     >

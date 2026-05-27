@@ -3,6 +3,7 @@
 namespace App\Modules\Evidence\Models;
 
 use App\Models\User;
+use App\Modules\Borang\Models\BorangItem;
 use App\Modules\Standard\Models\MstMetric;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,7 @@ class TrxEvidence extends Model
 
     protected $fillable = [
         'metric_id',
+        'borang_item_id',
         'uploaded_by',
         'source_type',
         'title',
@@ -44,6 +46,11 @@ class TrxEvidence extends Model
     public function metric(): BelongsTo
     {
         return $this->belongsTo(MstMetric::class, 'metric_id');
+    }
+
+    public function borangItem(): BelongsTo
+    {
+        return $this->belongsTo(BorangItem::class, 'borang_item_id');
     }
 
     public function uploader(): BelongsTo

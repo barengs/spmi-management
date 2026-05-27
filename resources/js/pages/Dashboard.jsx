@@ -59,6 +59,29 @@ function getCyclePeriodStatus(items) {
     return 'Non Aktif';
 }
 
+function getCycleWindow(period, durationMonths) {
+    const numericPeriod = Number(period);
+    const numericDuration = Number(durationMonths);
+
+    if (!Number.isFinite(numericPeriod) || !Number.isFinite(numericDuration) || numericDuration < 1) {
+        return {
+            start: null,
+            end: null,
+            ended: false,
+        };
+    }
+
+    const start = new Date(numericPeriod, 0, 1, 0, 0, 0, 0);
+    const end = new Date(numericPeriod, numericDuration, 0, 23, 59, 59, 999);
+    const now = new Date();
+
+    return {
+        start,
+        end,
+        ended: now.getTime() > end.getTime(),
+    };
+}
+
 export default function Dashboard() {
     const user = useSelector((state) => state.auth.user);
     const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
@@ -66,20 +89,30 @@ export default function Dashboard() {
     const [standards, setStandards] = useState([]);
     const [loadingCycle, setLoadingCycle] = useState(true);
     const [selectedPeriod, setSelectedPeriod] = useState('');
+    const [cycleDurationMonths, setCycleDurationMonths] = useState(4);
+    const [improvementSummary, setImprovementSummary] = useState([]);
 
     useEffect(() => {
-        const fetchStandards = async () => {
+        const fetchDashboardContext = async () => {
             try {
-                const response = await getCached('/standards');
-                setStandards(response.data.data || []);
+                const [standardsResponse, cycleDurationResponse, improvementResponse] = await Promise.all([
+                    getCached('/standards'),
+                    getCached('/settings/cycle-duration').catch(() => null),
+                    getCached('/improvements/summary').catch(() => null),
+                ]);
+
+                setStandards(standardsResponse.data.data || []);
+                setCycleDurationMonths(cycleDurationResponse?.data?.data?.duration_months || 4);
+                setImprovementSummary(improvementResponse?.data?.data || []);
             } catch (error) {
                 setStandards([]);
+                setImprovementSummary([]);
             } finally {
                 setLoadingCycle(false);
             }
         };
 
-        fetchStandards();
+        fetchDashboardContext();
     }, []);
 
     const cycleSummary = useMemo(() => {
@@ -124,21 +157,25 @@ export default function Dashboard() {
                 period: null,
                 description: 'Belum ada siklus SPMI yang terdaftar.',
                 status: 'Non Aktif',
+                window: { start: null, end: null, ended: false },
             };
         }
 
         const isCurrentYear = selected.period === currentYear;
         const selectedItems = standards.filter((item) => Number(item.periode_tahun) === selected.period);
+        const window = getCycleWindow(selected.period, cycleDurationMonths);
+        const baseStatus = getCyclePeriodStatus(selectedItems);
 
         return {
             label: `SPMI ${selected.period}`,
             period: selected.period,
-            status: getCyclePeriodStatus(selectedItems),
+            status: window.ended && baseStatus !== 'Dilaksanakan' ? 'Berakhir' : baseStatus,
             description: isCurrentYear
-                ? `Siklus tahun ${currentYear} sudah diterapkan sebagai siklus berjalan.`
+                ? `Siklus tahun ${currentYear} menggunakan durasi target ${cycleDurationMonths} bulan sejak awal periode.`
                 : `Siklus tahun ${currentYear} belum diterapkan, sehingga sistem menampilkan siklus aktif sebelumnya.`,
+            window,
         };
-    }, [standards]);
+    }, [cycleDurationMonths, standards]);
 
     const availablePeriods = useMemo(() => {
         const periods = Array.from(
@@ -184,6 +221,14 @@ export default function Dashboard() {
     }, [cycleSummary.period, selectedPeriod, standards]);
 
     const displayedCycleLabel = selectedPeriod ? `SPMI ${selectedPeriod}` : cycleSummary.label;
+    const selectedImprovementSummary = useMemo(
+        () => improvementSummary.find((item) => String(item.cycle_year) === String(selectedPeriod || cycleSummary.period)) || null,
+        [cycleSummary.period, improvementSummary, selectedPeriod]
+    );
+    const selectedCycleWindow = useMemo(
+        () => getCycleWindow(selectedPeriod || cycleSummary.period, cycleDurationMonths),
+        [cycleDurationMonths, cycleSummary.period, selectedPeriod]
+    );
 
     const auditProgress = useMemo(() => {
         if (currentCycleStandards.length === 0) {
@@ -191,6 +236,20 @@ export default function Dashboard() {
                 currentStep: 'draft',
                 headline: 'Belum ada proses audit yang berjalan',
                 helper: 'Sistem belum menemukan dokumen pada siklus ini, sehingga timeline dimulai dari tahap pembuatan.',
+            };
+        }
+
+        if (selectedCycleWindow.ended) {
+            const hasPublishedAfterEnd = currentCycleStandards.some((item) => item.status === 'TERBIT');
+
+            return {
+                currentStep: hasPublishedAfterEnd ? 'published' : 'head_lpmi_approval',
+                headline: hasPublishedAfterEnd
+                    ? `Siklus ${displayedCycleLabel} sudah selesai`
+                    : `Siklus ${displayedCycleLabel} telah berakhir`,
+                helper: hasPublishedAfterEnd
+                    ? `Periode siklus ini sudah melewati batas ${cycleDurationMonths} bulan dan seluruh dokumen yang terbit dianggap selesai diproses.`
+                    : `Periode siklus ini sudah melewati batas ${cycleDurationMonths} bulan. Dokumen yang belum terbit perlu dievaluasi pada siklus berikutnya.`,
             };
         }
 
@@ -237,7 +296,7 @@ export default function Dashboard() {
             headline: 'Proses audit masih berada pada tahap pembuatan',
             helper: 'Dokumen masih dalam status draft atau revisi sebelum diajukan ke tahapan approval.',
         };
-    }, [currentCycleStandards, displayedCycleLabel]);
+    }, [currentCycleStandards, cycleDurationMonths, displayedCycleLabel, selectedCycleWindow.ended]);
 
     const currentTimelineIndex = auditTimeline.findIndex((item) => item.key === auditProgress.currentStep);
 
@@ -307,6 +366,11 @@ export default function Dashboard() {
                             <p className="mt-3 max-w-xs text-sm leading-6 text-blue-50">
                                 {loadingCycle ? 'Sistem sedang membaca periode standar aktif.' : cycleSummary.description}
                             </p>
+                            {!loadingCycle && cycleSummary.window?.end && (
+                                <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-blue-100">
+                                    Berakhir {formatDateTime(cycleSummary.window.end)}
+                                </p>
+                            )}
                         </div>
                         <div className="rounded-2xl bg-white/15 p-3">
                             <Icon icon={Icons.refresh} width={26} />
@@ -439,6 +503,40 @@ export default function Dashboard() {
                             </div>
                         );
                     })}
+                </div>
+
+                <div className="mt-8 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                                <Icon icon={Icons.refresh} width={14} />
+                                Ringkasan Peningkatan
+                            </div>
+                            <h3 className="mt-3 text-lg font-semibold text-gray-900">Siklus {selectedPeriod || cycleSummary.period || '-'}</h3>
+                            <p className="mt-1 text-sm text-gray-600">
+                                Perbandingan keputusan peningkatan standar berdasarkan hasil evaluasi dan tindak koreksi.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-4 md:grid-cols-4">
+                        <div className="rounded-2xl bg-white px-4 py-4">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Direvisi</div>
+                            <div className="mt-2 text-2xl font-semibold text-emerald-700">{selectedImprovementSummary?.revisi || 0}</div>
+                        </div>
+                        <div className="rounded-2xl bg-white px-4 py-4">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Dipertahankan</div>
+                            <div className="mt-2 text-2xl font-semibold text-blue-700">{selectedImprovementSummary?.pertahankan || 0}</div>
+                        </div>
+                        <div className="rounded-2xl bg-white px-4 py-4">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Dihapus</div>
+                            <div className="mt-2 text-2xl font-semibold text-rose-700">{selectedImprovementSummary?.hapus || 0}</div>
+                        </div>
+                        <div className="rounded-2xl bg-white px-4 py-4">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Total Keputusan</div>
+                            <div className="mt-2 text-2xl font-semibold text-gray-900">{selectedImprovementSummary?.total || 0}</div>
+                        </div>
+                    </div>
                 </div>
             </section>
             )}

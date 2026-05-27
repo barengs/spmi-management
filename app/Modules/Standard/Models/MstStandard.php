@@ -4,6 +4,7 @@ namespace App\Modules\Standard\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
@@ -16,6 +17,12 @@ class MstStandard extends Model
         'name',
         'category',
         'periode_tahun',
+        'version_number',
+        'root_standard_id',
+        'previous_standard_id',
+        'superseded_by_standard_id',
+        'improved_from_ptk_id',
+        'improvement_justification',
         'is_active',
         'referensi_regulasi',
         'source_document_path',
@@ -57,6 +64,7 @@ class MstStandard extends Model
     {
         return [
             'is_active' => 'boolean',
+            'version_number' => 'integer',
             'imported_from_document_at' => 'datetime',
             'review_submitted_at' => 'datetime',
             'head_lpmi_approved_at' => 'datetime',
@@ -70,6 +78,31 @@ class MstStandard extends Model
     public function metrics(): HasMany
     {
         return $this->hasMany(MstMetric::class, 'standard_id');
+    }
+
+    public function rootStandard(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'root_standard_id');
+    }
+
+    public function previousStandard(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'previous_standard_id');
+    }
+
+    public function supersededByStandard(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'superseded_by_standard_id');
+    }
+
+    public function newerVersions(): HasMany
+    {
+        return $this->hasMany(self::class, 'previous_standard_id');
+    }
+
+    public function improvements(): HasMany
+    {
+        return $this->hasMany(StandardImprovement::class, 'standard_id');
     }
 
     public function structuralNodesWithoutContent(): Collection

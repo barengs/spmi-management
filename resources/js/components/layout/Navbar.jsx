@@ -21,6 +21,7 @@ export default function Navbar({ toggleSidebar }) {
     const [darkMode, setDarkMode] = useState(false);
     const [notificationSchedules, setNotificationSchedules] = useState([]);
     const [notificationStandards, setNotificationStandards] = useState([]);
+    const [notificationPtks, setNotificationPtks] = useState([]);
     const hasRole = (roleName) => roleNames.includes(roleName);
     const shouldFetchSchedules = hasRole('SuperAdmin')
         || permissions.includes('audit.view')
@@ -28,7 +29,12 @@ export default function Navbar({ toggleSidebar }) {
     const canAccessNotifications = hasRole('SuperAdmin')
         || permissions.includes('standard.publish')
         || permissions.includes('audit.view')
-        || permissions.includes('audit.score.update');
+        || permissions.includes('audit.score.update')
+        || permissions.includes('ptk.view')
+        || permissions.includes('ptk.respond')
+        || permissions.includes('ptk.create')
+        || permissions.includes('ptk.verify')
+        || permissions.includes('ptk.close');
     const canOpenSettings = hasRole('SuperAdmin') || permissions.includes('role.manage');
 
     const getBreadcrumbs = () => {
@@ -44,6 +50,14 @@ export default function Navbar({ toggleSidebar }) {
 
         if (path === '/borang') {
             return ['Borang'];
+        }
+
+        if (path === '/pelaksanaan') {
+            return ['Pelaksanaan'];
+        }
+
+        if (path === '/improvement') {
+            return ['Peningkatan'];
         }
 
         if (path === '/notifications') {
@@ -98,8 +112,24 @@ export default function Navbar({ toggleSidebar }) {
             return ['Master', 'Prodi'];
         }
 
+        if (path === '/settings/cycle') {
+            return ['Pengaturan', 'Siklus'];
+        }
+
         if (path === '/settings') {
-            return ['Pengaturan', 'Hak Akses'];
+            return ['Pengaturan', 'Manajemen Role'];
+        }
+
+        if (path === '/settings/permissions') {
+            return ['Pengaturan', 'Manajemen Permission'];
+        }
+
+        if (path === '/settings/permissions/add') {
+            return ['Pengaturan', 'Manajemen Permission', 'Tambah'];
+        }
+
+        if (/^\/settings\/permissions\/[^/]+\/edit$/.test(path)) {
+            return ['Pengaturan', 'Manajemen Permission', 'Edit'];
         }
 
         return ['Halaman'];
@@ -107,34 +137,38 @@ export default function Navbar({ toggleSidebar }) {
 
     const breadcrumbs = getBreadcrumbs();
     const notifications = useMemo(
-        () => buildNotifications(user, notificationSchedules, notificationStandards).slice(0, 5),
-        [notificationSchedules, notificationStandards, user]
+        () => buildNotifications(user, notificationSchedules, notificationStandards, notificationPtks).slice(0, 5),
+        [notificationPtks, notificationSchedules, notificationStandards, user]
     );
 
     useEffect(() => {
         if (!canAccessNotifications) {
             setNotificationSchedules([]);
             setNotificationStandards([]);
+            setNotificationPtks([]);
             return undefined;
         }
 
         const fetchNotifications = async () => {
             try {
-                const requests = [api.get('/standards')];
+                const requests = [api.get('/standards'), api.get('/ptk')];
 
                 if (shouldFetchSchedules) {
                     requests.unshift(api.get('/audit-schedules'));
                 }
 
                 const responses = await Promise.all(requests);
-                const standardResponse = responses[responses.length - 1];
-                const scheduleResponse = responses.length > 1 ? responses[0] : null;
+                const standardResponse = responses[responses.length - 2];
+                const ptkResponse = responses[responses.length - 1];
+                const scheduleResponse = responses.length > 2 ? responses[0] : null;
 
                 setNotificationSchedules(scheduleResponse?.data?.data || []);
                 setNotificationStandards(standardResponse.data.data || []);
+                setNotificationPtks(ptkResponse.data.data || []);
             } catch (error) {
                 setNotificationSchedules([]);
                 setNotificationStandards([]);
+                setNotificationPtks([]);
             }
         };
 

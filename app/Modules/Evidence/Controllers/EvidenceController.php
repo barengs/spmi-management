@@ -3,6 +3,7 @@
 namespace App\Modules\Evidence\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Core\Models\ActivityLog;
 use App\Modules\Evidence\Models\TrxEvidence;
 use App\Modules\Standard\Models\MstMetric;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +28,7 @@ class EvidenceController extends Controller
             ->with([
                 'metric:id,standard_id,content',
                 'metric.standard:id,name,category,periode_tahun',
+                'borangItem.prodi:id,parent_id,name,code,level',
                 'uploader:id,name,email,unit_id',
                 'uploader.unit:id,parent_id,name,code,level',
                 'reviewer:id,name,email',
@@ -53,7 +55,7 @@ class EvidenceController extends Controller
         }
 
         $evidences = TrxEvidence::query()
-            ->with('uploader:id,name,email')
+            ->with(['uploader:id,name,email', 'borangItem.prodi:id,parent_id,name,code,level'])
             ->where('metric_id', $metricId)
             ->latest()
             ->get()
@@ -85,6 +87,7 @@ class EvidenceController extends Controller
 
         $validated = $request->validate([
             'source_type' => 'required|in:file,link',
+            'borang_item_id' => 'nullable|exists:borang_items,id',
             'title' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
             'link_url' => 'nullable|url|max:2048',
@@ -104,6 +107,7 @@ class EvidenceController extends Controller
 
         $payload = [
             'metric_id' => $metric->id,
+            'borang_item_id' => $validated['borang_item_id'] ?? null,
             'uploaded_by' => $request->user()->id,
             'source_type' => $validated['source_type'],
             'title' => $validated['title'] ?? null,
@@ -141,6 +145,20 @@ class EvidenceController extends Controller
 
         $evidence = TrxEvidence::create($payload)->load('uploader:id,name,email');
 
+        ActivityLog::record(
+            'pelaksanaan.evidence_uploaded',
+            TrxEvidence::class,
+            $evidence->id,
+            null,
+            [
+                'borang_item_id' => $evidence->borang_item_id,
+                'metric_id' => $evidence->metric_id,
+                'source_type' => $evidence->source_type,
+                'title' => $evidence->title,
+                'review_status' => $evidence->review_status,
+            ]
+        );
+
         return response()->json([
             'status' => 'success',
             'message' => 'Bukti berhasil disimpan ke repository.',
@@ -158,12 +176,21 @@ class EvidenceController extends Controller
         }
 
         $evidence = TrxEvidence::with('metric.standard')->findOrFail($id);
+        $oldData = $evidence->only(['borang_item_id', 'metric_id', 'source_type', 'title', 'review_status']);
 
         if ($evidence->file_path) {
             Storage::disk('local')->delete($evidence->file_path);
         }
 
         $evidence->delete();
+
+        ActivityLog::record(
+            'pelaksanaan.evidence_deleted',
+            TrxEvidence::class,
+            $id,
+            $oldData,
+            null
+        );
 
         return response()->json([
             'status' => 'success',
@@ -191,6 +218,8 @@ class EvidenceController extends Controller
             'action' => ['required', Rule::in(['accept', 'reject'])],
             'comment' => 'nullable|string',
         ]);
+        $oldReviewStatus = $evidence->review_status;
+        $oldReviewComment = $evidence->review_comment;
 
         if ($validated['action'] === 'reject' && blank($validated['comment'] ?? null)) {
             return response()->json([
@@ -204,6 +233,21 @@ class EvidenceController extends Controller
         $evidence->reviewed_by = $request->user()->id;
         $evidence->reviewed_at = now();
         $evidence->save();
+
+        ActivityLog::record(
+            'audit.evidence_reviewed',
+            TrxEvidence::class,
+            $evidence->id,
+            [
+                'review_status' => $oldReviewStatus,
+                'review_comment' => $oldReviewComment,
+            ],
+            [
+                'review_status' => $evidence->review_status,
+                'review_comment' => $evidence->review_comment,
+                'reviewed_by' => $evidence->reviewed_by,
+            ]
+        );
 
         return response()->json([
             'status' => 'success',
@@ -232,6 +276,7 @@ class EvidenceController extends Controller
         return [
             'id' => $evidence->id,
             'metric_id' => $evidence->metric_id,
+            'borang_item_id' => $evidence->borang_item_id,
             'source_type' => $evidence->source_type,
             'title' => $evidence->title,
             'notes' => $evidence->notes,
@@ -256,6 +301,16 @@ class EvidenceController extends Controller
                     'name' => $evidence->uploader->unit->name,
                     'code' => $evidence->uploader->unit->code,
                     'level' => $evidence->uploader->unit->level,
+                ] : null,
+            ] : null,
+            'borang_item' => $evidence->relationLoaded('borangItem') && $evidence->borangItem ? [
+                'id' => $evidence->borangItem->id,
+                'prodi' => $evidence->borangItem->relationLoaded('prodi') && $evidence->borangItem->prodi ? [
+                    'id' => $evidence->borangItem->prodi->id,
+                    'parent_id' => $evidence->borangItem->prodi->parent_id,
+                    'name' => $evidence->borangItem->prodi->name,
+                    'code' => $evidence->borangItem->prodi->code,
+                    'level' => $evidence->borangItem->prodi->level,
                 ] : null,
             ] : null,
             'reviewer' => $evidence->reviewer ? [
