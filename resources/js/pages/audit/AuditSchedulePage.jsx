@@ -265,23 +265,7 @@ export default function AuditSchedulePage() {
         );
     }, [editingSchedule?.id, schedules]);
 
-    const auditorOptions = useMemo(() => {
-        const filtered = metadata.auditors.filter((item) => !occupiedAuditorIds.has(String(item.id)));
-
-        if (editingSchedule?.auditor && !filtered.some((item) => String(item.id) === String(editingSchedule.auditor.id))) {
-            filtered.push({
-                id: editingSchedule.auditor.id,
-                name: editingSchedule.auditor.name,
-                email: editingSchedule.auditor.email,
-            });
-        }
-
-        return filtered
-            .filter((item) => !form.lead_auditor_id || String(item.id) !== String(form.lead_auditor_id))
-            .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
-    }, [editingSchedule, form.lead_auditor_id, metadata.auditors, occupiedAuditorIds]);
-
-    const leadAuditorOptions = useMemo(() => {
+    const sharedAuditorPool = useMemo(() => {
         const filtered = metadata.lead_auditors.filter((item) => !occupiedAuditorIds.has(String(item.id)));
 
         if (editingSchedule?.lead_auditor && !filtered.some((item) => String(item.id) === String(editingSchedule.lead_auditor.id))) {
@@ -293,10 +277,33 @@ export default function AuditSchedulePage() {
             });
         }
 
-        return filtered
-            .filter((item) => !form.auditor_id || String(item.id) !== String(form.auditor_id))
-            .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
-    }, [editingSchedule, form.auditor_id, metadata.lead_auditors, occupiedAuditorIds]);
+        if (editingSchedule?.auditor && !filtered.some((item) => String(item.id) === String(editingSchedule.auditor.id))) {
+            filtered.push({
+                id: editingSchedule.auditor.id,
+                name: editingSchedule.auditor.name,
+                email: editingSchedule.auditor.email,
+                unit_id: null,
+            });
+        }
+
+        return filtered.sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
+    }, [editingSchedule, metadata.lead_auditors, occupiedAuditorIds]);
+
+    const leadAuditorOptions = useMemo(() => (
+        sharedAuditorPool.filter((item) => (
+            String(item.id) === String(form.lead_auditor_id)
+            || !form.auditor_id
+            || String(item.id) !== String(form.auditor_id)
+        ))
+    ), [form.auditor_id, form.lead_auditor_id, sharedAuditorPool]);
+
+    const auditorOptions = useMemo(() => {
+        return sharedAuditorPool.filter((item) => (
+            String(item.id) === String(form.auditor_id)
+            || !form.lead_auditor_id
+            || String(item.id) !== String(form.lead_auditor_id)
+        ));
+    }, [form.auditor_id, form.lead_auditor_id, sharedAuditorPool]);
 
     const openModal = () => {
         setForm(initialForm);

@@ -862,7 +862,7 @@ export default function StandardIndex() {
                 actionButtons.push(
                     <Link
                         key="detail"
-                        to={`/standards/${item.id}/detail`}
+                        to={`/standards/${item.id}`}
                         className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700 transition hover:bg-slate-200 hover:text-slate-900"
                     >
                         Detail

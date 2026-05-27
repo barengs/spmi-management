@@ -36,7 +36,8 @@ export default function BorangDetailPage() {
     const { borangItemId } = useParams();
     const user = useSelector((state) => state.auth.user);
     const permissions = user?.permissions || [];
-    const canUploadEvidence = permissions.includes('evidence.upload') || permissions.includes('standard.update');
+    const canReviewEvidence = permissions.includes('audit.score.update');
+    const canUploadEvidence = !canReviewEvidence && (permissions.includes('evidence.upload') || permissions.includes('standard.update'));
     const [loading, setLoading] = useState(true);
     const [borangItem, setBorangItem] = useState(null);
     const [uploadMode, setUploadMode] = useState('file');
@@ -47,6 +48,8 @@ export default function BorangDetailPage() {
     const [showFilePicker, setShowFilePicker] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [removing, setRemoving] = useState(false);
+    const [reviewComment, setReviewComment] = useState('');
+    const [reviewingAction, setReviewingAction] = useState('');
 
     const fetchBorangItem = async () => {
         try {
@@ -60,12 +63,57 @@ export default function BorangDetailPage() {
             setLinkUrl(latestSubmission?.link_url || '');
             setLatestSubmission(latestSubmission);
             setUploadMode(latestSubmission?.source_type === 'link' ? 'link' : 'file');
+            setReviewComment(latestSubmission?.review_status === 'REJECTED' ? (latestSubmission?.review_comment || '') : '');
             setSelectedFile(null);
             setShowFilePicker(false);
         } catch (error) {
             toast.error(error.response?.data?.message || 'Detail borang gagal dimuat.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleReview = async (action, createPtk = false) => {
+        if (!latestSubmission?.id) {
+            toast.warning('Belum ada bukti atau tautan yang bisa direview.');
+            return;
+        }
+
+        if (createPtk && !reviewComment.trim()) {
+            toast.warning('Komentar auditor wajib diisi sebelum membuat PTK.');
+            return;
+        }
+
+        setReviewingAction(createPtk ? 'ptk' : action);
+
+        try {
+            const response = await api.patch(`/evidences/${latestSubmission.id}/review`, {
+                action,
+                comment: reviewComment,
+            });
+
+            if (createPtk) {
+                const targetCompletionDate = window.prompt('Masukkan target tanggal koreksi untuk auditee (format YYYY-MM-DD):');
+
+                if (!targetCompletionDate || !targetCompletionDate.trim()) {
+                    throw new Error('Target tanggal koreksi wajib diisi untuk membuat PTK.');
+                }
+
+                await api.post('/ptk', {
+                    metric_id: borangItem.metric_id,
+                    evidence_id: latestSubmission.id,
+                    assigned_unit_id: borangItem.prodi?.id || null,
+                    target_completion_date: targetCompletionDate.trim(),
+                    finding_summary: reviewComment.trim(),
+                });
+            }
+
+            toast.success(createPtk ? 'PTK berhasil dibuat dari temuan auditor.' : response.data.message);
+            await fetchBorangItem();
+        } catch (error) {
+            toast.error(error.response?.data?.message || error.message || 'Aksi review gagal diproses.');
+        } finally {
+            setReviewingAction('');
         }
     };
 
@@ -183,7 +231,9 @@ export default function BorangDetailPage() {
                         </div>
                         <h1 className="mt-4 text-2xl font-semibold text-gray-900">{borangItem.standard_name}</h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                            Halaman ini menampilkan detail satu item borang dan digunakan untuk mengunggah dokumen bukti beserta komentar pendukung.
+                            {canReviewEvidence
+                                ? 'Halaman ini menampilkan bukti pelaksanaan secara read-only untuk kebutuhan review auditor.'
+                                : 'Halaman ini menampilkan detail satu item borang dan digunakan untuk mengunggah dokumen bukti beserta komentar pendukung.'}
                         </p>
                     </div>
 
@@ -219,7 +269,108 @@ export default function BorangDetailPage() {
                     </div>
                 </div>
 
-                {canUploadEvidence ? (
+                {canReviewEvidence ? (
+                    <div className="mt-6 space-y-5">
+                        {!latestSubmission ? (
+                            <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">
+                                Belum ada bukti atau tautan yang diunggah auditee pada item borang ini.
+                            </div>
+                        ) : (
+                            <>
+                                <div className="rounded-3xl border border-gray-200 bg-gray-50 p-5">
+                                    <div className="flex flex-wrap items-start justify-between gap-4">
+                                        <div className="space-y-2">
+                                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Bukti Terunggah</div>
+                                            <div className="text-sm font-semibold text-gray-900">
+                                                {latestSubmission.source_type === 'file'
+                                                    ? (latestSubmission.original_name || latestSubmission.stored_name || 'File bukti')
+                                                    : 'Tautan Bukti'}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                {latestSubmission.source_type === 'file'
+                                                    ? `${formatBytes(latestSubmission.size_bytes)}${latestSubmission.mime_type ? ` • ${latestSubmission.mime_type}` : ''}`
+                                                    : 'Link dokumen / bukti eksternal'}
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {latestSubmission.source_type === 'file' ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleViewSavedFile}
+                                                    className="rounded-full border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                                                >
+                                                    Lihat File
+                                                </button>
+                                            ) : latestSubmission.link_url ? (
+                                                <a
+                                                    href={latestSubmission.link_url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="rounded-full border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                                                >
+                                                    Buka Link
+                                                </a>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Komentar Auditee</div>
+                                    <div className="mt-2 text-sm leading-6 text-gray-700">
+                                        {latestSubmission.notes || 'Belum ada komentar dari auditee.'}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="mb-2 block text-sm font-medium text-gray-700">Komentar Auditor</label>
+                                    <textarea
+                                        rows="4"
+                                        value={reviewComment}
+                                        onChange={(event) => setReviewComment(event.target.value)}
+                                        className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                                        placeholder="Isi komentar auditor. Wajib diisi jika ingin membuat PTK."
+                                    />
+                                    {latestSubmission.review_comment ? (
+                                        <div className="mt-2 text-xs text-gray-500">
+                                            Komentar review terakhir: {latestSubmission.review_comment}
+                                        </div>
+                                    ) : null}
+                                </div>
+
+                                <div className="flex flex-wrap justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleReview('accept')}
+                                        disabled={reviewingAction !== ''}
+                                        className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Icon icon={reviewingAction === 'accept' ? Icons.refresh : Icons.check} width={16} className={reviewingAction === 'accept' ? 'animate-spin' : ''} />
+                                        Terealisasi
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleReview('reject')}
+                                        disabled={reviewingAction !== ''}
+                                        className="inline-flex items-center gap-2 rounded-full bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Icon icon={reviewingAction === 'reject' ? Icons.refresh : Icons.close} width={16} className={reviewingAction === 'reject' ? 'animate-spin' : ''} />
+                                        Tidak Terealisasi
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleReview('reject', true)}
+                                        disabled={reviewingAction !== '' || !reviewComment.trim()}
+                                        className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Icon icon={reviewingAction === 'ptk' ? Icons.refresh : Icons.add} width={16} className={reviewingAction === 'ptk' ? 'animate-spin' : ''} />
+                                        Buat PTK
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                ) : canUploadEvidence ? (
                     <form onSubmit={handleUpload} className="mt-6 space-y-5">
                         <div className="flex gap-3">
                             <button

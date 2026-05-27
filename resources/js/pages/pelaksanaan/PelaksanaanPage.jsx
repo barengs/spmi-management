@@ -240,7 +240,7 @@ export default function PelaksanaanPage() {
             <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.05fr)]">
                 <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
                     <div className="border-b border-gray-200 px-6 py-5">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Indikator Standar</h2>
+                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Standar yang Diimplementasi</h2>
                         <p className="mt-1 text-sm text-gray-600">
                             {selectedProdi ? `${selectedProdi.name}${selectedProdi.faculty?.name ? ` • ${selectedProdi.faculty.name}` : ''}` : 'Pilih prodi'}
                         </p>
@@ -260,13 +260,19 @@ export default function PelaksanaanPage() {
                             ))}
                         </select>
 
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Cari indikator dari standar..."
-                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
-                        />
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700">Cari Standar yang Diimplementasi</label>
+                            <div className="relative">
+                                <Icon icon={Icons.search} width={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(event) => setSearch(event.target.value)}
+                                    placeholder="Cari nama standar atau indikator..."
+                                    className="w-full rounded-2xl border border-gray-200 py-3 pl-11 pr-4 text-sm text-gray-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                                />
+                            </div>
+                        </div>
                     </div>
 
                     <div className="max-h-[72vh] overflow-y-auto p-4">

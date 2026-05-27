@@ -854,7 +854,7 @@ export default function StandardDetailPage() {
                                                         </div>
                                                     </div>
                                                     {item.new_standard ? (
-                                                        <Link to={`/standards/${item.new_standard.id}/detail`} className="text-xs font-semibold text-emerald-300 underline">
+                                                        <Link to={`/standards/${item.new_standard.id}`} className="text-xs font-semibold text-emerald-300 underline">
                                                             Buka versi revisi
                                                         </Link>
                                                     ) : null}

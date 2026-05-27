@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id')->nullable();
-            $table->string('action', 10)->comment('POST, PUT, DELETE');
+            $table->string('action', 100)->comment('Event key or request action');
             $table->string('model_type')->nullable()->comment('App\\Models\\User, etc.');
             $table->unsignedBigInteger('model_id')->nullable();
             $table->string('url', 500)->nullable();

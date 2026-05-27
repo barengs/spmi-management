@@ -10,6 +10,7 @@ import AuditSchedulePage from '../pages/audit/AuditSchedulePage';
 import StandardAuditReviewPage from '../pages/audit/StandardAuditReviewPage';
 import BorangManagementPage from '../pages/borang/BorangManagementPage';
 import BorangDetailPage from '../pages/borang/BorangDetailPage';
+import BorangProdiDetailPage from '../pages/borang/BorangProdiDetailPage';
 import PelaksanaanPage from '../pages/pelaksanaan/PelaksanaanPage';
 import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
@@ -102,7 +103,15 @@ export default function MainApp() {
                             }
                         />
                         <Route
-                            path="borang/items/:borangItemId/detail"
+                            path="borang/prodi/:prodiId"
+                            element={
+                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
+                                    <BorangProdiDetailPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="borang/:borangItemId"
                             element={
                                 <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
                                     <BorangDetailPage />
@@ -118,7 +127,7 @@ export default function MainApp() {
                             }
                         />
                         <Route
-                            path="standards/:id/detail"
+                            path="standards/:id"
                             element={
                                 <PermissionRoute permissions={['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export']}>
                                     <StandardDetailPage />
@@ -176,7 +185,7 @@ export default function MainApp() {
                             }
                         />
                         <Route
-                            path="audit/standards/:standardId/review"
+                            path="audit/:standardId/review"
                             element={
                                 <PermissionRoute permission="audit.score.update">
                                     <StandardAuditReviewPage />

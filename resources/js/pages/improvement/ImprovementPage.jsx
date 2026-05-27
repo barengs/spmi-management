@@ -223,7 +223,7 @@ export default function ImprovementPage() {
                                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
                                     Jika memilih revisi, sistem membuat versi baru sebagai draft dan menyimpan versi lama di riwayat. Setelah versi baru diterbitkan, versi lama otomatis menjadi tidak aktif.
                                     <div className="mt-3">
-                                        <Link to={`/standards/${selectedFinding.standard.id}/detail`} className="font-semibold underline">
+                                        <Link to={`/standards/${selectedFinding.standard.id}`} className="font-semibold underline">
                                             Lihat standar saat ini
                                         </Link>
                                     </div>
@@ -260,7 +260,7 @@ export default function ImprovementPage() {
                                         </div>
                                     </div>
                                     {item.new_standard ? (
-                                        <Link to={`/standards/${item.new_standard.id}/detail`} className="text-sm font-semibold text-emerald-700 underline">
+                                        <Link to={`/standards/${item.new_standard.id}`} className="text-sm font-semibold text-emerald-700 underline">
                                             Buka versi baru
                                         </Link>
                                     ) : null}

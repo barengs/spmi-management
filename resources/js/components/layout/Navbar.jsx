@@ -48,8 +48,20 @@ export default function Navbar({ toggleSidebar }) {
             return ['Standar'];
         }
 
+        if (/^\/standards\/[^/]+$/.test(path)) {
+            return ['Standar', 'Detail'];
+        }
+
         if (path === '/borang') {
             return ['Borang'];
+        }
+
+        if (/^\/borang\/prodi\/[^/]+$/.test(path)) {
+            return ['Borang', 'Dokumen Prodi'];
+        }
+
+        if (/^\/borang\/[^/]+$/.test(path)) {
+            return ['Borang', 'Detail'];
         }
 
         if (path === '/pelaksanaan') {
@@ -88,7 +100,7 @@ export default function Navbar({ toggleSidebar }) {
             return ['Audit', 'Jadwal Audit'];
         }
 
-        if (/^\/audit\/standards\/[^/]+\/review$/.test(path)) {
+        if (/^\/audit\/[^/]+\/review$/.test(path)) {
             return ['Audit', 'Review Dokumen'];
         }
 

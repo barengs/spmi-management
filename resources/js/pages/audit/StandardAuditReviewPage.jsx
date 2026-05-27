@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
@@ -38,30 +38,81 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function renderMetricTree(nodes, selectedMetricId, depth = 0) {
-    return nodes.map((node) => {
-        const isSelected = node.id === selectedMetricId;
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
+function getSearchTerms(value) {
+    return Array.from(
+        new Set(
+            String(value || '')
+                .trim()
+                .toLowerCase()
+                .split(/\s+/)
+                .filter(Boolean)
+        )
+    );
+}
+
+function renderHighlightedText(content, searchTerms) {
+    const text = String(content || '');
+
+    if (searchTerms.length === 0) {
+        return text;
+    }
+
+    const pattern = new RegExp(`(${searchTerms.map(escapeRegExp).join('|')})`, 'gi');
+    const parts = text.split(pattern);
+
+    return parts.map((part, index) => {
+        const isMatch = searchTerms.some((term) => part.toLowerCase() === term);
+
+        return isMatch ? (
+            <mark key={`${part}-${index}`} className="rounded bg-amber-200 px-1 text-gray-900">
+                {part}
+            </mark>
+        ) : (
+            <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
+        );
+    });
+}
+
+function filterMetricTree(nodes, searchTerms) {
+    if (searchTerms.length === 0) {
+        return nodes;
+    }
+
+    return nodes.reduce((result, node) => {
+        const filteredChildren = filterMetricTree(node.children_recursive || [], searchTerms);
+        const content = String(node.content || '').toLowerCase();
+        const matchesNode = searchTerms.every((term) => content.includes(term));
+
+        if (matchesNode || filteredChildren.length > 0) {
+            result.push({
+                ...node,
+                children_recursive: filteredChildren,
+            });
+        }
+
+        return result;
+    }, []);
+}
+
+function renderMetricTree(nodes, searchTerms, depth = 0) {
+    return nodes.map((node) => {
         return (
             <div key={node.id} className="space-y-2">
                 <div
-                    className={`rounded-2xl border px-4 py-3 ${
-                        isSelected ? 'border-rose-300 bg-rose-50' : 'border-gray-200 bg-gray-50/70'
-                    }`}
+                    className="rounded-2xl border border-gray-200 bg-gray-50/70 px-4 py-3"
                     style={{ marginLeft: `${depth * 16}px` }}
                 >
                     <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
                         <span>{node.type}</span>
-                        {isSelected && (
-                            <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] text-white">
-                                Bukti Aktif
-                            </span>
-                        )}
                     </div>
-                    <div className="text-sm leading-6 text-gray-800">{node.content}</div>
+                    <div className="text-sm leading-6 text-gray-800">{renderHighlightedText(node.content, searchTerms)}</div>
                 </div>
 
-                {node.children_recursive?.length > 0 && renderMetricTree(node.children_recursive, selectedMetricId, depth + 1)}
+                {node.children_recursive?.length > 0 && renderMetricTree(node.children_recursive, searchTerms, depth + 1)}
             </div>
         );
     });
@@ -84,6 +135,7 @@ export default function StandardAuditReviewPage() {
     const [reviewComment, setReviewComment] = useState('');
     const [createPtkOnReject, setCreatePtkOnReject] = useState(false);
     const [submittingAction, setSubmittingAction] = useState('');
+    const [standardSearch, setStandardSearch] = useState('');
 
     const fetchPageData = async () => {
         try {
@@ -173,6 +225,12 @@ export default function StandardAuditReviewPage() {
         }
     }, [selectedEvidence]);
 
+    const standardSearchTerms = useMemo(() => getSearchTerms(standardSearch), [standardSearch]);
+    const filteredStandardTree = useMemo(
+        () => filterMetricTree(standardTree, standardSearchTerms),
+        [standardTree, standardSearchTerms]
+    );
+
     const submitReview = async (action) => {
         if (!selectedEvidence) {
             return;
@@ -246,67 +304,6 @@ export default function StandardAuditReviewPage() {
             </section>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-                <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm xl:col-span-2">
-                    <div className="mb-4 flex items-center justify-between">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Dokumen</h2>
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-400">{evidences.length} item</span>
-                            <Link
-                                to="/audit"
-                                className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
-                            >
-                                <Icon icon={Icons.back} width={14} />
-                                Semua Dokumen
-                            </Link>
-                        </div>
-                    </div>
-
-                    {evidences.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-8 text-sm text-gray-500">
-                            Belum ada bukti audit pada standar ini.
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto pb-2">
-                            <div className="flex min-w-max gap-3">
-                                {evidences.map((evidence) => (
-                                    <button
-                                        key={evidence.id}
-                                        type="button"
-                                        onClick={() => setSelectedEvidence(evidence)}
-                                        className={`w-[320px] shrink-0 rounded-2xl border px-4 py-4 text-left transition ${
-                                            selectedEvidence?.id === evidence.id
-                                                ? 'border-rose-300 bg-rose-50'
-                                                : 'border-gray-200 bg-white hover:border-rose-200 hover:bg-rose-50/60'
-                                        }`}
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <div className="truncate text-sm font-semibold text-gray-900">
-                                                    {evidence.title || evidence.original_name || evidence.link_url}
-                                                </div>
-                                                <div className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">
-                                                    {evidence.metric?.content || 'Indicator tidak ditemukan'}
-                                                </div>
-                                            </div>
-                                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusStyles[evidence.review_status] || statusStyles.PENDING}`}>
-                                                {evidence.review_status}
-                                            </span>
-                                        </div>
-                                        <div className="mt-3 space-y-1 text-xs text-gray-500">
-                                            <div>Uploader: {evidence.uploader?.name || '-'}</div>
-                                            <div>
-                                                {evidence.source_type === 'file'
-                                                    ? `${evidence.original_name} • ${formatBytes(evidence.size_bytes)}`
-                                                    : 'Link Dokumen'}
-                                            </div>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </section>
-
                 <section className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="border-b border-gray-200 px-5 py-4">
                         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -322,9 +319,44 @@ export default function StandardAuditReviewPage() {
                                 </span>
                             )}
                         </div>
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-xs text-gray-400">{evidences.length} item</span>
+                            <Link
+                                to="/audit"
+                                className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                            >
+                                <Icon icon={Icons.back} width={14} />
+                                Semua Dokumen
+                            </Link>
+                        </div>
+                        {evidences.length > 1 && (
+                            <div className="mt-4">
+                                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                                    Pilih Dokumen
+                                </label>
+                                <select
+                                    value={selectedEvidence?.id ? String(selectedEvidence.id) : ''}
+                                    onChange={(event) => {
+                                        const nextEvidence = evidences.find((item) => String(item.id) === event.target.value) || null;
+                                        setSelectedEvidence(nextEvidence);
+                                    }}
+                                    className="w-full rounded-2xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-200"
+                                >
+                                    {evidences.map((evidence) => (
+                                        <option key={evidence.id} value={String(evidence.id)}>
+                                            {(evidence.title || evidence.original_name || evidence.link_url || 'Dokumen bukti')} - {evidence.uploader?.name || 'Uploader tidak diketahui'}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
                     <div className="h-[70vh] bg-gray-100">
-                        {selectedEvidence ? (
+                        {evidences.length === 0 ? (
+                            <div className="flex h-full items-center justify-center text-sm text-gray-500">
+                                Belum ada bukti audit pada standar ini.
+                            </div>
+                        ) : selectedEvidence ? (
                             previewLoading ? (
                                 <div className="flex h-full items-center justify-center text-sm text-gray-500">
                                     Memuat preview...
@@ -346,19 +378,21 @@ export default function StandardAuditReviewPage() {
 
                 <aside className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="border-b border-gray-200 px-5 py-4">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Standar Pembanding</h3>
-                                <p className="mt-1 text-sm text-gray-600">
-                                    {standard?.name || 'Standar tidak ditemukan'}
-                                </p>
-                            </div>
-                            <div className="rounded-2xl bg-gray-100 px-3 py-2 text-right">
-                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">Indikator Direview</div>
-                                <div className="mt-1 text-sm font-medium text-gray-800">
-                                    #{selectedEvidence?.metric?.id || '-'}
-                                </div>
-                            </div>
+                        <div>
+                            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Cari Standar</h3>
+                            <p className="mt-1 text-sm text-gray-600">
+                                {standard?.name || 'Standar tidak ditemukan'}
+                            </p>
+                        </div>
+                        <div className="mt-4 relative">
+                            <Icon icon={Icons.search} width={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                value={standardSearch}
+                                onChange={(event) => setStandardSearch(event.target.value)}
+                                placeholder="Cari isi standar..."
+                                className="w-full rounded-2xl border border-gray-300 bg-white py-2 pl-11 pr-4 text-sm text-gray-900 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-200"
+                            />
                         </div>
                     </div>
 
@@ -367,13 +401,13 @@ export default function StandardAuditReviewPage() {
                             <div className="flex h-full items-center justify-center text-sm text-gray-500">
                                 Memuat struktur standar...
                             </div>
-                        ) : standardTree.length > 0 ? (
+                        ) : filteredStandardTree.length > 0 ? (
                             <div className="space-y-3">
-                                {renderMetricTree(standardTree, selectedEvidence?.metric?.id)}
+                                {renderMetricTree(filteredStandardTree, standardSearchTerms)}
                             </div>
                         ) : (
                             <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                                Struktur standar belum tersedia.
+                                {standardSearch.trim() ? 'Tidak ada isi standar yang cocok dengan pencarian.' : 'Struktur standar belum tersedia.'}
                             </div>
                         )}
                     </div>
