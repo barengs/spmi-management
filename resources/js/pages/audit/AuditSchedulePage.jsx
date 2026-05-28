@@ -66,6 +66,13 @@ function getScheduleStatusPresentation(schedule) {
         };
     }
 
+    if (schedule.lead_auditor_status !== 'APPROVED') {
+        return {
+            tone: 'waiting_auditor',
+            label: 'Menunggu Lead Auditor',
+        };
+    }
+
     if (schedule.auditor_status !== 'APPROVED') {
         return {
             tone: 'waiting_auditor',
@@ -87,7 +94,9 @@ function getScheduleStatusPresentation(schedule) {
 }
 
 function canOpenBorang(schedule) {
-    return schedule.auditor_status === 'APPROVED' && schedule.auditee_status === 'APPROVED';
+    return schedule.lead_auditor_status === 'APPROVED'
+        && schedule.auditor_status === 'APPROVED'
+        && schedule.auditee_status === 'APPROVED';
 }
 
 function toDateTimeLocalInput(value) {
@@ -388,7 +397,11 @@ export default function AuditSchedulePage() {
         const isAssignedAuditee = String(schedule.auditee?.id) === String(userId)
             || (userUnitId && String(schedule.prodi?.id || '') === userUnitId);
 
-        if (isAssignedLeadAuditor || isAssignedAuditor) {
+        if (isAssignedLeadAuditor) {
+            return schedule.lead_auditor_status === 'PENDING' ? 'LEAD_AUDITOR' : null;
+        }
+
+        if (isAssignedAuditor) {
             return schedule.auditor_status === 'PENDING' ? 'AUDITOR' : null;
         }
 
@@ -620,6 +633,7 @@ export default function AuditSchedulePage() {
                                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Auditor</th>
                                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Auditee</th>
                                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Status</th>
+                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Approval Lead Auditor</th>
                                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Approval Auditor</th>
                                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Approval Auditee</th>
                                 <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Aksi</th>
@@ -628,13 +642,13 @@ export default function AuditSchedulePage() {
                         <tbody className="divide-y divide-gray-100 bg-white">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-10 text-center text-sm text-gray-500">
+                                    <td colSpan={10} className="px-6 py-10 text-center text-sm text-gray-500">
                                         Memuat jadwal audit...
                                     </td>
                                 </tr>
                             ) : filteredSchedules.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-10 text-center text-sm text-gray-500">
+                                    <td colSpan={10} className="px-6 py-10 text-center text-sm text-gray-500">
                                         Belum ada jadwal audit.
                                     </td>
                                 </tr>
@@ -662,6 +676,9 @@ export default function AuditSchedulePage() {
                                                     </span>
                                                 );
                                             })()}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <ApprovalBadge label="Lead Auditor" status={schedule.lead_auditor_status} />
                                         </td>
                                         <td className="px-6 py-4">
                                             <ApprovalBadge label="Auditor" status={schedule.auditor_status} />

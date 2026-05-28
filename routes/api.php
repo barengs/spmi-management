@@ -144,6 +144,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/{auditSchedule}',     [AuditScheduleController::class, 'update']);
             Route::delete('/{auditSchedule}',  [AuditScheduleController::class, 'destroy']);
             Route::patch('/{auditSchedule}/respond', [AuditScheduleController::class, 'respond']);
+            Route::patch('/{auditSchedule}/end-period', [AuditScheduleController::class, 'endPeriod']);
         });
 
         Route::prefix('audit-reports')->group(function () {

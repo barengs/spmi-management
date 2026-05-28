@@ -5,7 +5,9 @@ namespace App\Modules\Audit\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Audit\Models\AuditSchedule;
+use App\Modules\Borang\Models\BorangItem;
 use App\Modules\Core\Models\Unit;
+use App\Modules\Ptk\Models\TrxPtk;
 use App\Modules\Standard\Models\MstStandard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -199,6 +201,9 @@ class AuditScheduleController extends Controller
             'scheduled_end' => $schedule->scheduled_end?->toISOString(),
             'location' => $schedule->location,
             'notes' => $schedule->notes,
+            'lead_auditor_status' => $schedule->lead_auditor_status,
+            'lead_auditor_response_note' => $schedule->lead_auditor_response_note,
+            'lead_auditor_responded_at' => $schedule->lead_auditor_responded_at?->toISOString(),
             'overall_status' => $schedule->overall_status,
             'auditor_status' => $schedule->auditor_status,
             'auditor_response_note' => $schedule->auditor_response_note,
@@ -206,6 +211,13 @@ class AuditScheduleController extends Controller
             'auditee_status' => $schedule->auditee_status,
             'auditee_response_note' => $schedule->auditee_response_note,
             'auditee_responded_at' => $schedule->auditee_responded_at?->toISOString(),
+            'audit_period_status' => $schedule->audit_period_status,
+            'audit_period_lead_status' => $schedule->audit_period_lead_status,
+            'audit_period_lead_approved_at' => $schedule->audit_period_lead_approved_at?->toISOString(),
+            'audit_period_auditor_status' => $schedule->audit_period_auditor_status,
+            'audit_period_auditor_approved_at' => $schedule->audit_period_auditor_approved_at?->toISOString(),
+            'audit_period_conclusion' => $schedule->audit_period_conclusion,
+            'audit_period_closed_at' => $schedule->audit_period_closed_at?->toISOString(),
             'standard' => $schedule->standard ? [
                 'id' => $schedule->standard->id,
                 'name' => $schedule->standard->name,
@@ -241,15 +253,28 @@ class AuditScheduleController extends Controller
                 'name' => $schedule->creator->name,
                 'email' => $schedule->creator->email,
             ] : null,
+            'period_closer' => $schedule->periodCloser ? [
+                'id' => $schedule->periodCloser->id,
+                'name' => $schedule->periodCloser->name,
+                'email' => $schedule->periodCloser->email,
+            ] : null,
             'created_at' => $schedule->created_at?->toISOString(),
         ];
     }
 
     private function recalculateOverallStatus(AuditSchedule $schedule): void
     {
-        if ($schedule->auditor_status === 'REJECTED' || $schedule->auditee_status === 'REJECTED') {
+        if (
+            $schedule->lead_auditor_status === 'REJECTED'
+            || $schedule->auditor_status === 'REJECTED'
+            || $schedule->auditee_status === 'REJECTED'
+        ) {
             $schedule->overall_status = 'REJECTED';
-        } elseif ($schedule->auditor_status === 'APPROVED' && $schedule->auditee_status === 'APPROVED') {
+        } elseif (
+            $schedule->lead_auditor_status === 'APPROVED'
+            && $schedule->auditor_status === 'APPROVED'
+            && $schedule->auditee_status === 'APPROVED'
+        ) {
             $schedule->overall_status = 'APPROVED';
         } else {
             $schedule->overall_status = 'PENDING_APPROVAL';
@@ -276,6 +301,7 @@ class AuditScheduleController extends Controller
                 'auditor:id,name,email',
                 'auditee:id,name,email',
                 'creator:id,name,email',
+                'periodCloser:id,name,email',
             ])
             ->when(
                 ! $user->hasRole('SuperAdmin') && ! $user->hasRole('LPM-Admin'),
@@ -390,8 +416,12 @@ class AuditScheduleController extends Controller
             'auditee_id' => $auditee->id,
             'created_by' => $request->user()->id,
             'overall_status' => 'PENDING_APPROVAL',
+            'lead_auditor_status' => 'PENDING',
             'auditor_status' => 'PENDING',
             'auditee_status' => 'PENDING',
+            'audit_period_status' => 'OPEN',
+            'audit_period_lead_status' => 'PENDING',
+            'audit_period_auditor_status' => 'PENDING',
         ])->load([
             'standard:id,name,periode_tahun',
             'faculty:id,name,code',
@@ -400,6 +430,7 @@ class AuditScheduleController extends Controller
             'auditor:id,name,email',
             'auditee:id,name,email',
             'creator:id,name,email',
+            'periodCloser:id,name,email',
         ]);
 
         return response()->json([
@@ -444,6 +475,7 @@ class AuditScheduleController extends Controller
             'auditor:id,name,email',
             'auditee:id,name,email',
             'creator:id,name,email',
+            'periodCloser:id,name,email',
         ]);
 
         return response()->json([
@@ -517,7 +549,13 @@ class AuditScheduleController extends Controller
         $status = $validated['action'] === 'approve' ? 'APPROVED' : 'REJECTED';
         $note = $validated['note'] ?? null;
 
-        if ((int) $auditSchedule->lead_auditor_id === (int) $user->id || (int) $auditSchedule->auditor_id === (int) $user->id) {
+        if ((int) $auditSchedule->lead_auditor_id === (int) $user->id) {
+            $auditSchedule->lead_auditor_status = $status;
+            $auditSchedule->lead_auditor_response_note = $note;
+            $auditSchedule->lead_auditor_responded_at = now();
+        }
+
+        if ((int) $auditSchedule->auditor_id === (int) $user->id) {
             $auditSchedule->auditor_status = $status;
             $auditSchedule->auditor_response_note = $note;
             $auditSchedule->auditor_responded_at = now();
@@ -536,9 +574,11 @@ class AuditScheduleController extends Controller
             'standard:id,name,periode_tahun',
             'faculty:id,name,code',
             'prodi:id,name,code',
+            'leadAuditor:id,name,email',
             'auditor:id,name,email',
             'auditee:id,name,email',
             'creator:id,name,email',
+            'periodCloser:id,name,email',
         ]);
 
         return response()->json([
@@ -546,6 +586,145 @@ class AuditScheduleController extends Controller
             'message' => $validated['action'] === 'approve'
                 ? 'Persetujuan jadwal audit berhasil disimpan.'
                 : 'Penolakan jadwal audit berhasil disimpan.',
+            'data' => $this->transform($auditSchedule),
+        ]);
+    }
+
+    public function endPeriod(Request $request, AuditSchedule $auditSchedule): JsonResponse
+    {
+        $user = $request->user();
+
+        if (
+            (int) $auditSchedule->lead_auditor_id !== (int) $user->id
+            && (int) $auditSchedule->auditor_id !== (int) $user->id
+            && ! $user?->hasRole('SuperAdmin')
+        ) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Hanya lead auditor atau auditor yang dapat mengakhiri periode audit.',
+            ], 403);
+        }
+
+        if ($auditSchedule->audit_period_status === 'ENDED') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode audit ini sudah ditutup sebelumnya.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'conclusion' => 'required|string',
+        ], [
+            'conclusion.required' => 'Kesimpulan audit wajib diisi sebelum mengakhiri periode.',
+        ]);
+
+        $borangItemIds = BorangItem::query()
+            ->where('prodi_id', $auditSchedule->prodi_id)
+            ->pluck('id');
+
+        $hasUnreviewedIndicators = BorangItem::query()
+            ->where('prodi_id', $auditSchedule->prodi_id)
+            ->get()
+            ->contains(function (BorangItem $item): bool {
+                $latestEvidence = $item->evidences()
+                    ->latest('id')
+                    ->first();
+
+                if (! $latestEvidence) {
+                    return true;
+                }
+
+                return ! in_array($latestEvidence->review_status, ['ACCEPTED', 'REJECTED'], true);
+            });
+
+        if ($hasUnreviewedIndicators) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode audit belum dapat diakhiri karena masih ada indikator atau PJ yang belum direview final.',
+            ], 422);
+        }
+
+        $ongoingPtkExists = TrxPtk::query()
+            ->whereIn('status', ['OPEN', 'REVISION_REQUIRED', 'RESPONDED', 'VERIFIED'])
+            ->whereHas('evidence', function ($query) use ($borangItemIds) {
+                $query->whereIn('borang_item_id', $borangItemIds);
+            })
+            ->exists();
+
+        if ($ongoingPtkExists) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode audit belum dapat diakhiri karena masih ada PTK yang belum selesai.',
+            ], 422);
+        }
+
+        $trimmedConclusion = trim($validated['conclusion']);
+
+        if ((int) $auditSchedule->lead_auditor_id === (int) $user->id) {
+            if ($auditSchedule->audit_period_lead_status === 'APPROVED') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda sudah menyetujui pengakhiran periode audit ini.',
+                ], 422);
+            }
+
+            $auditSchedule->forceFill([
+                'audit_period_lead_status' => 'APPROVED',
+                'audit_period_lead_approved_at' => now(),
+                'audit_period_conclusion' => $trimmedConclusion,
+            ]);
+        }
+
+        if ((int) $auditSchedule->auditor_id === (int) $user->id) {
+            if ($auditSchedule->audit_period_auditor_status === 'APPROVED') {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Anda sudah menyetujui pengakhiran periode audit ini.',
+                ], 422);
+            }
+
+            $auditSchedule->forceFill([
+                'audit_period_auditor_status' => 'APPROVED',
+                'audit_period_auditor_approved_at' => now(),
+                'audit_period_conclusion' => $trimmedConclusion,
+            ]);
+        }
+
+        $leadApproved = $auditSchedule->audit_period_lead_status === 'APPROVED';
+        $auditorApproved = $auditSchedule->audit_period_auditor_status === 'APPROVED';
+
+        if ($leadApproved && $auditorApproved) {
+            $auditSchedule->forceFill([
+                'audit_period_status' => 'ENDED',
+                'audit_period_closed_at' => now(),
+                'audit_period_closed_by' => $user->id,
+            ]);
+        } else {
+            $auditSchedule->forceFill([
+                'audit_period_status' => 'PENDING_END_APPROVAL',
+                'audit_period_closed_at' => null,
+                'audit_period_closed_by' => null,
+            ]);
+        }
+
+        $auditSchedule->save();
+
+        $auditSchedule->load([
+            'standard:id,name,periode_tahun',
+            'faculty:id,name,code',
+            'prodi:id,name,code',
+            'leadAuditor:id,name,email',
+            'auditor:id,name,email',
+            'auditee:id,name,email',
+            'creator:id,name,email',
+            'periodCloser:id,name,email',
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => $leadApproved && $auditorApproved
+                ? 'Periode audit berhasil diakhiri.'
+                : 'Persetujuan pengakhiran periode audit berhasil disimpan dan menunggu auditor lainnya.',
             'data' => $this->transform($auditSchedule),
         ]);
     }

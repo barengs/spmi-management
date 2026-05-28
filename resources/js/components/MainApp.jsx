@@ -159,6 +159,22 @@ export default function MainApp() {
                             }
                         />
                         <Route
+                            path="pelaksanaan/prodis/:prodiId/standards"
+                            element={
+                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
+                                    <PelaksanaanPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="pelaksanaan/items/:itemId"
+                            element={
+                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
+                                    <PelaksanaanPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
                             path="standards/:id/execution"
                             element={
                                 <PermissionRoute
@@ -178,6 +194,14 @@ export default function MainApp() {
                         />
                         <Route
                             path="audit"
+                            element={
+                                <PermissionRoute permission="audit.score.update">
+                                    <EvidenceAuditPage />
+                                </PermissionRoute>
+                            }
+                        />
+                        <Route
+                            path="audit/prodi/:prodiId"
                             element={
                                 <PermissionRoute permission="audit.score.update">
                                     <EvidenceAuditPage />

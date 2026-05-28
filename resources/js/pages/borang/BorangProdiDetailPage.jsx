@@ -583,17 +583,6 @@ export default function BorangProdiDetailPage() {
                                                                 <Icon icon={Icons.eye} width={14} />
                                                                 Review
                                                             </button>
-                                                            {canCreatePtk && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleCreatePtk(row)}
-                                                                    disabled={creatingPtkId === row.id}
-                                                                    className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-60"
-                                                                >
-                                                                    <Icon icon={Icons.add} width={14} />
-                                                                    {creatingPtkId === row.id ? 'Membuat...' : `PTK${row.ptkSummary?.open ? ` (${row.ptkSummary.open})` : ''}`}
-                                                                </button>
-                                                            )}
                                                         </div>
                                                     ) : (
                                                         <button

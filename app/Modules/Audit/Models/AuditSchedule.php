@@ -26,6 +26,9 @@ class AuditSchedule extends Model
         'scheduled_end',
         'location',
         'notes',
+        'lead_auditor_status',
+        'lead_auditor_response_note',
+        'lead_auditor_responded_at',
         'auditor_status',
         'auditor_response_note',
         'auditor_responded_at',
@@ -33,6 +36,14 @@ class AuditSchedule extends Model
         'auditee_response_note',
         'auditee_responded_at',
         'overall_status',
+        'audit_period_status',
+        'audit_period_lead_status',
+        'audit_period_lead_approved_at',
+        'audit_period_auditor_status',
+        'audit_period_auditor_approved_at',
+        'audit_period_conclusion',
+        'audit_period_closed_at',
+        'audit_period_closed_by',
     ];
 
     protected function casts(): array
@@ -40,8 +51,12 @@ class AuditSchedule extends Model
         return [
             'scheduled_start' => 'datetime',
             'scheduled_end' => 'datetime',
+            'lead_auditor_responded_at' => 'datetime',
             'auditor_responded_at' => 'datetime',
             'auditee_responded_at' => 'datetime',
+            'audit_period_lead_approved_at' => 'datetime',
+            'audit_period_auditor_approved_at' => 'datetime',
+            'audit_period_closed_at' => 'datetime',
         ];
     }
 
@@ -78,5 +93,10 @@ class AuditSchedule extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function periodCloser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'audit_period_closed_by');
     }
 }

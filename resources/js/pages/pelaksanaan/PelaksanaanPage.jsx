@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
@@ -32,6 +33,7 @@ function formatDateTime(value) {
 }
 
 export default function PelaksanaanPage() {
+    const { prodiId, itemId } = useParams();
     const user = useSelector((state) => state.auth.user);
     const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
     const hasRole = (roleName) => roleNames.includes(roleName);
@@ -43,9 +45,8 @@ export default function PelaksanaanPage() {
     const [uploading, setUploading] = useState(false);
     const [deletingEvidenceId, setDeletingEvidenceId] = useState(null);
     const [prodis, setProdis] = useState([]);
-    const [selectedProdiId, setSelectedProdiId] = useState('');
+    const [schedules, setSchedules] = useState([]);
     const [rows, setRows] = useState([]);
-    const [selectedItemId, setSelectedItemId] = useState(null);
     const [detail, setDetail] = useState(null);
     const [search, setSearch] = useState('');
     const [uploadMode, setUploadMode] = useState('file');
@@ -53,14 +54,20 @@ export default function PelaksanaanPage() {
     const [uploadFile, setUploadFile] = useState(null);
     const [uploadNotes, setUploadNotes] = useState('');
 
+    const isProdiIndex = !prodiId && !itemId;
+    const isProdiStandards = Boolean(prodiId) && !itemId;
+    const isItemDetail = Boolean(itemId);
+
     useEffect(() => {
         const fetchMeta = async () => {
             try {
                 setLoadingMeta(true);
-                const response = await api.get('/pelaksanaan/prodis');
-                const nextProdis = response.data.data?.prodis || [];
-                setProdis(nextProdis);
-                setSelectedProdiId(nextProdis[0] ? String(nextProdis[0].id) : '');
+                const [prodiResponse, schedulesResponse] = await Promise.all([
+                    api.get('/pelaksanaan/prodis'),
+                    api.get('/audit-schedules'),
+                ]);
+                setProdis(prodiResponse.data.data?.prodis || []);
+                setSchedules(schedulesResponse.data.data || []);
             } catch (error) {
                 toast.error(error.response?.data?.message || 'Daftar prodi pelaksanaan gagal dimuat.');
             } finally {
@@ -71,36 +78,42 @@ export default function PelaksanaanPage() {
         fetchMeta();
     }, []);
 
+    const selectedProdi = useMemo(
+        () => prodis.find((prodi) => String(prodi.id) === String(prodiId)) || null,
+        [prodiId, prodis]
+    );
+    const selectedProdiSchedule = useMemo(
+        () => schedules.find((schedule) => String(schedule?.prodi?.id || '') === String(prodiId)) || null,
+        [prodiId, schedules]
+    );
+
     useEffect(() => {
-        if (!selectedProdiId) {
+        if (!isProdiStandards || !selectedProdi) {
             setRows([]);
-            setSelectedItemId(null);
             return;
         }
 
-        const fetchRows = async () => {
+        const fetchProdiRows = async () => {
             try {
                 setLoadingRows(true);
-                const response = await api.get(`/pelaksanaan/prodis/${selectedProdiId}`);
-                const nextRows = response.data.data?.rows || [];
+                const response = await api.get(`/pelaksanaan/prodis/${selectedProdi.id}`);
+                const nextRows = (response.data.data?.rows || []).map((row) => ({
+                    ...row,
+                    prodi: selectedProdi,
+                }));
                 setRows(nextRows);
-                setSelectedItemId((current) => (
-                    current && nextRows.some((row) => String(row.id) === String(current))
-                        ? current
-                        : nextRows[0]?.id || null
-                ));
             } catch (error) {
-                toast.error(error.response?.data?.message || 'Daftar indikator pelaksanaan gagal dimuat.');
+                toast.error(error.response?.data?.message || 'Daftar standar pelaksanaan gagal dimuat.');
             } finally {
                 setLoadingRows(false);
             }
         };
 
-        fetchRows();
-    }, [selectedProdiId]);
+        fetchProdiRows();
+    }, [isProdiStandards, selectedProdi]);
 
     useEffect(() => {
-        if (!selectedItemId) {
+        if (!isItemDetail || !itemId) {
             setDetail(null);
             return;
         }
@@ -108,7 +121,7 @@ export default function PelaksanaanPage() {
         const fetchDetail = async () => {
             try {
                 setLoadingDetail(true);
-                const response = await api.get(`/pelaksanaan/items/${selectedItemId}`);
+                const response = await api.get(`/pelaksanaan/items/${itemId}`);
                 setDetail(response.data.data || null);
                 setUploadMode('file');
                 setUploadLink('');
@@ -122,38 +135,21 @@ export default function PelaksanaanPage() {
         };
 
         fetchDetail();
-    }, [selectedItemId]);
+    }, [isItemDetail, itemId]);
 
     const filteredRows = useMemo(() => (
         rows.filter((row) => (
-            `${row.standard_name} ${row.indikator} ${row.sasaran_mutu}`.toLowerCase().includes(search.trim().toLowerCase())
+            `${row.standard_name} ${row.indikator} ${row.prodi?.name || ''}`.toLowerCase().includes(search.trim().toLowerCase())
         ))
     ), [rows, search]);
 
-    const selectedProdi = prodis.find((item) => String(item.id) === String(selectedProdiId));
-
-    const refreshDetail = async (itemId = selectedItemId) => {
+    const refreshDetail = async () => {
         if (!itemId) {
             return;
         }
 
         const response = await api.get(`/pelaksanaan/items/${itemId}`);
         setDetail(response.data.data || null);
-    };
-
-    const refreshRows = async (preferredItemId = selectedItemId) => {
-        if (!selectedProdiId) {
-            return;
-        }
-
-        const response = await api.get(`/pelaksanaan/prodis/${selectedProdiId}`);
-        const nextRows = response.data.data?.rows || [];
-        setRows(nextRows);
-        setSelectedItemId(
-            preferredItemId && nextRows.some((row) => String(row.id) === String(preferredItemId))
-                ? preferredItemId
-                : nextRows[0]?.id || null
-        );
     };
 
     const handleUpload = async (event) => {
@@ -187,8 +183,7 @@ export default function PelaksanaanPage() {
 
             await api.post(`/borang/items/${detail.id}/evidences`, formData);
             toast.success('Bukti pelaksanaan berhasil diunggah.');
-            await refreshRows(detail.id);
-            await refreshDetail(detail.id);
+            await refreshDetail();
             setUploadFile(null);
             setUploadLink('');
             setUploadNotes('');
@@ -208,8 +203,7 @@ export default function PelaksanaanPage() {
             setDeletingEvidenceId(evidenceId);
             await api.delete(`/evidences/${evidenceId}`);
             toast.success('Bukti pelaksanaan berhasil dihapus.');
-            await refreshRows(detail?.id);
-            await refreshDetail(detail?.id);
+            await refreshDetail();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Bukti pelaksanaan gagal dihapus.');
         } finally {
@@ -226,166 +220,237 @@ export default function PelaksanaanPage() {
                             <Icon icon={Icons.execution} width={14} />
                             Pelaksanaan
                         </div>
-                        <h1 className="mt-4 text-2xl font-semibold text-gray-900">Upload Bukti Pelaksanaan per Indikator</h1>
+                        <h1 className="mt-4 text-2xl font-semibold text-gray-900">
+                            {isProdiIndex
+                                ? 'Daftar Prodi Pelaksanaan'
+                                : isProdiStandards
+                                    ? `Daftar Standar ${selectedProdi?.name || ''}`.trim()
+                                    : 'Detail Dokumen Pelaksanaan'}
+                        </h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                            Halaman ini khusus untuk pelaksanaan. Pengguna hanya memilih indikator dari standar lalu mengunggah dokumen atau link bukti. Audit dan evaluasi tetap diproses di halaman lain.
+                            {isProdiIndex
+                                ? 'Halaman awal pelaksanaan menampilkan daftar prodi. Masuk ke masing-masing prodi untuk melihat daftar standar saat ini.'
+                                : isProdiStandards
+                                    ? 'Halaman ini menampilkan daftar standar dan indikator per prodi beserta akses ke detail dokumen buktinya.'
+                                    : 'Halaman ini menampilkan seluruh dokumen bukti atau capaian yang terkait dengan satu indikator standar.'}
                         </p>
                     </div>
-                    <div className={`rounded-2xl border px-4 py-3 text-sm ${canModify ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
-                        {canModify ? 'Form upload aktif untuk akun ini.' : 'Mode baca aktif. Upload hanya untuk SuperAdmin dan Auditee.'}
-                    </div>
+
+                    {!isProdiIndex && (
+                        <Link
+                            to={isProdiStandards ? '/pelaksanaan' : `/pelaksanaan/prodis/${detail?.prodi?.id || prodiId}/standards`}
+                            className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                        >
+                            <Icon icon={Icons.back} width={16} />
+                            Kembali
+                        </Link>
+                    )}
                 </div>
             </section>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.05fr)]">
-                <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
-                    <div className="border-b border-gray-200 px-6 py-5">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Standar yang Diimplementasi</h2>
-                        <p className="mt-1 text-sm text-gray-600">
-                            {selectedProdi ? `${selectedProdi.name}${selectedProdi.faculty?.name ? ` • ${selectedProdi.faculty.name}` : ''}` : 'Pilih prodi'}
-                        </p>
-                    </div>
-
-                    <div className="grid gap-3 border-b border-gray-200 px-6 py-4">
-                        <select
-                            value={selectedProdiId}
-                            onChange={(event) => setSelectedProdiId(event.target.value)}
-                            disabled={loadingMeta || prodis.length === 0}
-                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
-                        >
-                            {prodis.map((prodi) => (
-                                <option key={prodi.id} value={String(prodi.id)}>
-                                    {prodi.name}{prodi.faculty?.name ? ` • ${prodi.faculty.name}` : ''}
-                                </option>
-                            ))}
-                        </select>
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Cari Standar yang Diimplementasi</label>
-                            <div className="relative">
-                                <Icon icon={Icons.search} width={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                                <input
-                                    type="text"
-                                    value={search}
-                                    onChange={(event) => setSearch(event.target.value)}
-                                    placeholder="Cari nama standar atau indikator..."
-                                    className="w-full rounded-2xl border border-gray-200 py-3 pl-11 pr-4 text-sm text-gray-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
-                                />
-                            </div>
+            {isProdiStandards && selectedProdi && (
+                <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Prodi</div>
+                            <div className="mt-2 text-sm font-semibold text-gray-900">{selectedProdi.name}</div>
+                        </div>
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Fakultas</div>
+                            <div className="mt-2 text-sm font-semibold text-gray-900">{selectedProdi.faculty?.name || '-'}</div>
+                        </div>
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Auditee</div>
+                            <div className="mt-2 text-sm font-semibold text-gray-900">{selectedProdiSchedule?.auditee?.name || '-'}</div>
+                            <div className="mt-1 text-xs text-gray-500">{selectedProdiSchedule?.auditee?.email || 'Belum ada jadwal audit'}</div>
                         </div>
                     </div>
+                </section>
+            )}
 
-                    <div className="max-h-[72vh] overflow-y-auto p-4">
-                        {loadingRows ? (
-                            <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
-                                Memuat indikator pelaksanaan...
-                            </div>
-                        ) : filteredRows.length === 0 ? (
-                            <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
-                                Belum ada indikator pelaksanaan untuk prodi ini.
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {filteredRows.map((row) => (
-                                    <button
-                                        key={row.id}
-                                        type="button"
-                                        onClick={() => setSelectedItemId(row.id)}
-                                        className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
-                                            String(selectedItemId) === String(row.id)
-                                                ? 'border-sky-300 bg-sky-50'
-                                                : 'border-gray-200 bg-white hover:border-sky-200 hover:bg-sky-50/50'
-                                        }`}
-                                    >
-                                        <div className="text-sm font-semibold text-gray-900">{row.standard_name}</div>
-                                        <div className="mt-2 text-sm leading-6 text-gray-600">{row.indikator}</div>
-                                        <div className="mt-3 text-xs text-gray-500">
-                                            Bukti tersimpan: {row.evidence_summary?.total || 0}
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+            {isProdiIndex && (
+                <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                    <div className="border-b border-gray-200 px-6 py-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Prodi</h2>
+                            <span className="text-sm text-gray-500">{prodis.length} prodi</span>
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Nama Prodi</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Nama Fakultas</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Kode</th>
+                                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                                {loadingMeta ? (
+                                    <tr>
+                                        <td colSpan={4} className="px-6 py-10 text-center text-sm text-gray-500">Memuat daftar prodi...</td>
+                                    </tr>
+                                ) : prodis.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={4} className="px-6 py-10 text-center text-sm text-gray-500">Belum ada prodi yang dapat diakses.</td>
+                                    </tr>
+                                ) : (
+                                    prodis.map((prodi) => (
+                                        <tr key={prodi.id} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{prodi.name}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-700">{prodi.faculty?.name || '-'}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-700">{prodi.code || '-'}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <Link
+                                                    to={`/pelaksanaan/prodis/${prodi.id}/standards`}
+                                                    className="inline-flex items-center gap-2 rounded-full border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
+                                                >
+                                                    <Icon icon={Icons.eye} width={16} />
+                                                    Lihat Standar
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </section>
+            )}
 
+            {isProdiStandards && (
+                <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+                    <div className="grid gap-3 border-b border-gray-200 px-6 py-4">
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Cari standar, indikator, atau prodi..."
+                            className="w-full rounded-2xl border border-gray-200 py-3 pl-4 pr-4 text-sm text-gray-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                        />
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Standar</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Indikator</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Prodi</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Bukti</th>
+                                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                                {loadingRows ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-500">Memuat daftar standar...</td>
+                                    </tr>
+                                ) : filteredRows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-500">Belum ada standar untuk prodi ini.</td>
+                                    </tr>
+                                ) : (
+                                    filteredRows.map((row) => (
+                                        <tr key={row.id} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 text-sm font-semibold text-gray-900">{row.standard_name}</td>
+                                            <td className="px-6 py-4 text-sm leading-6 text-gray-700">{row.indikator}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-700">{row.prodi?.name || '-'}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-700">{row.evidence_summary?.total || 0} dokumen</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <Link
+                                                    to={`/pelaksanaan/items/${row.id}`}
+                                                    className="inline-flex items-center gap-2 rounded-full border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
+                                                >
+                                                    <Icon icon={Icons.eye} width={16} />
+                                                    Detail
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
+
+            {isItemDetail && (
                 <section className="space-y-6">
                     <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                         {loadingDetail ? (
-                            <div className="text-sm text-gray-500">Memuat indikator terpilih...</div>
+                            <div className="text-sm text-gray-500">Memuat detail indikator...</div>
                         ) : !detail ? (
-                            <div className="text-sm text-gray-500">Pilih indikator dari daftar di kiri untuk mulai upload bukti.</div>
+                            <div className="text-sm text-gray-500">Detail indikator tidak ditemukan.</div>
                         ) : (
                             <>
-                                <div>
-                                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Form Pelaksanaan</div>
-                                    <h2 className="mt-3 text-xl font-semibold text-gray-900">Indikator dari Standar</h2>
-                                </div>
-
-                                <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                                <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
                                     <div className="text-sm font-semibold text-gray-900">{detail.standard_name}</div>
                                     <div className="mt-2 text-sm leading-6 text-gray-700">{detail.indikator}</div>
+                                    <div className="mt-3 text-xs text-gray-500">
+                                        {detail.prodi?.name || '-'}{detail.faculty?.name ? ` • ${detail.faculty.name}` : ''}
+                                    </div>
                                 </div>
 
-                                <form onSubmit={handleUpload} className="mt-6 space-y-4">
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700">Jenis Bukti</label>
-                                        <div className="flex gap-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => setUploadMode('file')}
-                                                className={`rounded-full px-4 py-2 text-sm font-medium ${uploadMode === 'file' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-                                            >
-                                                Upload Dokumen
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setUploadMode('link')}
-                                                className={`rounded-full px-4 py-2 text-sm font-medium ${uploadMode === 'link' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-                                            >
-                                                Link Bukti
-                                            </button>
+                                {canModify && (
+                                    <form onSubmit={handleUpload} className="mt-6 space-y-4">
+                                        <div>
+                                            <label className="mb-2 block text-sm font-medium text-gray-700">Jenis Bukti</label>
+                                            <div className="flex gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setUploadMode('file')}
+                                                    className={`rounded-full px-4 py-2 text-sm font-medium ${uploadMode === 'file' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                                                >
+                                                    Upload Dokumen
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setUploadMode('link')}
+                                                    className={`rounded-full px-4 py-2 text-sm font-medium ${uploadMode === 'link' ? 'bg-sky-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                                                >
+                                                    Link Bukti
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {uploadMode === 'file' ? (
+                                        {uploadMode === 'file' ? (
+                                            <div>
+                                                <label className="mb-2 block text-sm font-medium text-gray-700">Upload Document of Prove</label>
+                                                <input
+                                                    type="file"
+                                                    onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
+                                                    disabled={uploading}
+                                                    className="block w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 disabled:bg-gray-100"
+                                                    accept=".pdf,.doc,.docx,.xls,.xlsx"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <label className="mb-2 block text-sm font-medium text-gray-700">Link of Prove</label>
+                                                <input
+                                                    type="url"
+                                                    value={uploadLink}
+                                                    onChange={(event) => setUploadLink(event.target.value)}
+                                                    disabled={uploading}
+                                                    placeholder="https://..."
+                                                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 disabled:bg-gray-100"
+                                                />
+                                            </div>
+                                        )}
+
                                         <div>
-                                            <label className="mb-2 block text-sm font-medium text-gray-700">Upload Document of Prove</label>
-                                            <input
-                                                type="file"
-                                                onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
-                                                disabled={!canModify || uploading}
-                                                className="block w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 disabled:bg-gray-100"
-                                                accept=".pdf,.doc,.docx,.xls,.xlsx"
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <label className="mb-2 block text-sm font-medium text-gray-700">Link of Prove</label>
-                                            <input
-                                                type="url"
-                                                value={uploadLink}
-                                                onChange={(event) => setUploadLink(event.target.value)}
-                                                disabled={!canModify || uploading}
-                                                placeholder="https://..."
+                                            <label className="mb-2 block text-sm font-medium text-gray-700">Catatan Singkat</label>
+                                            <textarea
+                                                rows={3}
+                                                value={uploadNotes}
+                                                onChange={(event) => setUploadNotes(event.target.value)}
+                                                disabled={uploading}
+                                                placeholder="Catatan opsional untuk bukti pelaksanaan"
                                                 className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 disabled:bg-gray-100"
                                             />
                                         </div>
-                                    )}
 
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-gray-700">Catatan Singkat</label>
-                                        <textarea
-                                            rows={3}
-                                            value={uploadNotes}
-                                            onChange={(event) => setUploadNotes(event.target.value)}
-                                            disabled={!canModify || uploading}
-                                            placeholder="Catatan opsional untuk bukti pelaksanaan"
-                                            className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 disabled:bg-gray-100"
-                                        />
-                                    </div>
-
-                                    {canModify && (
                                         <div className="flex justify-end">
                                             <button
                                                 type="submit"
@@ -396,8 +461,8 @@ export default function PelaksanaanPage() {
                                                 {uploading ? 'Mengunggah...' : 'Simpan Bukti'}
                                             </button>
                                         </div>
-                                    )}
-                                </form>
+                                    </form>
+                                )}
                             </>
                         )}
                     </section>
@@ -406,9 +471,9 @@ export default function PelaksanaanPage() {
                         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                             <div className="flex items-center justify-between gap-4">
                                 <div>
-                                    <h3 className="text-lg font-semibold text-gray-900">Bukti Tersimpan</h3>
+                                    <h3 className="text-lg font-semibold text-gray-900">Dokumen Bukti dan Capaian</h3>
                                     <p className="mt-1 text-sm text-gray-500">
-                                        Halaman audit dan evaluasi membaca bukti ini dari menu yang terpisah.
+                                        Seluruh dokumen pembuktian yang terkait dengan standar atau indikator ini.
                                     </p>
                                 </div>
                                 <span className="text-sm text-gray-500">{detail.evidences?.length || 0} item</span>
@@ -417,7 +482,7 @@ export default function PelaksanaanPage() {
                             <div className="mt-5 space-y-3">
                                 {(detail.evidences || []).length === 0 ? (
                                     <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
-                                        Belum ada bukti pelaksanaan untuk indikator ini.
+                                        Belum ada dokumen bukti atau capaian terkait untuk indikator ini.
                                     </div>
                                 ) : (
                                     detail.evidences.map((evidence) => (
@@ -478,7 +543,7 @@ export default function PelaksanaanPage() {
                         </section>
                     )}
                 </section>
-            </div>
+            )}
         </div>
     );
 }

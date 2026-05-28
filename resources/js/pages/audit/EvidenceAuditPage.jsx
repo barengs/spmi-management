@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
@@ -12,9 +13,11 @@ const initialFacultyForm = {
 
 export default function EvidenceAuditPage() {
     const PAGE_SIZE = 10;
+    const { prodiId } = useParams();
     const user = useSelector((state) => state.auth.user);
     const [units, setUnits] = useState([]);
     const [assignedSchedules, setAssignedSchedules] = useState([]);
+    const [auditSchedules, setAuditSchedules] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isFacultyModalOpen, setIsFacultyModalOpen] = useState(false);
     const [facultyForm, setFacultyForm] = useState(initialFacultyForm);
@@ -30,6 +33,8 @@ export default function EvidenceAuditPage() {
     const [pairsFacultyFilter, setPairsFacultyFilter] = useState('ALL');
     const [requirementsSearch, setRequirementsSearch] = useState('');
     const [requirementsStandardFilter, setRequirementsStandardFilter] = useState('ALL');
+    const [endAuditConclusion, setEndAuditConclusion] = useState('');
+    const [endingAuditPeriod, setEndingAuditPeriod] = useState(false);
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
@@ -41,12 +46,17 @@ export default function EvidenceAuditPage() {
             setLoading(true);
 
             if (canViewAllAuditUnits) {
-                const unitsResponse = await api.get('/units/flat');
+                const [unitsResponse, schedulesResponse] = await Promise.all([
+                    api.get('/units/flat'),
+                    api.get('/audit-schedules'),
+                ]);
                 setUnits(unitsResponse.data.data || []);
-                setAssignedSchedules([]);
+                setAssignedSchedules(schedulesResponse.data.data || []);
+                setAuditSchedules(schedulesResponse.data.data || []);
             } else {
                 const schedulesResponse = await api.get('/audit-schedules');
                 setAssignedSchedules(schedulesResponse.data.data || []);
+                setAuditSchedules(schedulesResponse.data.data || []);
                 setUnits([]);
             }
         } catch (error) {
@@ -93,6 +103,45 @@ export default function EvidenceAuditPage() {
                 schedule,
             }));
     }, [assignedSchedules, canViewAllAuditUnits, facultyRows, units]);
+
+    useEffect(() => {
+        if (!prodiId) {
+            setSelectedFaculty(null);
+            setSelectedProdi(null);
+            setRequirementRows([]);
+            setViewMode('pairs');
+            return;
+        }
+
+        if (loading) {
+            return;
+        }
+
+        const matchedPair = canViewAllAuditUnits
+            ? facultyProdiRows.find(({ prodi }) => String(prodi?.id || '') === String(prodiId))
+            : assignedSchedules
+                .filter((schedule) => schedule?.prodi?.id && schedule?.faculty?.id)
+                .map((schedule) => ({
+                    faculty: schedule.faculty,
+                    prodi: schedule.prodi,
+                }))
+                .find(({ prodi }) => String(prodi?.id || '') === String(prodiId));
+
+        if (!matchedPair?.prodi || !matchedPair?.faculty) {
+            toast.error('Prodi audit tidak ditemukan.');
+            setSelectedFaculty(null);
+            setSelectedProdi(null);
+            setRequirementRows([]);
+            setViewMode('pairs');
+            return;
+        }
+
+        if (String(selectedProdi?.id || '') === String(matchedPair.prodi.id) && viewMode === 'requirements') {
+            return;
+        }
+
+        openRequirementTable(matchedPair.faculty, matchedPair.prodi);
+    }, [assignedSchedules, canViewAllAuditUnits, facultyProdiRows, loading, prodiId, selectedProdi?.id, viewMode]);
 
     const openFacultyModal = () => {
         setFacultyForm(initialFacultyForm);
@@ -209,6 +258,26 @@ export default function EvidenceAuditPage() {
             }))
     ), [activeRequirementTab, requirementRows, requirementsSearch, requirementsStandardFilter]);
 
+    const selectedSchedule = useMemo(() => (
+        auditSchedules.find((schedule) => String(schedule?.prodi?.id || '') === String(selectedProdi?.id || '')) || null
+    ), [auditSchedules, selectedProdi?.id]);
+
+    const isAssignedLeadAuditor = String(selectedSchedule?.lead_auditor?.id || '') === String(user?.id || '');
+    const isAssignedAuditor = String(selectedSchedule?.auditor?.id || '') === String(user?.id || '');
+    const canManageAuditPeriod = isAssignedLeadAuditor || isAssignedAuditor;
+    const auditAlreadyEnded = selectedSchedule?.audit_period_status === 'ENDED';
+    const currentUserEndApprovalStatus = isAssignedLeadAuditor
+        ? selectedSchedule?.audit_period_lead_status
+        : isAssignedAuditor
+            ? selectedSchedule?.audit_period_auditor_status
+            : null;
+    const otherAuditorEndApprovalStatus = isAssignedLeadAuditor
+        ? selectedSchedule?.audit_period_auditor_status
+        : isAssignedAuditor
+            ? selectedSchedule?.audit_period_lead_status
+            : null;
+    const hasCurrentUserApprovedEndPeriod = currentUserEndApprovalStatus === 'APPROVED';
+
     const pairTotalPages = Math.max(1, Math.ceil(filteredFacultyProdiRows.length / PAGE_SIZE));
     const paginatedFacultyProdiRows = useMemo(() => (
         filteredFacultyProdiRows.slice((pairsPage - 1) * PAGE_SIZE, pairsPage * PAGE_SIZE)
@@ -237,6 +306,42 @@ export default function EvidenceAuditPage() {
         setRequirementsPage((current) => Math.min(current, requirementTotalPages));
     }, [requirementTotalPages]);
 
+    useEffect(() => {
+        setEndAuditConclusion(selectedSchedule?.audit_period_conclusion || '');
+    }, [selectedSchedule?.audit_period_conclusion, selectedSchedule?.id]);
+
+    const handleEndAuditPeriod = async () => {
+        if (!selectedSchedule?.id) {
+            toast.error('Jadwal audit untuk prodi ini tidak ditemukan.');
+            return;
+        }
+
+        if (!endAuditConclusion.trim()) {
+            toast.warning('Kesimpulan audit wajib diisi sebelum mengakhiri periode.');
+            return;
+        }
+
+        setEndingAuditPeriod(true);
+
+        try {
+            const response = await api.patch(`/audit-schedules/${selectedSchedule.id}/end-period`, {
+                conclusion: endAuditConclusion.trim(),
+            });
+
+            setAuditSchedules((current) => current.map((schedule) => (
+                String(schedule.id) === String(response.data.data?.id) ? response.data.data : schedule
+            )));
+            setAssignedSchedules((current) => current.map((schedule) => (
+                String(schedule.id) === String(response.data.data?.id) ? response.data.data : schedule
+            )));
+            toast.success(response.data.message || 'Periode audit berhasil diakhiri.');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Periode audit gagal diakhiri.');
+        } finally {
+            setEndingAuditPeriod(false);
+        }
+    };
+
     return (
         <div className="space-y-6 p-6 sm:p-8">
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -254,14 +359,24 @@ export default function EvidenceAuditPage() {
 
                     <div className="flex flex-wrap gap-3">
                         {viewMode !== 'pairs' && (
-                            <button
-                                type="button"
+                            <Link
+                                to="/audit"
                                 onClick={goBackToPairs}
                                 className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
                             >
                                 <Icon icon={Icons.back} width={16} />
                                 Kembali
-                            </button>
+                            </Link>
+                        )}
+
+                        {viewMode === 'requirements' && selectedProdi?.id && (
+                            <Link
+                                to={`/borang/prodi/${selectedProdi.id}`}
+                                className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700"
+                            >
+                                <Icon icon={Icons.eye} width={16} />
+                                Buka Borang Prodi
+                            </Link>
                         )}
 
                         {viewMode === 'pairs' && canCreateFaculty && (
@@ -349,14 +464,13 @@ export default function EvidenceAuditPage() {
                                                 </td>
                                             )}
                                             <td className="px-6 py-4 text-right">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => openRequirementTable(faculty, prodi)}
+                                                <Link
+                                                    to={`/audit/prodi/${prodi.id}`}
                                                     className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
                                                 >
                                                     <Icon icon={Icons.eye} width={16} />
                                                     Lihat Detail
-                                                </button>
+                                                </Link>
                                             </td>
                                         </tr>
                                     ))
@@ -385,6 +499,107 @@ export default function EvidenceAuditPage() {
                             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Daftar Kewajiban Indikator</h2>
                             <span className="text-sm text-gray-500">{filteredRequirementRows.length} baris</span>
                         </div>
+                        <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Prodi</div>
+                                    <div className="mt-2 text-sm font-semibold text-gray-900">{selectedProdi?.name || '-'}</div>
+                                </div>
+                                <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Fakultas</div>
+                                    <div className="mt-2 text-sm font-semibold text-gray-900">{selectedFaculty?.name || '-'}</div>
+                                </div>
+                                <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Auditee</div>
+                                    <div className="mt-2 text-sm font-semibold text-gray-900">
+                                        {assignedSchedules.find((schedule) => String(schedule?.prodi?.id || '') === String(selectedProdi?.id || ''))?.auditee?.name || '-'}
+                                    </div>
+                                    <div className="mt-1 text-xs text-gray-500">
+                                        {assignedSchedules.find((schedule) => String(schedule?.prodi?.id || '') === String(selectedProdi?.id || ''))?.auditee?.email || 'Belum ada auditee'}
+                                    </div>
+                                </div>
+                        </div>
+                        {selectedSchedule && (
+                            <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50/70 p-5">
+                                <div className="flex flex-wrap items-start justify-between gap-4">
+                                    <div>
+                                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">Penutupan Periode Audit</div>
+                                        <p className="mt-2 max-w-3xl text-sm leading-6 text-amber-900">
+                                            Salah satu auditor dapat memulai penutupan periode. Periode baru benar-benar berakhir setelah auditor lainnya ikut menyetujui, dan tidak ada PTK yang masih berjalan.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-full border border-amber-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+                                        {auditAlreadyEnded ? 'Periode Ditutup' : 'Periode Masih Aktif'}
+                                    </div>
+                                </div>
+                                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                                    <div className="rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-gray-700">
+                                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Lead Auditor</div>
+                                        <div className="mt-2 font-semibold text-gray-900">{selectedSchedule.lead_auditor?.name || '-'}</div>
+                                        <div className="mt-1 text-xs text-gray-500">Jadwal: {selectedSchedule.lead_auditor_status || 'PENDING'}</div>
+                                        <div className="mt-1 text-xs text-gray-500">Akhiri Periode: {selectedSchedule.audit_period_lead_status || 'PENDING'}</div>
+                                    </div>
+                                    <div className="rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-gray-700">
+                                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Auditor</div>
+                                        <div className="mt-2 font-semibold text-gray-900">{selectedSchedule.auditor?.name || '-'}</div>
+                                        <div className="mt-1 text-xs text-gray-500">Jadwal: {selectedSchedule.auditor_status || 'PENDING'}</div>
+                                        <div className="mt-1 text-xs text-gray-500">Akhiri Periode: {selectedSchedule.audit_period_auditor_status || 'PENDING'}</div>
+                                    </div>
+                                    <div className="rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-gray-700">
+                                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Penutupan</div>
+                                        <div className="mt-2 font-semibold text-gray-900">
+                                            {selectedSchedule.audit_period_status === 'ENDED'
+                                                ? 'Selesai'
+                                                : selectedSchedule.audit_period_status === 'PENDING_END_APPROVAL'
+                                                    ? 'Menunggu Persetujuan Auditor Lain'
+                                                    : 'Belum Ditutup'}
+                                        </div>
+                                        <div className="mt-1 text-xs text-gray-500">
+                                            {selectedSchedule.audit_period_closed_at
+                                                ? `Ditutup ${new Date(selectedSchedule.audit_period_closed_at).toLocaleString('id-ID')}`
+                                                : 'Menunggu kesimpulan akhir audit'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mt-4">
+                                    <label className="block space-y-2">
+                                        <span className="text-sm font-medium text-gray-900">Kesimpulan Audit</span>
+                                        <textarea
+                                            value={endAuditConclusion}
+                                            onChange={(event) => setEndAuditConclusion(event.target.value)}
+                                            rows={4}
+                                            readOnly={!canManageAuditPeriod || auditAlreadyEnded}
+                                            placeholder="Tuliskan kesimpulan akhir audit sebelum periode ditutup."
+                                            className="w-full rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100 read-only:cursor-not-allowed read-only:bg-gray-50"
+                                        />
+                                    </label>
+                                    {selectedSchedule.period_closer?.name && (
+                                        <p className="mt-2 text-xs text-gray-500">
+                                            Ditutup oleh {selectedSchedule.period_closer.name}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="mt-4 flex flex-wrap items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={handleEndAuditPeriod}
+                                        disabled={!canManageAuditPeriod || auditAlreadyEnded || endingAuditPeriod || hasCurrentUserApprovedEndPeriod}
+                                        className="inline-flex items-center gap-2 rounded-full bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <Icon icon={Icons.check} width={16} />
+                                        {endingAuditPeriod ? 'Menyimpan...' : 'Akhiri Periode Audit'}
+                                    </button>
+                                    {hasCurrentUserApprovedEndPeriod && !auditAlreadyEnded && (
+                                        <span className="text-xs text-amber-800">Persetujuan Anda sudah tersimpan. Menunggu auditor lainnya menyetujui penutupan periode.</span>
+                                    )}
+                                    {otherAuditorEndApprovalStatus === 'PENDING' && selectedSchedule.audit_period_status === 'PENDING_END_APPROVAL' && (
+                                        <span className="text-xs text-amber-800">Status saat ini menunggu persetujuan auditor lainnya.</span>
+                                    )}
+                                    {auditAlreadyEnded && (
+                                        <span className="text-xs text-emerald-700">Periode audit ini sudah ditutup.</span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <div className="mt-4 flex flex-wrap gap-3">
                             <button
                                 type="button"

@@ -68,6 +68,14 @@ export default function Navbar({ toggleSidebar }) {
             return ['Pelaksanaan'];
         }
 
+        if (/^\/pelaksanaan\/prodis\/[^/]+\/standards$/.test(path)) {
+            return ['Pelaksanaan', 'Daftar Standar'];
+        }
+
+        if (/^\/pelaksanaan\/items\/[^/]+$/.test(path)) {
+            return ['Pelaksanaan', 'Detail Dokumen'];
+        }
+
         if (path === '/improvement') {
             return ['Peningkatan'];
         }
@@ -94,6 +102,10 @@ export default function Navbar({ toggleSidebar }) {
 
         if (path === '/audit') {
             return ['Audit', 'Daftar Fakultas'];
+        }
+
+        if (/^\/audit\/prodi\/[^/]+$/.test(path)) {
+            return ['Audit', 'Detail Prodi'];
         }
 
         if (path === '/audit/schedules') {
