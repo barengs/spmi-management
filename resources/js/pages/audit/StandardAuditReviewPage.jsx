@@ -98,6 +98,23 @@ function filterMetricTree(nodes, searchTerms) {
     }, []);
 }
 
+function flattenIndicatorOptions(nodes, options = []) {
+    nodes.forEach((node) => {
+        if (node.type === 'Indicator') {
+            options.push({
+                id: node.id,
+                label: node.content || `Butir mutu #${node.id}`,
+            });
+        }
+
+        if (node.children_recursive?.length) {
+            flattenIndicatorOptions(node.children_recursive, options);
+        }
+    });
+
+    return options;
+}
+
 function renderMetricTree(nodes, searchTerms, depth = 0) {
     return nodes.map((node) => {
         return (
@@ -136,6 +153,7 @@ export default function StandardAuditReviewPage() {
     const [createPtkOnReject, setCreatePtkOnReject] = useState(false);
     const [submittingAction, setSubmittingAction] = useState('');
     const [standardSearch, setStandardSearch] = useState('');
+    const [findings, setFindings] = useState([{ referenceMetricId: '', statement: '' }]);
 
     const fetchPageData = async () => {
         try {
@@ -172,11 +190,18 @@ export default function StandardAuditReviewPage() {
         if (!selectedEvidence) {
             setReviewComment('');
             setPreviewUrl('');
+            setFindings([{ referenceMetricId: '', statement: '' }]);
             return;
         }
 
         setReviewComment(selectedEvidence.review_status === 'REJECTED' ? (selectedEvidence.review_comment || '') : '');
         setCreatePtkOnReject(false);
+        setFindings([
+            {
+                referenceMetricId: selectedEvidence.metric?.id ? String(selectedEvidence.metric.id) : '',
+                statement: '',
+            },
+        ]);
     }, [selectedEvidence]);
 
     useEffect(() => {
@@ -230,6 +255,46 @@ export default function StandardAuditReviewPage() {
         () => filterMetricTree(standardTree, standardSearchTerms),
         [standardTree, standardSearchTerms]
     );
+    const indicatorOptions = useMemo(() => flattenIndicatorOptions(standardTree), [standardTree]);
+
+    const updateFinding = (index, field, value) => {
+        setFindings((current) => current.map((item, itemIndex) => (
+            itemIndex === index
+                ? { ...item, [field]: value }
+                : item
+        )));
+    };
+
+    const addFinding = () => {
+        setFindings((current) => [
+            ...current,
+            { referenceMetricId: '', statement: '' },
+        ]);
+    };
+
+    const buildFindingSummary = () => {
+        const normalizedFindings = findings
+            .map((item) => ({
+                referenceMetricId: String(item.referenceMetricId || '').trim(),
+                statement: String(item.statement || '').trim(),
+            }))
+            .filter((item) => item.referenceMetricId || item.statement);
+
+        if (normalizedFindings.length === 0) {
+            return reviewComment.trim();
+        }
+
+        const hasIncompleteFinding = normalizedFindings.some((item) => !item.referenceMetricId || !item.statement);
+
+        if (hasIncompleteFinding) {
+            throw new Error('Setiap temuan harus memiliki referensi butir mutu dan isi pernyataan.');
+        }
+
+        return normalizedFindings.map((item, index) => {
+            const referenceLabel = indicatorOptions.find((option) => String(option.id) === item.referenceMetricId)?.label || `Butir mutu #${item.referenceMetricId}`;
+            return `${index + 1}. Referensi butir mutu: ${referenceLabel}\nPernyataan: ${item.statement}`;
+        }).join('\n\n');
+    };
 
     const submitReview = async (action) => {
         if (!selectedEvidence) {
@@ -256,13 +321,19 @@ export default function StandardAuditReviewPage() {
                     throw new Error('Target tanggal koreksi wajib diisi untuk membuat PTK.');
                 }
 
+                const findingSummary = buildFindingSummary();
+
+                if (!findingSummary.trim()) {
+                    throw new Error('Isi temuan atau komentar auditor terlebih dahulu sebelum membuat PTK.');
+                }
+
                 await api.post('/ptk', {
                     metric_id: selectedEvidence.metric?.id,
                     evidence_id: selectedEvidence.id,
                     assigned_user_id: selectedEvidence.uploader?.id || null,
                     assigned_unit_id: selectedEvidence.uploader?.unit?.id || selectedEvidence.uploader?.unit_id || null,
                     target_completion_date: targetCompletionDate.trim(),
-                    finding_summary: reviewComment.trim(),
+                    finding_summary: findingSummary,
                 });
             }
 
@@ -450,6 +521,59 @@ export default function StandardAuditReviewPage() {
                             <div className="rounded-2xl bg-gray-50 px-4 py-3">
                                 <div className="text-xs font-semibold uppercase tracking-[0.15em] text-gray-500">Waktu Review</div>
                                 <div className="mt-2 text-sm font-medium text-gray-900">{formatDate(selectedEvidence.reviewed_at)}</div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6">
+                            <div className="mb-2 block text-sm font-medium text-gray-700">
+                                Temuan
+                            </div>
+                            <div className="space-y-4">
+                                {findings.map((item, index) => (
+                                    <div key={`finding-${index}`} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div>
+                                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                                    Referensi Butir Mutu
+                                                </label>
+                                                <select
+                                                    value={item.referenceMetricId}
+                                                    onChange={(event) => updateFinding(index, 'referenceMetricId', event.target.value)}
+                                                    className="w-full rounded-2xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-200"
+                                                >
+                                                    <option value="">Pilih butir mutu</option>
+                                                    {indicatorOptions.map((option) => (
+                                                        <option key={option.id} value={String(option.id)}>
+                                                            {option.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="mb-2 block text-sm font-medium text-gray-700">
+                                                    Pernyataan Temuan
+                                                </label>
+                                                <textarea
+                                                    rows="3"
+                                                    value={item.statement}
+                                                    onChange={(event) => updateFinding(index, 'statement', event.target.value)}
+                                                    className="w-full rounded-2xl border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-200"
+                                                    placeholder="Tuliskan isi temuan untuk butir mutu ini."
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-4">
+                                <button
+                                    type="button"
+                                    onClick={addFinding}
+                                    className="inline-flex items-center gap-2 rounded-full border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                                >
+                                    <Icon icon={Icons.add} width={16} />
+                                    Tambah Temuan
+                                </button>
                             </div>
                         </div>
 
