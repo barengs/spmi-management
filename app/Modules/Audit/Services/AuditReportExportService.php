@@ -35,6 +35,7 @@ class AuditReportExportService
     public function buildPdfHtml(AuditSchedule $schedule, Collection $findings): string
     {
         $context = $this->buildContext($schedule, $findings);
+        $pdfLogoPath = $this->resolvePdfLogoPath($context['logo_path']);
         $findingRows = $this->buildPdfFindingRows($context['findings'], $context['auditor_initials']);
         $conclusionItems = collect($context['conclusions'])
             ->map(fn (string $line) => '<tr><td style="padding:4px 0 4px 18px; font-size:11pt; font-style:italic;">- ' . e($line) . '</td></tr>')
@@ -50,22 +51,22 @@ class AuditReportExportService
 <body style="font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #111111; margin: 0;">
     <table style="width:100%; border-collapse:collapse;">
         <tr>
-            <td style="text-align:center; padding-top:40px;">
-                {$this->buildPdfLogoMarkup($context['logo_path'])}
+            <td style="text-align:left; padding-top:40px;">
+                {$this->buildPdfLogoMarkup($pdfLogoPath)}
             </td>
         </tr>
         <tr>
-            <td style="text-align:center; color:#365F91; font-size:30pt; font-weight:bold; padding-top:12px;">LAPORAN</td>
+            <td style="text-align:left; color:#365F91; font-size:30pt; font-weight:bold; padding-top:12px;">LAPORAN</td>
         </tr>
         <tr>
-            <td style="text-align:center; color:#365F91; font-size:24pt; font-weight:bold; padding-top:8px;">Audit Mutu Internal (AMI)</td>
+            <td style="text-align:left; color:#365F91; font-size:24pt; font-weight:bold; padding-top:8px;">Audit Mutu Internal (AMI)</td>
         </tr>
         <tr>
-            <td style="text-align:center; color:#365F91; font-size:22pt; font-weight:bold; padding-top:10px;">{$this->escape($context['cover_unit_label'])}</td>
+            <td style="text-align:left; color:#365F91; font-size:22pt; font-weight:bold; padding-top:10px;">{$this->escape($context['cover_unit_label'])}</td>
         </tr>
         <tr>
             <td style="padding-top:34px;">
-                <table style="width:430px; margin:0 auto; border-collapse:collapse;">
+                <table style="width:430px; margin:0; border-collapse:collapse;">
                     <tr><td colspan="3" style="border-top:2px solid #7FB3D5; height:14px;"></td></tr>
                     {$this->buildPdfCoverMetaRows($context)}
                 </table>
@@ -603,12 +604,13 @@ HTML;
         $table->addCell($c1)->addText('Tanggal Audit', ['size' => $fs], 'bodyTight');
         $table->addCell($spanAll, ['gridSpan' => 4])->addText($context['audit_date'], ['size' => $fs], 'bodyTight');
 
-        // Row: Ketua Auditor | value | Fakultas/Unit : | short name
+        // Row: Ketua Auditor (multi-line cell)
         $table->addRow();
         $table->addCell($c1)->addText('Ketua Auditor', ['size' => $fs], 'bodyTight');
-        $table->addCell($c2)->addText($context['lead_auditor'], ['size' => $fs], 'bodyTight');
-        $table->addCell($c3 + $c4, ['gridSpan' => 2])->addText($context['cover_unit_label'] . ' :', ['size' => $fs], 'bodyTight');
-        $table->addCell($c5)->addText($context['faculty_short_name'], ['size' => $fs], 'bodyTight');
+        $ketuaCell = $table->addCell($spanAll, ['gridSpan' => 4]);
+        $ketuaCell->addText('Nama     :  ' . $context['lead_auditor'], ['size' => $fs], 'bodyTight');
+        $ketuaCell->addText($context['cover_unit_label'] . '  :  ' . $context['faculty_short_name'], ['size' => $fs], 'bodyTight');
+        $ketuaCell->addText('Telp.      :  -', ['size' => $fs], 'bodyTight');
 
         // Row: Anggota Auditor (multi-line cell)
         $table->addRow();
@@ -876,9 +878,11 @@ HTML;
     </tr>
     <tr>
         <td class="label">Ketua Auditor</td>
-        <td>{$this->escape($context['lead_auditor'])}</td>
-        <td>{$this->escape($context['cover_unit_label'])} :</td>
-        <td>{$this->escape($context['faculty_short_name'])}</td>
+        <td colspan="3">
+            Nama     :  {$this->escape($context['lead_auditor'])}<br />
+            {$this->escape($context['cover_unit_label'])}  :  {$this->escape($context['faculty_short_name'])}<br />
+            Telp.      :  -
+        </td>
     </tr>
     <tr>
         <td class="label">Anggota Auditor</td>
@@ -911,7 +915,7 @@ HTML;
     <tr><td style="border:1px solid #111111; padding:4px 6px;">Alamat</td><td colspan="3" style="border:1px solid #111111; padding:4px 6px;">{$this->escape($context['location'])}</td></tr>
     <tr><td style="border:1px solid #111111; padding:4px 6px;">{$this->escape($auditeeLabel)}</td><td style="border:1px solid #111111; padding:4px 6px;">{$this->escape($context['auditee_name'])}</td><td style="border:1px solid #111111; padding:4px 6px; width:90px;">Telp. :</td><td style="border:1px solid #111111; padding:4px 6px;">-</td></tr>
     <tr><td style="border:1px solid #111111; padding:4px 6px;">Tanggal Audit</td><td colspan="3" style="border:1px solid #111111; padding:4px 6px;">{$this->escape($context['audit_date'])}</td></tr>
-    <tr><td style="border:1px solid #111111; padding:4px 6px;">Ketua Auditor</td><td style="border:1px solid #111111; padding:4px 6px;">{$this->escape($context['lead_auditor'])}</td><td style="border:1px solid #111111; padding:4px 6px;">{$this->escape($context['cover_unit_label'])} :</td><td style="border:1px solid #111111; padding:4px 6px;">{$this->escape($context['faculty_short_name'])}</td></tr>
+    <tr><td style="border:1px solid #111111; padding:4px 6px;">Ketua Auditor</td><td colspan="3" style="border:1px solid #111111; padding:4px 6px;">Nama     :  {$this->escape($context['lead_auditor'])}<br>{$this->escape($context['cover_unit_label'])}  :  {$this->escape($context['faculty_short_name'])}<br>Telp.      :  -</td></tr>
     <tr><td style="border:1px solid #111111; padding:4px 6px;">Anggota Auditor</td><td colspan="3" style="border:1px solid #111111; padding:4px 6px;">Nama     :  {$this->escape($context['auditor'])}<br>{$this->escape($context['cover_unit_label'])}  :  {$this->escape($context['faculty_short_name'])}<br>Telp.      :  -</td></tr>
     <tr>
         <td style="border:1px solid #111111; padding:4px 6px;">Tanda Tangan<br>Ketua Auditor</td>
@@ -1041,7 +1045,8 @@ HTML;
         if (! $logoPath || ! is_file($logoPath)) {
             return '';
         }
-        return '<img src="' . e($this->toDataUri($logoPath, 'image/png')) . '" alt="Logo Universitas Islam Madura" style="width:120px; height:auto;" />';
+        $mimeType = mime_content_type($logoPath) ?: 'image/jpeg';
+        return '<img src="' . e($this->toDataUri($logoPath, $mimeType)) . '" alt="Logo Universitas Islam Madura" style="width:118px; height:auto;" />';
     }
 
     private function buildHtmlSignatureMarkup(?string $signaturePath): string
@@ -1073,6 +1078,16 @@ HTML;
 
         $publicLogo = public_path('uim-report-logo.png');
         return is_file($publicLogo) ? $publicLogo : null;
+    }
+
+    private function resolvePdfLogoPath(?string $logoPath): ?string
+    {
+        $preferredPdfLogo = public_path('logo-uim-pdf.jpg');
+        if (is_file($preferredPdfLogo)) {
+            return $preferredPdfLogo;
+        }
+
+        return $logoPath;
     }
 
     private function resolveUserSignaturePath(?User $user): ?string

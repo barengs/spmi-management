@@ -73,21 +73,11 @@ class AuditReportController extends Controller
 
         $format = strtolower((string) $request->query('format', 'docx'));
 
-        if (! in_array($format, ['doc', 'docx', 'pdf'], true)) {
+        if (! in_array($format, ['docx', 'pdf'], true)) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Format export tidak didukung.',
             ], 422);
-        }
-
-        if ($format === 'doc') {
-            $htmlDocument = $this->exportService->buildWordHtml($schedule, $findings);
-            $filename = 'laporan-ami-' . $schedule->id . '.doc';
-            return response()->streamDownload(function () use ($htmlDocument) {
-                echo $htmlDocument;
-            }, $filename, [
-                'Content-Type' => 'application/msword; charset=UTF-8',
-            ]);
         }
 
         if ($format === 'pdf') {

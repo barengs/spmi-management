@@ -243,9 +243,7 @@ export default function ReportDetailPage() {
             const contentType = response.headers['content-type']
                 || (selectedExportFormat === 'pdf'
                     ? 'application/pdf'
-                    : selectedExportFormat === 'docx'
-                        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                        : 'application/msword');
+                    : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
             const contentDisposition = response.headers['content-disposition'] || '';
             const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
             const fileName = fileNameMatch?.[1] || fallbackFileName;
@@ -509,7 +507,6 @@ export default function ReportDetailPage() {
 
                         <div className="mt-5 space-y-3">
                             {[
-                                { value: 'doc', label: '.doc', description: 'Format Word lama yang kompatibel luas.' },
                                 { value: 'docx', label: '.docx', description: 'Format Word modern yang direkomendasikan.' },
                                 { value: 'pdf', label: '.pdf', description: 'Format final siap baca dan cetak.' },
                             ].map((option) => (
