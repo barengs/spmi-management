@@ -604,6 +604,43 @@ The repository currently contains several additions and implementation details b
 - `scripts/extract-standard-pdf.mjs` is the truth source for current PDF parsing heuristics used by document import.
 - Existing manually-created standards and imported standards now share the same persisted tree model (`mst_metrics`), but import-specific parsing rules only apply during file import.
 
+### Audit Report Export Notes
+- Active export implementation lives in:
+  - `app/Modules/Audit/Controllers/AuditReportController.php`
+  - `app/Modules/Audit/Services/AuditReportExportService.php`
+  - `resources/js/pages/report/ReportDetailPage.jsx`
+- Supported AMI report export formats are now only:
+  - `.docx`
+  - `.pdf`
+- Legacy `.doc` export has been intentionally removed from AMI report export options and backend validation.
+- `.docx` export currently uses `PhpWord`, not a `.docx` template processor.
+- The Word cover layout is intentionally left-aligned for logo and title text, matching the current approved output rather than the earlier centered draft.
+- Current logo source of truth for AMI report export:
+  - `public/logo-uim.png`
+- Current PDF-specific logo fallback:
+  - `public/logo-uim-pdf.jpg`
+  - This exists to avoid Dompdf PNG rendering failures on environments without the PHP `gd` extension.
+- Known root causes that were already encountered and fixed in AMI export:
+  1. `PhpWord` output escaping was disabled by default, causing raw XML characters such as `&` to corrupt `word/document.xml`.
+     - Fix applied: `Settings::setOutputEscapingEnabled(true)` before document generation.
+  2. `PhpWord` emitted invalid OOXML for some zero-width borders.
+     - Fix applied: post-save zip patching in `patchDocxBorders()`.
+  3. Wrong logo assets in `public/` caused Word export to embed an unrelated image even when layout was correct.
+     - Fix applied: export now resolves `public/logo-uim.png` first.
+  4. Dompdf failed with `The PHP GD extension is required, but is not installed.` when rendering PNG logo assets.
+     - Fix applied: PDF export uses `public/logo-uim-pdf.jpg` through `resolvePdfLogoPath()`.
+  5. Old Word-specific asset override files (`*-word.png`, `*-word.jpg`) could accidentally override the intended logo.
+     - Current safeguard: `prepareWordImagePath()` returns `logo-uim.png` directly when that exact asset is the source path.
+- AMI export layout decisions currently in force:
+  - Cover logo is placed above the title.
+  - Cover title block is left-aligned in `.docx` and `.pdf`.
+  - `Ketua Auditor` row is intentionally formatted like `Anggota Auditor`: one merged cell containing `Nama`, unit label (`Program Studi` / `Fakultas`), and `Telp.`.
+- If the exported `.docx` opens but shows the wrong image above `LAPORAN`, first verify the actual packaged file under `word/media/section_image1.*` before changing layout code.
+- If the exported `.pdf` fails on image rendering again, check whether a PNG path re-entered the Dompdf path; prefer JPEG assets on environments without `gd`.
+- `lap-ami-fe.docx` under `documents/examples/` is useful as a visual reference, but the current AMI export is not template-based and should not assume its embedded media assets are directly reusable via `PhpWord::addImage()`.
+- Recommended maintenance rule:
+  - Treat AMI export asset problems as a source-path / renderer-compatibility issue first, not a table/layout issue.
+
 ### Risks / Inconsistencies To Address
 1. **Model namespace mismatch**
    - `MstStandard::submitter()` and `approver()` reference `App\Modules\Core\Models\User`, while active user model is `App\Models\User`.
@@ -633,6 +670,13 @@ The repository currently contains several additions and implementation details b
    - New governance roles (`Pemeriksa`, `Persetujuan`, `Pertimbangan`, `Pengendalian`) now exist for account assignment and RBAC management, but current approval controller logic is still hardcoded to role names like `Kepala LPMI`, `Wakil Rektor 1/2/3`, and `Rektor`.
 12. **Role page naming drift**
    - `resources/js/pages/settings/PermissionMatrixPage.jsx` is no longer a matrix-style page in practice; it now acts as the role creation page for `/settings`.
+13. **AMI export implementation complexity**
+   - `AuditReportExportService` now contains several renderer-specific workarounds for Word and PDF compatibility.
+   - Future refactor should separate:
+     - shared report content/context assembly
+     - Word rendering
+     - PDF rendering
+     - asset resolution / compatibility handling
 
 ### Quick Verification Paths
 - API routing truth source: `routes/api.php`
@@ -654,7 +698,14 @@ The repository currently contains several additions and implementation details b
   - `app/Modules/Standard/Controllers/MetricController.php`
   - `app/Modules/Standard/Models/MstStandard.php`
   - `resources/js/pages/standards/StandardBuilder.jsx`
+- AMI export verification:
+  - `app/Modules/Audit/Controllers/AuditReportController.php`
+  - `app/Modules/Audit/Services/AuditReportExportService.php`
+  - `resources/js/pages/report/ReportDetailPage.jsx`
+  - `public/logo-uim.png`
+  - `public/logo-uim-pdf.jpg`
+  - `documents/examples/lap-ami-fe.docx`
 
 ---
 
-*Last Updated: 2026-04-29*
+*Last Updated: 2026-05-30*
