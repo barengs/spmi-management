@@ -14,6 +14,7 @@ E-SPMI (Sistem Penjaminan Mutu Internal) adalah aplikasi web berbasis Laravel da
 - [Manual Setup](#-manual-setup)
 - [Development](#-development)
 - [Default Credentials](#-default-credentials)
+- [Buku Manual Pengguna](#-buku-manual-pengguna)
 
 ---
 
@@ -43,6 +44,21 @@ E-SPMI (Sistem Penjaminan Mutu Internal) adalah aplikasi web berbasis Laravel da
 | **PHPUnit** | Testing Framework |
 | **Laravel Pint** | Code Formatting |
 | **Vite HMR** | Hot Module Replacement |
+
+---
+
+## 📘 Buku Manual Pengguna
+
+Panduan operasional aplikasi tersedia di:
+
+- [MANUAL_BOOK.md](/Users/alvinsetyapranata/Documents/spmi-management/MANUAL_BOOK.md:1)
+
+Dokumen tersebut mencakup:
+
+- alur login dan dashboard
+- penggunaan modul standar, borang, pelaksanaan, audit, PTK, dan laporan
+- pengaturan user, role, permission, dan siklus
+- ringkasan route penting
 
 ---
 

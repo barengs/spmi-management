@@ -6,11 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Modules\Audit\Models\AuditSchedule;
 use App\Modules\Audit\Services\AuditReportExportService;
 use App\Modules\Ptk\Models\TrxPtk;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
-use PhpOffice\PhpWord\IOFactory;
-use PhpOffice\PhpWord\Settings;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AuditReportController extends Controller
@@ -71,7 +71,6 @@ class AuditReportController extends Controller
             ? $this->queryFindingsForSchedule($schedule)->get()
             : collect();
 
-        $htmlDocument = $this->exportService->buildWordHtml($schedule, $findings);
         $format = strtolower((string) $request->query('format', 'docx'));
 
         if (! in_array($format, ['doc', 'docx', 'pdf'], true)) {
@@ -82,6 +81,7 @@ class AuditReportController extends Controller
         }
 
         if ($format === 'doc') {
+            $htmlDocument = $this->exportService->buildWordHtml($schedule, $findings);
             $filename = 'laporan-ami-' . $schedule->id . '.doc';
             return response()->streamDownload(function () use ($htmlDocument) {
                 echo $htmlDocument;
@@ -90,16 +90,19 @@ class AuditReportController extends Controller
             ]);
         }
 
-        $phpWord = $this->exportService->buildPhpWord($schedule, $findings);
-
         if ($format === 'pdf') {
-            Settings::setPdfRendererName(Settings::PDF_RENDERER_DOMPDF);
-            Settings::setPdfRendererPath(base_path('vendor/dompdf/dompdf'));
-
+            $pdfHtmlDocument = $this->exportService->buildPdfHtml($schedule, $findings);
             $filename = 'laporan-ami-' . $schedule->id . '.pdf';
             $tempPath = storage_path('app/tmp-' . uniqid('laporan-ami-', true) . '.pdf');
-            $writer = IOFactory::createWriter($phpWord, 'PDF');
-            $writer->save($tempPath);
+
+            $options = new Options();
+            $options->set('isRemoteEnabled', true);
+            $options->set('isHtml5ParserEnabled', true);
+            $dompdf = new Dompdf($options);
+            $dompdf->loadHtml($pdfHtmlDocument, 'UTF-8');
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+            file_put_contents($tempPath, $dompdf->output());
 
             return response()->download(
                 $tempPath,
@@ -108,10 +111,9 @@ class AuditReportController extends Controller
             )->deleteFileAfterSend(true);
         }
 
-        $filename = 'laporan-ami-' . $schedule->id . '.docx';
-        $tempPath = storage_path('app/tmp-' . uniqid('laporan-ami-', true) . '.docx');
-        $writer = IOFactory::createWriter($phpWord, 'Word2007');
-        $writer->save($tempPath);
+        // docx — use saveDocx() which builds, saves, and patches invalid border XML
+        $tempPath = $this->exportService->saveDocx($schedule, $findings);
+        $filename  = 'laporan-ami-' . $schedule->id . '.docx';
 
         return response()->download(
             $tempPath,
@@ -129,9 +131,9 @@ class AuditReportController extends Controller
                 'standard:id,name,periode_tahun',
                 'faculty:id,name,code',
                 'prodi:id,name,code',
-                'leadAuditor:id,name,email',
-                'auditor:id,name,email',
-                'auditee:id,name,email',
+                'leadAuditor:id,name,email,signature_path',
+                'auditor:id,name,email,signature_path',
+                'auditee:id,name,email,signature_path',
                 'creator:id,name,email',
                 'periodCloser:id,name,email',
             ])

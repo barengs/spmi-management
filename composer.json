@@ -50,7 +50,27 @@
         ],
         "test": [
             "@php artisan config:clear --ansi",
-            "@php artisan test"
+            "@php artisan test --testsuite=Feature"
+        ],
+        "test:blackbox": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test --testsuite=Feature"
+        ],
+        "test:feature": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test --testsuite=Feature"
+        ],
+        "test:workflow": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test tests/Feature/StandardApprovalTest.php tests/Feature/EvidenceUploadTest.php tests/Feature/EvidenceReviewTest.php tests/Feature/PtkWorkflowTest.php tests/Feature/StandardExportTest.php tests/Feature/StandardDocumentImportTest.php"
+        ],
+        "test:rbac": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test tests/Feature/RbacMatrixTest.php"
+        ],
+        "test:exports": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test tests/Feature/StandardExportTest.php"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
