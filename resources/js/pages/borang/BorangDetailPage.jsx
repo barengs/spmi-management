@@ -50,6 +50,7 @@ export default function BorangDetailPage() {
     const [removing, setRemoving] = useState(false);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewingAction, setReviewingAction] = useState('');
+    const auditLocked = Boolean(borangItem?.audit_locked);
 
     const fetchBorangItem = async () => {
         try {
@@ -235,6 +236,11 @@ export default function BorangDetailPage() {
                                 ? 'Halaman ini menampilkan bukti pelaksanaan secara read-only untuk kebutuhan review auditor.'
                                 : 'Halaman ini menampilkan detail satu item borang dan digunakan untuk mengunggah dokumen bukti beserta komentar pendukung.'}
                         </p>
+                        {auditLocked && (
+                            <div className="mt-3 inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">
+                                Audit Locked
+                            </div>
+                        )}
                     </div>
 
                     <Link
@@ -269,7 +275,11 @@ export default function BorangDetailPage() {
                     </div>
                 </div>
 
-                {canReviewEvidence ? (
+                {auditLocked ? (
+                    <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-6 text-sm text-rose-800">
+                        Periode audit sudah ditutup. Bukti, komentar review, dan hasil audit pada item ini sudah terkunci.
+                    </div>
+                ) : canReviewEvidence ? (
                     <div className="mt-6 space-y-5">
                         {!latestSubmission ? (
                             <div className="rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500">

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
+import { useSelector } from 'react-redux';
 
 function formatDate(value, options = { dateStyle: 'long' }) {
     if (!value) {
@@ -127,6 +128,10 @@ function buildAuditScope(report) {
 }
 
 function buildAuditConclusion(report) {
+    if (report.audit_period_conclusion) {
+        return [report.audit_period_conclusion];
+    }
+
     const findingsTotal = report.findings_summary?.total || 0;
     const openFindings = report.findings_summary?.open || 0;
     const closedFindings = report.findings_summary?.closed || 0;
@@ -164,6 +169,10 @@ function buildAttachments(report) {
         attachments.push('Catatan pelaksanaan audit dari jadwal audit.');
     }
 
+    if (report.audit_period_conclusion) {
+        attachments.push('Kesimpulan akhir audit yang disahkan pada saat periode audit ditutup.');
+    }
+
     return attachments;
 }
 
@@ -182,8 +191,12 @@ function MetadataRow({ label, value }) {
 
 export default function ReportDetailPage() {
     const { id } = useParams();
+    const user = useSelector((state) => state.auth.user);
     const [auditReports, setAuditReports] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+    const [selectedExportFormat, setSelectedExportFormat] = useState('docx');
 
     useEffect(() => {
         const fetchAuditReports = async () => {
@@ -205,6 +218,54 @@ export default function ReportDetailPage() {
         () => auditReports.find((item) => String(item.id) === String(id)) || null,
         [auditReports, id],
     );
+
+    const canExportReport = useMemo(() => {
+        const roles = user?.roles || [];
+        const permissions = user?.permissions || [];
+        const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
+
+        return hasRole('SuperAdmin') || permissions.includes('report.view') || permissions.includes('report.export');
+    }, [user]);
+
+    const handleExport = async () => {
+        if (!report) {
+            return;
+        }
+
+        try {
+            setIsExporting(true);
+            const response = await api.get(`/audit-reports/${report.id}/export`, {
+                params: { format: selectedExportFormat },
+                responseType: 'blob',
+            });
+
+            const fallbackFileName = `laporan-ami-${report.id}.${selectedExportFormat}`;
+            const contentType = response.headers['content-type']
+                || (selectedExportFormat === 'pdf'
+                    ? 'application/pdf'
+                    : selectedExportFormat === 'docx'
+                        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        : 'application/msword');
+            const contentDisposition = response.headers['content-disposition'] || '';
+            const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
+            const fileName = fileNameMatch?.[1] || fallbackFileName;
+            const blob = new Blob([response.data], { type: contentType });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            link.href = downloadUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+            setIsExportDialogOpen(false);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Export laporan audit gagal diproses.');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -236,19 +297,31 @@ export default function ReportDetailPage() {
 
     return (
         <div className="space-y-6 p-6 sm:p-8">
-            <Link to="/report" className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800">
-                Kembali ke daftar laporan
-            </Link>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <Link to="/report" className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800">
+                    Kembali ke daftar laporan
+                </Link>
+                {canExportReport && (
+                    <button
+                        type="button"
+                        onClick={() => setIsExportDialogOpen(true)}
+                        disabled={isExporting}
+                        className="inline-flex items-center justify-center rounded-md border border-transparent bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {isExporting ? 'Mengekspor...' : 'Export Laporan AMI'}
+                    </button>
+                )}
+            </div>
 
             <article className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 bg-slate-900 px-6 py-5 text-white sm:px-8">
+                <div className="border-b border-slate-200 bg-white px-6 py-8 sm:px-8">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div>
-                            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">
+                            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
                                 Laporan Audit Mutu Internal
                             </div>
-                            <h1 className="mt-2 text-2xl font-semibold">{report.title}</h1>
-                            <p className="mt-2 text-sm leading-6 text-slate-200">
+                            <h1 className="mt-2 text-3xl font-semibold text-slate-900">FAKULTAS</h1>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">
                                 Fakultas {report.faculty?.name || '-'} | Program Studi {report.prodi?.name || '-'} | Tahun Akademik {formatAcademicYear(report.standard?.periode_tahun)}
                             </p>
                         </div>
@@ -269,6 +342,8 @@ export default function ReportDetailPage() {
                             <MetadataRow label="Anggota Auditor" value={report.auditor?.name || '-'} />
                             <MetadataRow label="Auditee" value={report.auditee?.name || '-'} />
                             <MetadataRow label="Tahun Akademik" value={formatAcademicYear(report.standard?.periode_tahun)} />
+                            <MetadataRow label="Periode Ditutup" value={formatDateTime(report.audit_period_closed_at)} />
+                            <MetadataRow label="Penutup Periode" value={report.period_closer?.name || '-'} />
                         </div>
                     </section>
 
@@ -412,6 +487,77 @@ export default function ReportDetailPage() {
                     </section>
                 </div>
             </article>
+
+            {isExportDialogOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h2 className="text-lg font-semibold text-slate-900">Export Laporan AMI</h2>
+                                <p className="mt-1 text-sm text-slate-500">
+                                    Pilih format file yang ingin digunakan untuk mengunduh laporan audit.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => !isExporting && setIsExportDialogOpen(false)}
+                                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="mt-5 space-y-3">
+                            {[
+                                { value: 'doc', label: '.doc', description: 'Format Word lama yang kompatibel luas.' },
+                                { value: 'docx', label: '.docx', description: 'Format Word modern yang direkomendasikan.' },
+                                { value: 'pdf', label: '.pdf', description: 'Format final siap baca dan cetak.' },
+                            ].map((option) => (
+                                <label
+                                    key={option.value}
+                                    className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
+                                        selectedExportFormat === option.value
+                                            ? 'border-blue-500 bg-blue-50'
+                                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="export-format"
+                                        value={option.value}
+                                        checked={selectedExportFormat === option.value}
+                                        onChange={(event) => setSelectedExportFormat(event.target.value)}
+                                        className="mt-1 h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span>
+                                        <span className="block text-sm font-semibold text-slate-900">{option.label}</span>
+                                        <span className="mt-1 block text-sm text-slate-500">{option.description}</span>
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+
+                        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setIsExportDialogOpen(false)}
+                                disabled={isExporting}
+                                className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleExport}
+                                disabled={isExporting}
+                                className="inline-flex items-center justify-center rounded-md border border-transparent bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isExporting ? 'Mengekspor...' : `Export ${selectedExportFormat.toUpperCase()}`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

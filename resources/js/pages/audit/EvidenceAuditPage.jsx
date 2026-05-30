@@ -11,6 +11,37 @@ const initialFacultyForm = {
     code: '',
 };
 
+function getAmiStatus(schedule) {
+    if (!schedule) {
+        return {
+            label: 'Belum Dijadwalkan',
+            className: 'border-gray-200 bg-gray-100 text-gray-700',
+        };
+    }
+
+    if (schedule.audit_period_status === 'ENDED') {
+        return {
+            label: 'Selesai',
+            className: 'border-emerald-200 bg-emerald-100 text-emerald-700',
+        };
+    }
+
+    const now = new Date();
+    const start = schedule.scheduled_start ? new Date(schedule.scheduled_start) : null;
+
+    if (start && start > now) {
+        return {
+            label: 'Belum Mulai',
+            className: 'border-amber-200 bg-amber-100 text-amber-700',
+        };
+    }
+
+    return {
+        label: 'Sedang Berjalan',
+        className: 'border-sky-200 bg-sky-100 text-sky-700',
+    };
+}
+
 export default function EvidenceAuditPage() {
     const PAGE_SIZE = 10;
     const { prodiId } = useParams();
@@ -431,6 +462,7 @@ export default function EvidenceAuditPage() {
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Prodi Name</th>
                                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Faculty Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Status AMI</th>
                                     {!canViewAllAuditUnits && (
                                         <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Standar / Jadwal</th>
                                     )}
@@ -440,11 +472,11 @@ export default function EvidenceAuditPage() {
                             <tbody className="divide-y divide-gray-200 bg-white">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={canViewAllAuditUnits ? 3 : 4} className="px-6 py-10 text-center text-sm text-gray-500">Memuat data audit...</td>
+                                        <td colSpan={canViewAllAuditUnits ? 4 : 5} className="px-6 py-10 text-center text-sm text-gray-500">Memuat data audit...</td>
                                     </tr>
                                 ) : filteredFacultyProdiRows.length === 0 ? (
                                     <tr>
-                                        <td colSpan={canViewAllAuditUnits ? 3 : 4} className="px-6 py-10 text-center text-sm text-gray-500">
+                                        <td colSpan={canViewAllAuditUnits ? 4 : 5} className="px-6 py-10 text-center text-sm text-gray-500">
                                             {canViewAllAuditUnits ? 'Belum ada data fakultas dan prodi.' : 'Belum ada prodi audit yang ditugaskan kepada Anda.'}
                                         </td>
                                     </tr>
@@ -453,6 +485,17 @@ export default function EvidenceAuditPage() {
                                         <tr key={schedule?.id ? `schedule-${schedule.id}` : `${faculty.id}-${prodi.id}`} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 text-sm font-semibold text-gray-900">{prodi.name}</td>
                                             <td className="px-6 py-4 text-sm text-gray-700">{faculty.name}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-700">
+                                                {(() => {
+                                                    const amiStatus = getAmiStatus(schedule);
+
+                                                    return (
+                                                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${amiStatus.className}`}>
+                                                            {amiStatus.label}
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </td>
                                             {!canViewAllAuditUnits && (
                                                 <td className="px-6 py-4 text-sm text-gray-700">
                                                     <div className="font-medium text-gray-900">{schedule?.standard?.name || '-'}</div>

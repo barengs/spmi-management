@@ -12,6 +12,31 @@ use Illuminate\Validation\ValidationException;
 
 class StandardDocumentImportService
 {
+    private const MAJOR_SECTION_PATTERNS = [
+        '/^visi dan misi$/iu',
+        '/^rasionalisasi\b/iu',
+        '/^pihak yang bertanggungjawab\b/iu',
+        '/^definisi istilah$/iu',
+        '/^pernyataan isi standar\b/iu',
+        '/^proses ppepp\b/iu',
+        '/^strategi pelaksanaan\b/iu',
+        '/^indikator ketercapaian\b/iu',
+        '/^dokumen terkait\b/iu',
+        '/^referensi$/iu',
+    ];
+
+    private const MINOR_SECTION_PATTERNS = [
+        '/^visi$/iu',
+        '/^misi$/iu',
+        '/^tujuan\s*:?\s*$/iu',
+        '/^sasaran\s*:?\s*$/iu',
+        '/^penetapan standar$/iu',
+        '/^pelaksanaan standar$/iu',
+        '/^evaluasi standar$/iu',
+        '/^pengendalian standar$/iu',
+        '/^peningkatan standar$/iu',
+    ];
+
     public function import(MstStandard $standard, ?array $structureTree = null, ?string $extractedText = null): array
     {
         if (! $structureTree && ! $extractedText) {
@@ -84,6 +109,7 @@ class StandardDocumentImportService
         $lines = collect(preg_split('/\R/u', $normalized))
             ->map(fn (string $line) => trim($line))
             ->filter()
+            ->pipe(fn ($collection) => $this->cropToStandardBody($collection))
             ->values();
 
         $tree = [];
@@ -107,26 +133,41 @@ class StandardDocumentImportService
             $activeListItemIndex = null;
         };
 
+        $ensureStatementNode = function () use (&$tree, &$currentHeaderIndex, &$currentStatementIndex): bool {
+            if ($currentHeaderIndex === null) {
+                return false;
+            }
+
+            if ($currentStatementIndex !== null) {
+                return true;
+            }
+
+            $tree[$currentHeaderIndex]['children'][] = $this->makeNode('Statement', 'Uraian');
+            $currentStatementIndex = array_key_last($tree[$currentHeaderIndex]['children']);
+
+            return true;
+        };
+
         foreach ($lines as $line) {
             if ($this->shouldSkipLine($line)) {
                 continue;
             }
 
-            if ($this->isHeaderLine($line)) {
+            if ($this->isHeaderLine($line) || $this->isMajorSectionLine($line)) {
                 $flushParagraphBuffer();
-                $tree[] = $this->makeNode('Header', $line);
+                $tree[] = $this->makeNode('Header', $this->cleanSectionLabel($line));
                 $currentHeaderIndex = array_key_last($tree);
                 $currentStatementIndex = null;
                 $activeListItemIndex = null;
                 continue;
             }
 
-            if ($this->isStatementLine($line)) {
+            if ($this->isStatementLine($line) || $this->isMinorSectionLine($line)) {
                 $flushParagraphBuffer();
                 if ($currentHeaderIndex === null) {
                     continue;
                 }
-                $tree[$currentHeaderIndex]['children'][] = $this->makeNode('Statement', $line);
+                $tree[$currentHeaderIndex]['children'][] = $this->makeNode('Statement', $this->cleanSectionLabel($line));
                 $currentStatementIndex = array_key_last($tree[$currentHeaderIndex]['children']);
                 $activeListItemIndex = null;
                 continue;
@@ -134,7 +175,7 @@ class StandardDocumentImportService
 
             if ($this->isContentListLine($line)) {
                 $flushParagraphBuffer();
-                if ($currentHeaderIndex === null || $currentStatementIndex === null) {
+                if (! $ensureStatementNode()) {
                     continue;
                 }
                 $tree[$currentHeaderIndex]['children'][$currentStatementIndex]['children'][] = $this->makeNode('Indicator', $line);
@@ -142,7 +183,7 @@ class StandardDocumentImportService
                 continue;
             }
 
-            if ($currentHeaderIndex === null || $currentStatementIndex === null) {
+            if ($currentHeaderIndex === null) {
                 continue;
             }
 
@@ -150,6 +191,14 @@ class StandardDocumentImportService
                 $current = $tree[$currentHeaderIndex]['children'][$currentStatementIndex]['children'][$activeListItemIndex]['content'] ?? '';
                 $tree[$currentHeaderIndex]['children'][$currentStatementIndex]['children'][$activeListItemIndex]['content'] = trim($current . ' ' . $line);
                 continue;
+            }
+
+            if (! $ensureStatementNode()) {
+                continue;
+            }
+
+            if (! empty($paragraphBuffer) && ! $this->shouldContinueParagraph(end($paragraphBuffer), $line)) {
+                $flushParagraphBuffer();
             }
 
             $paragraphBuffer[] = $line;
@@ -187,6 +236,37 @@ class StandardDocumentImportService
         return (bool) preg_match('/^[0-9]+\)\s+\S+/u', $line);
     }
 
+    private function isMajorSectionLine(string $line): bool
+    {
+        foreach (self::MAJOR_SECTION_PATTERNS as $pattern) {
+            if (preg_match($pattern, trim($line))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isMinorSectionLine(string $line): bool
+    {
+        foreach (self::MINOR_SECTION_PATTERNS as $pattern) {
+            if (preg_match($pattern, trim($line))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function cleanSectionLabel(string $line): string
+    {
+        $normalized = preg_replace('/^[A-Za-z]\.\s+/u', '', $line) ?? $line;
+        $normalized = preg_replace('/^[0-9]+\.\s+/u', '', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\s*:\s*$/u', '', $normalized) ?? $normalized;
+
+        return trim($normalized);
+    }
+
     private function makeNode(string $type, string $content): array
     {
         return [
@@ -198,7 +278,57 @@ class StandardDocumentImportService
 
     private function shouldSkipLine(string $line): bool
     {
-        return (bool) preg_match('/^(Standar SPMI Universitas Islam Madura\b.*|No Isi Halaman)$/i', trim($line));
+        return (bool) preg_match(
+            '/^(Standar SPMI Universitas Islam Madura\b.*|No Isi Halaman|Universitas Islam Madura|Halaman\s*:.*|Kode\s*:.*|Tanggal\s*:.*|Revisi\s*:.*|Alamat:.*|www\..*|Proses|Penanggung Jawab|Tanda Tangan|Nama|Jabatan|\d+|[\-–]?\d[\d\-]{4,})$/iu',
+            trim($line)
+        );
+    }
+
+    private function cropToStandardBody($lines)
+    {
+        $majorSectionIndex = $lines->search(fn (string $line) => $this->isMajorSectionLine($line));
+
+        if ($majorSectionIndex !== false) {
+            return $lines->slice($majorSectionIndex)->values();
+        }
+
+        $numberedHeaderIndex = $lines->search(function (string $line, int $index) use ($lines) {
+            if (! $this->isHeaderLine($line)) {
+                return false;
+            }
+
+            return $lines->slice($index + 1, 5)->contains(fn (string $candidate) => $this->isStatementLine($candidate));
+        });
+
+        if ($numberedHeaderIndex !== false) {
+            return $lines->slice($numberedHeaderIndex)->values();
+        }
+
+        return $lines;
+    }
+
+    private function shouldContinueParagraph(string $previousLine, string $currentLine): bool
+    {
+        $previousLine = trim($previousLine);
+        $currentLine = trim($currentLine);
+
+        if ($previousLine === '' || $currentLine === '') {
+            return false;
+        }
+
+        if (preg_match('/[,:]\s*$/u', $previousLine)) {
+            return true;
+        }
+
+        if (! preg_match('/[.!?;:]$/u', $previousLine)) {
+            return true;
+        }
+
+        if (preg_match('/^[a-z(]/u', $currentLine)) {
+            return true;
+        }
+
+        return (bool) preg_match('/^(dan|atau|serta|yang|untuk|dengan|dalam|pada|sebagai|agar|oleh|terhadap|melalui)\b/iu', $currentLine);
     }
 
     private function filterEmptyNodes(array $nodes): array

@@ -104,6 +104,7 @@ export default function BorangProdiDetailPage() {
     const [selectedFaculty, setSelectedFaculty] = useState(null);
     const [selectedProdi, setSelectedProdi] = useState(null);
     const [requirementRows, setRequirementRows] = useState([]);
+    const [auditLocked, setAuditLocked] = useState(false);
     const [activeRequirementTab, setActiveRequirementTab] = useState(isReadOnlyBorang ? 'KAPRODI' : 'DEKAN');
     const [requirementsPage, setRequirementsPage] = useState(1);
     const [requirementsSearch, setRequirementsSearch] = useState('');
@@ -117,6 +118,7 @@ export default function BorangProdiDetailPage() {
 
     const loadRequirementRows = async (currentProdiId) => {
         const response = await api.get(`/borang/prodis/${currentProdiId}`);
+        setAuditLocked(Boolean(response.data.meta?.audit_locked));
 
         return (response.data.data || []).map((row) => ({
             id: row.id,
@@ -380,6 +382,11 @@ export default function BorangProdiDetailPage() {
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
                             {pageMeta.description}
                         </p>
+                        {auditLocked && (
+                            <div className="mt-3 inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-rose-700">
+                                Audit Locked
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex flex-wrap gap-3">
@@ -390,7 +397,7 @@ export default function BorangProdiDetailPage() {
                             <Icon icon={Icons.back} width={16} />
                             Kembali
                         </Link>
-                        {canManageBorang && (
+                        {canManageBorang && !auditLocked && (
                             <button
                                 type="button"
                                 onClick={openAddBorangModal}
@@ -483,6 +490,11 @@ export default function BorangProdiDetailPage() {
                                 'Informasi auditor, lead auditor, dan jadwal audit bersifat read-only pada halaman ini. Perubahan hanya dapat dilakukan oleh LPM-Admin atau SuperAdmin.'
                             )}
                         </div>
+                        {auditLocked && (
+                            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm leading-6 text-rose-800">
+                                Periode audit untuk prodi ini sudah ditutup. Upload bukti, review auditor, dan perubahan struktur borang sudah dikunci.
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -568,6 +580,7 @@ export default function BorangProdiDetailPage() {
                                                         <button
                                                             type="button"
                                                             onClick={() => handleDeleteBorang(row.id)}
+                                                            disabled={auditLocked}
                                                             className="inline-flex items-center gap-2 rounded-full border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
                                                         >
                                                             <Icon icon={Icons.delete} width={14} />
@@ -578,6 +591,7 @@ export default function BorangProdiDetailPage() {
                                                             <button
                                                                 type="button"
                                                                 onClick={() => window.location.assign(`/audit/${row.standardId}/review`)}
+                                                                disabled={auditLocked}
                                                                 className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
                                                             >
                                                                 <Icon icon={Icons.eye} width={14} />

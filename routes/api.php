@@ -149,6 +149,7 @@ Route::prefix('v1')->group(function () {
 
         Route::prefix('audit-reports')->group(function () {
             Route::get('/',                    [AuditReportController::class, 'index']);
+            Route::get('/{auditSchedule}/export', [AuditReportController::class, 'export']);
         });
 
         Route::prefix('borang')->group(function () {

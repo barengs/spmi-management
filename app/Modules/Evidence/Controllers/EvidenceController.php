@@ -3,6 +3,7 @@
 namespace App\Modules\Evidence\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Audit\Models\AuditSchedule;
 use App\Modules\Core\Models\ActivityLog;
 use App\Modules\Evidence\Models\TrxEvidence;
 use App\Modules\Standard\Models\MstMetric;
@@ -15,6 +16,20 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EvidenceController extends Controller
 {
+    private function isAuditLockedForEvidence(TrxEvidence $evidence): bool
+    {
+        $prodiId = $evidence->borangItem?->prodi_id;
+
+        if (! $prodiId) {
+            return false;
+        }
+
+        return AuditSchedule::query()
+            ->where('prodi_id', $prodiId)
+            ->latest('scheduled_start')
+            ->value('audit_period_status') === 'ENDED';
+    }
+
     public function auditIndex(Request $request): JsonResponse
     {
         if (! $request->user()?->can('audit.score.update')) {
@@ -175,8 +190,15 @@ class EvidenceController extends Controller
             ], 403);
         }
 
-        $evidence = TrxEvidence::with('metric.standard')->findOrFail($id);
+        $evidence = TrxEvidence::with(['metric.standard', 'borangItem'])->findOrFail($id);
         $oldData = $evidence->only(['borang_item_id', 'metric_id', 'source_type', 'title', 'review_status']);
+
+        if ($this->isAuditLockedForEvidence($evidence)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode audit sudah ditutup. Bukti tidak dapat diubah atau dihapus lagi.',
+            ], 423);
+        }
 
         if ($evidence->file_path) {
             Storage::disk('local')->delete($evidence->file_path);
@@ -210,9 +232,17 @@ class EvidenceController extends Controller
 
         $evidence = TrxEvidence::with([
             'metric.standard',
+            'borangItem',
             'uploader:id,name,email',
             'reviewer:id,name,email',
         ])->findOrFail($id);
+
+        if ($this->isAuditLockedForEvidence($evidence)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode audit sudah ditutup. Auditor tidak dapat mengubah hasil review lagi.',
+            ], 423);
+        }
 
         $validated = $request->validate([
             'action' => ['required', Rule::in(['accept', 'reject'])],

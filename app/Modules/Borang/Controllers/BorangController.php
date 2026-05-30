@@ -16,6 +16,23 @@ use Illuminate\Support\Str;
 
 class BorangController extends Controller
 {
+    private function getLatestAuditScheduleForProdi(int|string|null $prodiId): ?AuditSchedule
+    {
+        if (! $prodiId) {
+            return null;
+        }
+
+        return AuditSchedule::query()
+            ->where('prodi_id', $prodiId)
+            ->latest('scheduled_start')
+            ->first();
+    }
+
+    private function isAuditLockedForProdi(int|string|null $prodiId): bool
+    {
+        return $this->getLatestAuditScheduleForProdi($prodiId)?->audit_period_status === 'ENDED';
+    }
+
     private function canAccessBorangProdi(?object $user, Unit $prodi): bool
     {
         $canManageBorang = $user?->can('standard.update');
@@ -144,6 +161,9 @@ class BorangController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $items,
+            'meta' => [
+                'audit_locked' => $this->isAuditLockedForProdi($prodi->id),
+            ],
         ]);
     }
 
@@ -170,6 +190,7 @@ class BorangController extends Controller
         }
 
         $latestSubmission = null;
+        $auditSchedule = $this->getLatestAuditScheduleForProdi($prodi->id);
         if ($borangItem->metric_id && $user?->id) {
             $latestEvidence = TrxEvidence::query()
                 ->where('borang_item_id', $borangItem->id)
@@ -208,6 +229,8 @@ class BorangController extends Controller
                     'name' => $prodi->parent->name,
                     'code' => $prodi->parent->code,
                 ] : null,
+                'audit_locked' => $auditSchedule?->audit_period_status === 'ENDED',
+                'audit_period_status' => $auditSchedule?->audit_period_status,
                 'latest_submission' => $latestSubmission,
             ],
         ]);
@@ -237,6 +260,13 @@ class BorangController extends Controller
                 'status' => 'error',
                 'message' => 'Anda hanya dapat mengunggah bukti untuk borang prodi yang ditugaskan kepada Anda.',
             ], 403);
+        }
+
+        if ($this->isAuditLockedForProdi($prodi->id)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode audit sudah ditutup. Auditee tidak dapat mengunggah atau mengubah bukti lagi.',
+            ], 423);
         }
 
         $metric = $borangItem->metric;
@@ -371,6 +401,13 @@ class BorangController extends Controller
             ], 422);
         }
 
+        if ($this->isAuditLockedForProdi($prodi->id)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode audit sudah ditutup. Struktur borang untuk prodi ini terkunci.',
+            ], 423);
+        }
+
         $metric = MstMetric::with(['standard', 'parent'])->findOrFail($validated['metric_id']);
         if ($metric->type !== 'Indicator') {
             return response()->json([
@@ -432,6 +469,13 @@ class BorangController extends Controller
     {
         if ($denied = $this->denyUnless($request, 'standard.update', 'Anda tidak memiliki hak akses untuk menghapus borang.')) {
             return $denied;
+        }
+
+        if ($this->isAuditLockedForProdi($borangItem->prodi_id)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Periode audit sudah ditutup. Struktur borang untuk prodi ini terkunci.',
+            ], 423);
         }
 
         BorangItem::query()

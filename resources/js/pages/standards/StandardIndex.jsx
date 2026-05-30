@@ -4,7 +4,6 @@ import { useSelector } from 'react-redux';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import StandardCloneModal from './StandardCloneModal';
-import StandardCycleImportModal from './StandardCycleImportModal';
 import Icon, { Icons } from '../../components/ui/Icon';
 import { getStandardStatusLabel, normalizeStandardCategory } from '../../utils/standardStatus';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -30,9 +29,69 @@ const buildNode = (type, content) => ({
     children: [],
 });
 
+const majorSectionPatterns = [
+    /^visi dan misi$/i,
+    /^rasionalisasi\b/i,
+    /^pihak yang bertanggungjawab\b/i,
+    /^definisi istilah$/i,
+    /^pernyataan isi standar\b/i,
+    /^proses ppepp\b/i,
+    /^strategi pelaksanaan\b/i,
+    /^indikator ketercapaian\b/i,
+    /^dokumen terkait\b/i,
+    /^referensi$/i,
+];
+
+const minorSectionPatterns = [
+    /^visi$/i,
+    /^misi$/i,
+    /^tujuan\s*:?\s*$/i,
+    /^sasaran\s*:?\s*$/i,
+    /^penetapan standar$/i,
+    /^pelaksanaan standar$/i,
+    /^evaluasi standar$/i,
+    /^pengendalian standar$/i,
+    /^peningkatan standar$/i,
+];
+
 const isHeaderLine = (line) => /^[0-9]+\.\s+\S+/.test(line);
 const isStatementLine = (line) => /^[A-Za-z]\.\s+\S+/.test(line);
 const isContentListLine = (line) => /^[0-9]+\)\s+\S+/.test(line);
+const isMajorSectionLine = (line) => majorSectionPatterns.some((pattern) => pattern.test(line.trim()));
+const isMinorSectionLine = (line) => minorSectionPatterns.some((pattern) => pattern.test(line.trim()));
+
+const cleanSectionLabel = (line) => line
+    .replace(/^[A-Za-z]\.\s+/u, '')
+    .replace(/^[0-9]+\.\s+/u, '')
+    .replace(/\s*:\s*$/u, '')
+    .trim();
+
+const shouldContinueParagraph = (previousLine, currentLine) => {
+    if (!previousLine || !currentLine) {
+        return false;
+    }
+
+    const prev = previousLine.trim();
+    const current = currentLine.trim();
+
+    if (!prev || !current) {
+        return false;
+    }
+
+    if (/[,:]\s*$/u.test(prev)) {
+        return true;
+    }
+
+    if (!/[.!?;:]$/u.test(prev)) {
+        return true;
+    }
+
+    if (/^[a-z(]/u.test(current)) {
+        return true;
+    }
+
+    return /^(dan|atau|serta|yang|untuk|dengan|dalam|pada|sebagai|agar|oleh|terhadap|melalui)\b/i.test(current);
+};
 
 const shouldSkipLine = (line) => {
     const normalized = line.trim();
@@ -50,14 +109,28 @@ const shouldSkipLine = (line) => {
         /^halaman\s*:/i,
         /^kode\s*:/i,
         /^alamat:/i,
+        /^www\./i,
         /^tanggal\s*:/i,
         /^revisi\s*:/i,
+        /^proses$/i,
+        /^penanggung jawab$/i,
+        /^tanda tangan$/i,
+        /^nama$/i,
+        /^jabatan$/i,
         /^proses\s+penanggung jawab/i,
         /^nama\s+jabatan$/i,
+        /^[\-–]?\d[\d\-]{4,}$/i,
+        /^\d+$/i,
     ].some((pattern) => pattern.test(normalized));
 };
 
 const cropToStandardBody = (lines) => {
+    const firstMajorSectionIndex = lines.findIndex((line) => isMajorSectionLine(line.trim()));
+
+    if (firstMajorSectionIndex !== -1) {
+        return lines.slice(firstMajorSectionIndex);
+    }
+
     const startIndex = lines.findIndex((line, index, source) => {
         if (!/^1\.\s+/i.test(line.trim())) {
             return false;
@@ -108,26 +181,40 @@ const buildStructureTreeFromText = (text) => {
         activeListItemIndex = null;
     };
 
+    const ensureStatementNode = () => {
+        if (currentHeaderIndex === null) {
+            return false;
+        }
+
+        if (currentStatementIndex !== null) {
+            return true;
+        }
+
+        tree[currentHeaderIndex].children.push(buildNode('Statement', 'Uraian'));
+        currentStatementIndex = tree[currentHeaderIndex].children.length - 1;
+        return true;
+    };
+
     lines.forEach((line) => {
         if (shouldSkipLine(line)) {
             return;
         }
 
-        if (isHeaderLine(line)) {
+        if (isHeaderLine(line) || isMajorSectionLine(line)) {
             flushParagraphBuffer();
-            tree.push(buildNode('Header', line));
+            tree.push(buildNode('Header', cleanSectionLabel(line)));
             currentHeaderIndex = tree.length - 1;
             currentStatementIndex = null;
             activeListItemIndex = null;
             return;
         }
 
-        if (isStatementLine(line)) {
+        if (isStatementLine(line) || isMinorSectionLine(line)) {
             flushParagraphBuffer();
             if (currentHeaderIndex === null) {
                 return;
             }
-            tree[currentHeaderIndex].children.push(buildNode('Statement', line));
+            tree[currentHeaderIndex].children.push(buildNode('Statement', cleanSectionLabel(line)));
             currentStatementIndex = tree[currentHeaderIndex].children.length - 1;
             activeListItemIndex = null;
             return;
@@ -135,7 +222,7 @@ const buildStructureTreeFromText = (text) => {
 
         if (isContentListLine(line)) {
             flushParagraphBuffer();
-            if (currentHeaderIndex === null || currentStatementIndex === null) {
+            if (!ensureStatementNode()) {
                 return;
             }
             tree[currentHeaderIndex].children[currentStatementIndex].children.push(buildNode('Indicator', line));
@@ -143,7 +230,7 @@ const buildStructureTreeFromText = (text) => {
             return;
         }
 
-        if (currentHeaderIndex === null || currentStatementIndex === null) {
+        if (currentHeaderIndex === null) {
             return;
         }
 
@@ -151,6 +238,14 @@ const buildStructureTreeFromText = (text) => {
             const current = tree[currentHeaderIndex].children[currentStatementIndex].children[activeListItemIndex].content || '';
             tree[currentHeaderIndex].children[currentStatementIndex].children[activeListItemIndex].content = `${current} ${line}`.trim();
             return;
+        }
+
+        if (!ensureStatementNode()) {
+            return;
+        }
+
+        if (paragraphBuffer.length && !shouldContinueParagraph(paragraphBuffer[paragraphBuffer.length - 1], line)) {
+            flushParagraphBuffer();
         }
 
         paragraphBuffer.push(line);
@@ -293,7 +388,6 @@ export default function StandardIndex() {
     // Modal state for Create/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-    const [isCycleImportModalOpen, setIsCycleImportModalOpen] = useState(false);
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [cloneTarget, setCloneTarget] = useState(null);
     const [editingStandard, setEditingStandard] = useState(null);
@@ -518,20 +612,6 @@ export default function StandardIndex() {
         setImportExtractedText('');
         setImportStructureTree([]);
         setImportSummary(null);
-    };
-
-    const handleCycleImportSuccess = (importedStandards) => {
-        const importedList = Array.isArray(importedStandards) ? importedStandards : [];
-
-        importedList.forEach((standard) => {
-            upsertStandard(standard);
-        });
-
-        if (selectedPeriod) {
-            setSelectedPeriod(String(selectedPeriod));
-        }
-
-        fetchStandards();
     };
 
     const extractTextFromPdf = async (file) => {
@@ -949,16 +1029,6 @@ export default function StandardIndex() {
                 </div>
                 {canManageStandards && (
                 <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex gap-3">
-                    {!isPerumus && (
-                        <button
-                            onClick={() => setIsCycleImportModalOpen(true)}
-                            disabled={!selectedPeriod}
-                            className="inline-flex items-center gap-1 justify-center rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm transition hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-gray-900 dark:text-blue-300 dark:hover:bg-gray-800"
-                        >
-                            <Icon icon={Icons.refresh} width={18} />
-                            Impor Siklus Lama
-                        </button>
-                    )}
                     <button
                         onClick={() => handleOpenModal()}
                         disabled={!canCreateStandards}
@@ -970,15 +1040,6 @@ export default function StandardIndex() {
                 </div>
                 )}
             </div>
-
-            {!isPerumus && (
-                <StandardCycleImportModal
-                    isOpen={isCycleImportModalOpen}
-                    onClose={() => setIsCycleImportModalOpen(false)}
-                    targetPeriod={selectedPeriod}
-                    onSuccess={handleCycleImportSuccess}
-                />
-            )}
 
             {error && (
                 <div className="mt-4 p-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-200 dark:text-red-800" role="alert">
