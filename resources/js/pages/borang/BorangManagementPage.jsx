@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 import TablePagination from '../../components/ui/TablePagination';
 
 export default function BorangManagementPage() {
     const PAGE_SIZE = 10;
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));

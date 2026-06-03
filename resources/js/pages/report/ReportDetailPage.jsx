@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
-import { useSelector } from 'react-redux';
+import { useAuth } from '../../services/authStore';
 
 function formatDate(value, options = { dateStyle: 'long' }) {
     if (!value) {
@@ -191,7 +191,7 @@ function MetadataRow({ label, value }) {
 
 export default function ReportDetailPage() {
     const { id } = useParams();
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const [auditReports, setAuditReports] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);

@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Provider, useSelector } from 'react-redux';
-import { store } from '../store';
+import { QueryClientProvider } from '@tanstack/react-query';
 import AppLayout from './layout/AppLayout';
 import LoginPage from '../pages/auth/LoginPage';
 import Dashboard from '../pages/Dashboard';
@@ -31,9 +30,11 @@ import NotificationPage from '../pages/notifications/NotificationPage';
 import AccountPage from '../pages/account/AccountPage';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { useAuth } from '../services/authStore';
+import { queryClient } from '../services/queryClient';
 
 const PrivateRoute = ({ children }) => {
-    const token = useSelector((state) => state.auth.token);
+    const { token } = useAuth();
     if (!token) {
         return <Navigate to="/login" replace />;
     }
@@ -41,7 +42,7 @@ const PrivateRoute = ({ children }) => {
 };
 
 const GuestRoute = ({ children }) => {
-    const token = useSelector((state) => state.auth.token);
+    const { token } = useAuth();
     if (token) {
         return <Navigate to="/" replace />;
     }
@@ -49,7 +50,7 @@ const GuestRoute = ({ children }) => {
 };
 
 const PermissionRoute = ({ permission, permissions: allowedPermissions = [], roles: allowedRoles = [], children }) => {
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
@@ -68,7 +69,7 @@ const PermissionRoute = ({ permission, permissions: allowedPermissions = [], rol
 
 export default function MainApp() {
     return (
-        <Provider store={store}>
+        <QueryClientProvider client={queryClient}>
             <ToastContainer position="top-right" autoClose={3000} />
             <Router>
                 <Routes>
@@ -314,6 +315,6 @@ export default function MainApp() {
                     </Route>
                 </Routes>
             </Router>
-        </Provider>
+        </QueryClientProvider>
     );
 }

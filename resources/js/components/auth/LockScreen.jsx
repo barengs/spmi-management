@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { setLocked } from '../../store/authSlice';
+import { authActions, useAuth } from '../../services/authStore';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import Icon, { Icons } from '../ui/Icon';
 
 export default function LockScreen() {
-    const isLocked = useSelector(state => state.auth.isLocked);
-    const user = useSelector(state => state.auth.user);
-    const dispatch = useDispatch();
+    const { isLocked, user } = useAuth();
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -25,7 +22,7 @@ export default function LockScreen() {
             });
 
             if (res.data.status === 'success') {
-                dispatch(setLocked(false));
+                authActions.setLocked(false);
                 toast.success('Sesi pulih kembali. Layar terbuka.');
             }
         } catch (err) {

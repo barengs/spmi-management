@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import Icon, { Icons } from '../ui/Icon';
+import { useAuth } from '../../services/authStore';
 
 export default function Sidebar({
     isOpen,
@@ -11,8 +11,9 @@ export default function Sidebar({
     connectionStatus = 'connected',
     pendingQueueCount = 0,
 }) {
-    const roles = useSelector((state) => state.auth.user?.roles || []);
-    const permissions = useSelector((state) => state.auth.user?.permissions || []);
+    const { user } = useAuth();
+    const roles = user?.roles || [];
+    const permissions = user?.permissions || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
 
     // Menu items based on capabilities/roles

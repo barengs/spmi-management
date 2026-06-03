@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 function formatDate(value) {
@@ -44,7 +44,7 @@ function getAuditScheduleStatusLabel(status) {
 }
 
 export default function ReportPage() {
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const permissions = user?.permissions || [];
     const [auditReports, setAuditReports] = useState([]);
     const [loading, setLoading] = useState(true);

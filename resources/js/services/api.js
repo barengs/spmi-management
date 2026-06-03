@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { store } from '../store';
-import { logout } from '../store/authSlice';
+import { authActions, getAuthState } from './authStore';
 import {
     canQueueRequest,
     enqueueOfflineRequest,
@@ -58,8 +57,9 @@ api.interceptors.request.use(
             return Promise.reject(queuedError);
         }
 
-        const token = store.getState().auth.token;
+        const token = getAuthState().token;
         if (token) {
+            hasShownSessionExpiredToast = false;
             config.headers.Authorization = `Bearer ${token}`;
         }
 
@@ -104,24 +104,18 @@ api.interceptors.response.use(
         }
 
         if (error.response && error.response.status === 401) {
-            const hasToken = Boolean(store.getState().auth.token);
+            const hasToken = Boolean(getAuthState().token);
 
             if (hasToken && !hasShownSessionExpiredToast) {
                 hasShownSessionExpiredToast = true;
                 toast.error('Sesi habis, harap login kembali');
             }
 
-            store.dispatch(logout());
+            authActions.logout();
         }
         return Promise.reject(error);
     }
 );
-
-store.subscribe(() => {
-    if (store.getState().auth.token) {
-        hasShownSessionExpiredToast = false;
-    }
-});
 
 if (typeof window !== 'undefined') {
     window.addEventListener('online', () => {

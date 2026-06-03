@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
-import { logout } from '../../store/authSlice';
+import { authActions, useAuth } from '../../services/authStore';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
 import Icon, { Icons } from '../ui/Icon';
@@ -10,8 +9,7 @@ import { buildNotifications } from '../../utils/notifications';
 const NOTIFICATION_POLL_INTERVAL_MS = 30000;
 
 export default function Navbar({ toggleSidebar }) {
-    const dispatch = useDispatch();
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
     const roleNames = roles.map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
@@ -243,7 +241,7 @@ export default function Navbar({ toggleSidebar }) {
             console.error('Logout failed:', error);
             toast.error('Masalah jaringan saat logout, namun sesi lokal dihapus.');
         } finally {
-            dispatch(logout());
+            authActions.logout();
         }
     };
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api, { getCached } from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 const statusStyles = {
@@ -154,7 +154,7 @@ function renderMetricTree(nodes, searchTerms, depth = 0) {
 export default function StandardAuditReviewPage() {
     const { standardId } = useParams();
     const navigate = useNavigate();
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const permissions = user?.permissions || [];
     const canCreatePtk = permissions.includes('ptk.create');
     const [standard, setStandard] = useState(null);

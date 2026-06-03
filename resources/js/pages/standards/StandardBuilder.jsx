@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import api from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import { toast } from 'react-toastify';
+import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 
@@ -481,7 +481,7 @@ const MetricNode = ({
 export default function StandardBuilder() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
     const [standard, setStandard] = useState(null);

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 import TablePagination from '../../components/ui/TablePagination';
 
@@ -45,7 +45,7 @@ function getAmiStatus(schedule) {
 export default function EvidenceAuditPage() {
     const PAGE_SIZE = 10;
     const { prodiId } = useParams();
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const [units, setUnits] = useState([]);
     const [assignedSchedules, setAssignedSchedules] = useState([]);
     const [auditSchedules, setAuditSchedules] = useState([]);

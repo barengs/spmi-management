@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import { useSelector } from 'react-redux';
 import api from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 const statusStyles = {
@@ -38,7 +38,7 @@ function formatDateTime(value) {
 }
 
 export default function PtkPage() {
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const permissions = user?.permissions || [];
     const canRespond = permissions.includes('ptk.respond');
     const canVerify = permissions.includes('ptk.verify');

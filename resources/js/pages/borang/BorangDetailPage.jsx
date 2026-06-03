@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 function formatBytes(bytes) {
@@ -34,7 +34,7 @@ function FieldCard({ label, value, hint }) {
 export default function BorangDetailPage() {
     const navigate = useNavigate();
     const { borangItemId } = useParams();
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const permissions = user?.permissions || [];
     const canReviewEvidence = permissions.includes('audit.score.update');
     const canUploadEvidence = !canReviewEvidence && (permissions.includes('evidence.upload') || permissions.includes('standard.update'));

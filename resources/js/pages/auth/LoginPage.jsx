@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import { setCredentials } from '../../store/authSlice';
-import api from '../../services/api';
+import { authActions, useAuth } from '../../services/authStore';
 import { toast } from 'react-toastify';
+import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 export default function LoginPage() {
     const navigate = useNavigate();
-    const dispatch = useDispatch();
-    const token = useSelector((state) => state.auth.token);
+    const { token } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -35,7 +33,7 @@ export default function LoginPage() {
             // { status: 'success', data: { token: '...', user: {...} } }
             const { token, user } = response.data.data;
 
-            dispatch(setCredentials({ token, user }));
+            authActions.setCredentials({ token, user });
             toast.success('Login berhasil! Selamat datang kembali.');
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed. Please check your credentials.');

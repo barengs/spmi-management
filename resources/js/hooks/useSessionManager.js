@@ -1,6 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { logout, setLocked, updateToken } from '../store/authSlice';
+import { authActions, useAuth } from '../services/authStore';
 import api from '../services/api';
 import { toast } from 'react-toastify';
 
@@ -9,8 +8,7 @@ const LOGOUT_TIMEOUT_MS = 60 * 60 * 1000; // 60 mins
 const REFRESH_INTERVAL_MS = 45 * 60 * 1000; // Refresh token every 45 mins of active session
 
 export default function useSessionManager() {
-    const dispatch = useDispatch();
-    const { token, isLocked } = useSelector(state => state.auth);
+    const { token, isLocked } = useAuth();
     const lastActive = useRef(Date.now());
     const isTokenRefreshing = useRef(false);
 
@@ -34,13 +32,13 @@ export default function useSessionManager() {
             if (timeIdle >= LOGOUT_TIMEOUT_MS) {
                 // Completely inactive for 60 mins -> auto logout
                 toast.error('Sesi Anda telah berakhir karena tidak aktif.', { duration: 5000 });
-                dispatch(logout());
+                authActions.logout();
                 return;
             }
 
             if (timeIdle >= LOCK_TIMEOUT_MS && !isLocked) {
                 // Inactive for 30 mins -> lock screen
-                dispatch(setLocked(true));
+                authActions.setLocked(true);
                 toast('Layar terkunci karena tidak ada aktivitas.', { 
                     icon: '🔒',
                     className: 'dark:bg-gray-800 dark:text-white'
@@ -59,13 +57,13 @@ export default function useSessionManager() {
                     isTokenRefreshing.current = true;
                     const res = await api.post('/auth/refresh');
                     if (res.data?.data?.token) {
-                        dispatch(updateToken(res.data.data.token));
+                        authActions.updateToken(res.data.data.token);
                         console.log('Session token refreshed in background');
                     }
                 } catch (err) {
                     // Refresh failed (e.g. token expired on server)
                     console.error('Failed to refresh token', err);
-                    dispatch(logout());
+                    authActions.logout();
                     toast.error('Sesi habis, harap login kembali');
                 } finally {
                     isTokenRefreshing.current = false;
@@ -78,5 +76,5 @@ export default function useSessionManager() {
             clearInterval(activityCheckInterval);
             clearInterval(tokenRefreshInterval);
         };
-    }, [token, isLocked, dispatch, updateActivity]);
+    }, [token, isLocked, updateActivity]);
 }

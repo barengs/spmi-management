@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api, { getCached, invalidateCachedGet } from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 import TablePagination from '../../components/ui/TablePagination';
 
@@ -131,7 +131,7 @@ function toDateInput(value) {
 
 export default function AuditSchedulePage() {
     const PAGE_SIZE = 10;
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name));
     const isLpmAdmin = roleNames.includes('LPM-Admin') || roleNames.includes('SuperAdmin');
     const [schedules, setSchedules] = useState([]);

@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
-import { updateUser } from '../../store/authSlice';
+import { authActions, useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 function formatFileSize(value) {
@@ -24,8 +23,7 @@ function formatFileSize(value) {
 }
 
 export default function AccountPage() {
-    const dispatch = useDispatch();
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const [profileName, setProfileName] = useState(user?.name || '');
     const [profileSubmitting, setProfileSubmitting] = useState(false);
     const [passwordSubmitting, setPasswordSubmitting] = useState(false);
@@ -110,7 +108,7 @@ export default function AccountPage() {
             const response = await api.put('/auth/profile', {
                 name: profileName.trim(),
             });
-            dispatch(updateUser(response.data.data));
+            authActions.updateUser(response.data.data);
             toast.success(response.data.message || 'Nama akun berhasil diperbarui.');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Nama akun gagal diperbarui.');
@@ -151,7 +149,7 @@ export default function AccountPage() {
         try {
             setSignatureSubmitting(true);
             const response = await api.post('/auth/signature', payload);
-            dispatch(updateUser(response.data.data));
+            authActions.updateUser(response.data.data);
             toast.success(response.data.message || 'Tanda tangan virtual berhasil diperbarui.');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Tanda tangan virtual gagal diperbarui.');
@@ -165,7 +163,7 @@ export default function AccountPage() {
         try {
             setSignatureSubmitting(true);
             const response = await api.delete('/auth/signature');
-            dispatch(updateUser(response.data.data));
+            authActions.updateUser(response.data.data);
             toast.success(response.data.message || 'Tanda tangan virtual berhasil dihapus.');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Tanda tangan virtual gagal dihapus.');

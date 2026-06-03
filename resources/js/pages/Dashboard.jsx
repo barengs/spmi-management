@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSelector } from 'react-redux';
 import { getCached } from '../services/api';
+import { useAuth } from '../services/authStore';
 import Icon, { Icons } from '../components/ui/Icon';
 
 const auditTimeline = [
@@ -83,7 +83,7 @@ function getCycleWindow(period, durationMonths) {
 }
 
 export default function Dashboard() {
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
     const isPerumus = roleNames.includes('Perumus');
     const [standards, setStandards] = useState([]);

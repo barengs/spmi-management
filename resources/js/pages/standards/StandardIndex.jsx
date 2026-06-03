@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import api from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import { toast } from 'react-toastify';
+import api from '../../services/api';
 import StandardCloneModal from './StandardCloneModal';
 import Icon, { Icons } from '../../components/ui/Icon';
 import { getStandardStatusLabel, normalizeStandardCategory } from '../../utils/standardStatus';
@@ -342,7 +342,7 @@ export default function StandardIndex() {
     const [selectedPeriod, setSelectedPeriod] = useState(null);
     const [sorting, setSorting] = useState([{ id: 'created_at', desc: true }]);
 
-    const user = useSelector(state => state.auth.user);
+    const { user } = useAuth();
     const roles = user?.roles || [];
     const permissions = user?.permissions || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));

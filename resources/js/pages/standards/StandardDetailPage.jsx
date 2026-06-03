@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
+import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
 import { getApprovalStageLabel, getStandardStatusLabel, getStandardWrLabel, normalizeStandardCategory } from '../../utils/standardStatus';
 
@@ -296,7 +296,7 @@ function StructureNode({ node, depth = 0 }) {
 export default function StandardDetailPage() {
     const navigate = useNavigate();
     const { id } = useParams();
-    const user = useSelector((state) => state.auth.user);
+    const { user } = useAuth();
     const roleNames = (user?.roles || []).map((role) => (typeof role === 'string' ? role : role?.name)).filter(Boolean);
     const hasRole = (roleName) => roleNames.includes(roleName);
     const canDraftStandard = hasRole('SuperAdmin')
