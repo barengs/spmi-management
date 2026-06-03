@@ -21,6 +21,7 @@ class MstMetric extends Model
         'content',
         'pj',
         'type',
+        'content_format',
         'order',
         'review_status',
         'review_action',

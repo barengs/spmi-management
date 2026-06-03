@@ -11,6 +11,8 @@
     <meta name="apple-mobile-web-app-title" content="E-SPMI">
     <meta name="application-name" content="E-SPMI - Universitas Islam Madura">
     <meta name="description" content="Sistem Penjaminan Mutu Internal untuk standar, audit, dan eviden institusi.">
+    <link rel="icon" type="image/png" href="/logo-uim.png">
+    <link rel="shortcut icon" type="image/png" href="/logo-uim.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'espmi-v1';
+const CACHE_VERSION = 'espmi-v3';
 const APP_SHELL_CACHE = `app-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const APP_SHELL_FILES = ['/', '/offline.html', '/manifest.webmanifest', '/favicon.ico'];
@@ -37,7 +37,7 @@ self.addEventListener('fetch', (event) => {
     }
 
     if (request.mode === 'navigate') {
-        event.respondWith(networkFirst(request, '/offline.html'));
+        event.respondWith(networkFirst(request, '/'));
         return;
     }
 
@@ -90,5 +90,12 @@ async function staleWhileRevalidate(request) {
         return networkResponse;
     }
 
-    return caches.match('/offline.html');
+    if (request.destination === 'document') {
+        return caches.match('/');
+    }
+
+    return new Response('', {
+        status: 503,
+        statusText: 'Offline',
+    });
 }

@@ -56,6 +56,90 @@ function getNodeTypeLabel(type) {
     return 'Isi';
 }
 
+function getDefaultContentFormat(type) {
+    if (type === 'Header') return 'SUB_POINT';
+    if (type === 'Statement') return 'INDICATOR';
+    return 'LONG_TEXT';
+}
+
+function normalizeTableData(table) {
+    const headers = Array.isArray(table?.headers) && table.headers.length > 0
+        ? table.headers.map((header) => String(header ?? ''))
+        : ['Kolom 1'];
+    const rows = Array.isArray(table?.rows) && table.rows.length > 0
+        ? table.rows.map((row) => headers.map((_, index) => String(row?.[index] ?? '')))
+        : [headers.map(() => '')];
+
+    return { headers, rows };
+}
+
+function parseStructuredTableContent(content) {
+    if (!content) {
+        return normalizeTableData(null);
+    }
+
+    try {
+        const parsed = JSON.parse(content);
+
+        if (parsed?.kind === 'TABLE') {
+            return normalizeTableData(parsed);
+        }
+
+        if (parsed?.kind === 'SINGLE_COLUMN_TABLE') {
+            return normalizeTableData({
+                headers: [parsed.column_name || 'Kolom 1'],
+                rows: [[parsed.value || '']],
+            });
+        }
+    } catch (error) {
+        // Fall back to legacy plain text content.
+    }
+
+    return normalizeTableData({
+        headers: ['Kolom 1'],
+        rows: [[String(content || '')]],
+    });
+}
+
+function TableContentPreview({ content }) {
+    const table = parseStructuredTableContent(content);
+
+    return (
+        <div className="mt-3 overflow-hidden rounded-xl border border-slate-700">
+            <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm">
+                    <thead className="bg-slate-800">
+                        <tr>
+                            {table.headers.map((header, index) => (
+                                <th
+                                    key={`detail-header-${index}`}
+                                    className="border-b border-slate-700 px-3 py-2 text-left font-semibold text-slate-100"
+                                >
+                                    {header || `Kolom ${index + 1}`}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {table.rows.map((row, rowIndex) => (
+                            <tr key={`detail-row-${rowIndex}`} className="border-b border-slate-700 last:border-b-0">
+                                {row.map((cell, columnIndex) => (
+                                    <td
+                                        key={`detail-cell-${rowIndex}-${columnIndex}`}
+                                        className="px-3 py-2 whitespace-pre-wrap text-slate-200"
+                                    >
+                                        {cell || '-'}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
 function flattenNodes(nodes) {
     return (nodes || []).flatMap((node) => [
         node,
@@ -177,6 +261,8 @@ function SummaryCard({ label, value, hint }) {
 }
 
 function StructureNode({ node, depth = 0 }) {
+    const contentFormat = node.content_format || getDefaultContentFormat(node.type);
+
     return (
         <div className="space-y-3">
             <div
@@ -189,7 +275,11 @@ function StructureNode({ node, depth = 0 }) {
                         {node.review_status || 'ACCEPTED'}
                     </span>
                 </div>
-                <div className="text-sm leading-6 text-slate-100">{node.content || '-'}</div>
+                {contentFormat === 'TABLE' ? (
+                    <TableContentPreview content={node.content} />
+                ) : (
+                    <div className="text-sm leading-6 text-slate-100">{node.content || '-'}</div>
+                )}
             </div>
 
             {node.children_recursive?.length ? (
@@ -355,7 +445,7 @@ export default function StandardDetailPage() {
     const flattenedTree = useMemo(() => flattenNodes(tree), [tree]);
     const historyItems = useMemo(() => buildHistoryItems(standard), [standard]);
     const isDraft = standard?.status === 'DRAFT';
-    const isImprovementLocked = standard?.status !== 'TERBIT' || !standard?.implementation_summary?.is_implemented;
+    const isImprovementLocked = standard?.status !== 'TERBIT';
     const improvementActionLabels = {
         REVISI: 'Perlu diperbaiki dan diterapkan lagi',
         PERTAHANKAN: 'Tetap dipakai pada siklus berikutnya',

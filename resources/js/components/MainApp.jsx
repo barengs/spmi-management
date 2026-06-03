@@ -219,7 +219,7 @@ export default function MainApp() {
                         <Route
                             path="ptk"
                             element={
-                                <PermissionRoute permission="ptk.view">
+                                <PermissionRoute permission="ptk.view" roles={['Auditor']}>
                                     <PtkPage />
                                 </PermissionRoute>
                             }

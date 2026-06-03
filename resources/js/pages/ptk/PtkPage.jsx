@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useSelector } from 'react-redux';
-import api, { getCached, invalidateCachedGet } from '../../services/api';
+import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
 
 const statusStyles = {
@@ -37,50 +37,23 @@ function formatDateTime(value) {
     });
 }
 
-function flattenIndicators(nodes, carry = []) {
-    nodes.forEach((node) => {
-        if (node.type === 'Indicator') {
-            carry.push(node);
-        }
-
-        if (node.children_recursive?.length) {
-            flattenIndicators(node.children_recursive, carry);
-        }
-    });
-
-    return carry;
-}
-
 export default function PtkPage() {
     const user = useSelector((state) => state.auth.user);
     const permissions = user?.permissions || [];
-    const canCreate = permissions.includes('ptk.create');
     const canRespond = permissions.includes('ptk.respond');
     const canVerify = permissions.includes('ptk.verify');
     const canClose = permissions.includes('ptk.close');
 
     const [ptks, setPtks] = useState([]);
-    const [standards, setStandards] = useState([]);
-    const [units, setUnits] = useState([]);
-    const [indicatorOptions, setIndicatorOptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedId, setSelectedId] = useState(null);
     const [submittingAction, setSubmittingAction] = useState('');
-    const [creatingPtk, setCreatingPtk] = useState(false);
     const [updatingTargetDate, setUpdatingTargetDate] = useState(false);
     const [targetDateNote, setTargetDateNote] = useState('');
     const [targetCompletionDate, setTargetCompletionDate] = useState('');
     const [responseNote, setResponseNote] = useState('');
     const [verificationNote, setVerificationNote] = useState('');
     const [closureNote, setClosureNote] = useState('');
-    const [createForm, setCreateForm] = useState({
-        standardId: '',
-        metricId: '',
-        assignedUnitId: '',
-        targetCompletionDate: '',
-        findingSummary: '',
-    });
-
     const loadPtk = async () => {
         try {
             setLoading(true);
@@ -98,54 +71,6 @@ export default function PtkPage() {
     useEffect(() => {
         loadPtk();
     }, []);
-
-    useEffect(() => {
-        if (!canCreate) {
-            return;
-        }
-
-        const loadCreateMeta = async () => {
-            try {
-                const [standardsResponse, unitsResponse] = await Promise.all([
-                    getCached('/standards'),
-                    api.get('/units/flat'),
-                ]);
-
-                setStandards(standardsResponse.data.data || []);
-                setUnits((unitsResponse.data.data || []).filter((item) => item.level === 'department'));
-            } catch (error) {
-                toast.error(error.response?.data?.message || 'Metadata PTK gagal dimuat.');
-            }
-        };
-
-        loadCreateMeta();
-    }, [canCreate]);
-
-    useEffect(() => {
-        if (!canCreate || !createForm.standardId) {
-            setIndicatorOptions([]);
-            setCreateForm((current) => ({ ...current, metricId: '' }));
-            return;
-        }
-
-        const loadIndicators = async () => {
-            try {
-                const response = await api.get(`/standards/${createForm.standardId}/metrics/tree`);
-                const indicators = flattenIndicators(response.data.data || []);
-                setIndicatorOptions(indicators);
-                setCreateForm((current) => ({
-                    ...current,
-                    metricId: indicators.some((item) => String(item.id) === String(current.metricId))
-                        ? current.metricId
-                        : '',
-                }));
-            } catch (error) {
-                toast.error(error.response?.data?.message || 'Daftar indikator PTK gagal dimuat.');
-            }
-        };
-
-        loadIndicators();
-    }, [canCreate, createForm.standardId]);
 
     const selectedPtk = useMemo(
         () => ptks.find((item) => item.id === selectedId) || null,
@@ -251,42 +176,6 @@ export default function PtkPage() {
         submitAction('close', { closure_note: closureNote });
     };
 
-    const handleCreatePtk = async (event) => {
-        event.preventDefault();
-
-        if (!createForm.standardId || !createForm.metricId || !createForm.assignedUnitId || !createForm.targetCompletionDate || !createForm.findingSummary.trim()) {
-            toast.warning('Standar, indikator, unit tujuan, target tanggal, dan temuan auditor wajib diisi.');
-            return;
-        }
-
-        setCreatingPtk(true);
-
-        try {
-            const response = await api.post('/ptk', {
-                metric_id: createForm.metricId,
-                assigned_unit_id: createForm.assignedUnitId,
-                target_completion_date: createForm.targetCompletionDate,
-                finding_summary: createForm.findingSummary.trim(),
-            });
-
-            toast.success(response.data.message || 'PTK berhasil dibuat.');
-            invalidateCachedGet('/standards');
-            setCreateForm({
-                standardId: '',
-                metricId: '',
-                assignedUnitId: '',
-                targetCompletionDate: '',
-                findingSummary: '',
-            });
-            setIndicatorOptions([]);
-            await loadPtk();
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'PTK gagal dibuat.');
-        } finally {
-            setCreatingPtk(false);
-        }
-    };
-
     return (
         <div className="space-y-6 p-6 sm:p-8">
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -299,94 +188,6 @@ export default function PtkPage() {
                     PTK dibuat oleh auditor saat audit ketika temuan memang perlu ditindaklanjuti secara formal, termasuk saat bukti kosong atau belum diunggah oleh auditee.
                 </p>
             </section>
-
-            {canCreate && (
-                <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-                    <div className="mb-4">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Buat PTK Baru</h2>
-                        <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                            Gunakan form ini saat auditor memutuskan sebuah indikator perlu PTK, termasuk jika dokumen masih kosong atau tidak tersedia.
-                        </p>
-                    </div>
-
-                    <form onSubmit={handleCreatePtk} className="grid gap-4 lg:grid-cols-2">
-                        <label className="space-y-2">
-                            <span className="text-sm font-medium text-gray-700">Standar</span>
-                            <select
-                                value={createForm.standardId}
-                                onChange={(event) => setCreateForm((current) => ({ ...current, standardId: event.target.value }))}
-                                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                            >
-                                <option value="">Pilih standar</option>
-                                {standards.map((item) => (
-                                    <option key={item.id} value={item.id}>{item.name}</option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label className="space-y-2">
-                            <span className="text-sm font-medium text-gray-700">Indikator</span>
-                            <select
-                                value={createForm.metricId}
-                                onChange={(event) => setCreateForm((current) => ({ ...current, metricId: event.target.value }))}
-                                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                                disabled={!createForm.standardId}
-                            >
-                                <option value="">Pilih indikator</option>
-                                {indicatorOptions.map((item) => (
-                                    <option key={item.id} value={item.id}>{item.content}</option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label className="space-y-2">
-                            <span className="text-sm font-medium text-gray-700">Unit Auditee</span>
-                            <select
-                                value={createForm.assignedUnitId}
-                                onChange={(event) => setCreateForm((current) => ({ ...current, assignedUnitId: event.target.value }))}
-                                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                            >
-                                <option value="">Pilih prodi/unit</option>
-                                {units.map((item) => (
-                                    <option key={item.id} value={item.id}>{item.name}</option>
-                                ))}
-                            </select>
-                        </label>
-
-                        <label className="space-y-2">
-                            <span className="text-sm font-medium text-gray-700">Target Tanggal Koreksi</span>
-                            <input
-                                type="date"
-                                value={createForm.targetCompletionDate}
-                                onChange={(event) => setCreateForm((current) => ({ ...current, targetCompletionDate: event.target.value }))}
-                                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                            />
-                        </label>
-
-                        <label className="space-y-2 lg:col-span-2">
-                            <span className="text-sm font-medium text-gray-700">Temuan Auditor</span>
-                            <textarea
-                                rows={4}
-                                value={createForm.findingSummary}
-                                onChange={(event) => setCreateForm((current) => ({ ...current, findingSummary: event.target.value }))}
-                                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
-                                placeholder="Jelaskan dokumen yang kosong, belum tersedia, atau temuan yang mengharuskan PTK."
-                            />
-                        </label>
-
-                        <div className="lg:col-span-2 flex justify-end">
-                            <button
-                                type="submit"
-                                disabled={creatingPtk}
-                                className="inline-flex items-center gap-2 rounded-2xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <Icon icon={Icons.add} width={16} />
-                                {creatingPtk ? 'Membuat...' : 'Buat PTK'}
-                            </button>
-                        </div>
-                    </form>
-                </section>
-            )}
 
             <section className="grid gap-4 md:grid-cols-4">
                 <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">

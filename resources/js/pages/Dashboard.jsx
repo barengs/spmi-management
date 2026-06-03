@@ -553,10 +553,6 @@ export default function Dashboard() {
                     </p>
                 </section>
             )}
-
-            <section className="rounded-3xl border-2 border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
-                Fase 6: Dashboard analytic IKU akan dilanjutkan pada sprint berikutnya.
-            </section>
         </div>
     );
 }

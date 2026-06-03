@@ -40,6 +40,7 @@ export default function NotificationPage() {
     const shouldFetchSchedules = hasRole('SuperAdmin')
         || permissions.includes('audit.view')
         || permissions.includes('audit.score.update');
+    const canAccessPtkPage = hasRole('SuperAdmin') || hasRole('Auditor');
     const canAccessNotifications = hasRole('SuperAdmin')
         || permissions.includes('standard.publish')
         || permissions.includes('audit.view')
@@ -62,20 +63,26 @@ export default function NotificationPage() {
         const fetchNotifications = async () => {
             try {
                 setLoading(true);
-                const requests = [api.get('/standards'), api.get('/ptk')];
+                const requests = [api.get('/standards')];
 
                 if (shouldFetchSchedules) {
                     requests.unshift(api.get('/audit-schedules'));
                 }
 
+                if (canAccessPtkPage) {
+                    requests.push(api.get('/ptk'));
+                }
+
                 const responses = await Promise.all(requests);
-                const standardResponse = responses[responses.length - 2];
-                const ptkResponse = responses[responses.length - 1];
+                const standardResponse = canAccessPtkPage
+                    ? responses[responses.length - 2]
+                    : responses[responses.length - 1];
+                const ptkResponse = canAccessPtkPage ? responses[responses.length - 1] : null;
                 const scheduleResponse = responses.length > 2 ? responses[0] : null;
 
                 setSchedules(scheduleResponse?.data?.data || []);
                 setStandards(standardResponse.data.data || []);
-                setPtks(ptkResponse.data.data || []);
+                setPtks(ptkResponse?.data?.data || []);
             } catch (error) {
                 setSchedules([]);
                 setStandards([]);
@@ -93,7 +100,7 @@ export default function NotificationPage() {
         return () => {
             window.clearInterval(intervalId);
         };
-    }, [canAccessNotifications, shouldFetchSchedules]);
+    }, [canAccessNotifications, canAccessPtkPage, shouldFetchSchedules]);
 
     const notifications = useMemo(
         () => buildNotifications(user, schedules, standards, ptks),

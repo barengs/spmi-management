@@ -12,6 +12,39 @@ const getNodeTypeLabel = (type) => {
     return 'Isi';
 };
 
+const getContentFormatOptions = (type) => {
+    if (type === 'Header') {
+        return [];
+    }
+
+    if (type === 'Statement') {
+        return [
+            { value: 'INDICATOR', label: 'Isi / Indikator' },
+            { value: 'LONG_TEXT', label: 'Teks Panjang' },
+            { value: 'TABLE', label: 'Tabel' },
+        ];
+    }
+
+    return [
+        { value: 'LONG_TEXT', label: 'Teks Panjang' },
+        { value: 'TABLE', label: 'Tabel' },
+    ];
+};
+
+const getDefaultContentFormat = (type) => {
+    if (type === 'Header') return 'SUB_POINT';
+    if (type === 'Statement') return 'INDICATOR';
+    return 'LONG_TEXT';
+};
+
+const getContentFormatLabel = (type, format) => {
+    if (type === 'Header') {
+        return 'Poin Utama';
+    }
+
+    return getContentFormatOptions(type).find((option) => option.value === format)?.label || getDefaultContentFormat(type);
+};
+
 const getNextChildType = (parentType) => {
     if (parentType === 'Header') return 'Statement';
     if (parentType === 'Statement') return 'Indicator';
@@ -22,6 +55,122 @@ const getAddChildLabel = (nodeType) => {
     if (nodeType === 'Header') return 'Tambah Sub Poin';
     if (nodeType === 'Statement') return 'Tambah Isi';
     return 'Tambah';
+};
+
+const canAddChildToNode = (node) => {
+    if (node.type === 'Header') {
+        return true;
+    }
+
+    if (node.type === 'Statement') {
+        return (node.content_format || getDefaultContentFormat(node.type)) === 'INDICATOR';
+    }
+
+    return false;
+};
+
+const createDefaultTableData = () => ({
+    headers: ['Kolom 1'],
+    rows: [['']],
+});
+
+const normalizeTableData = (table) => {
+    const headers = Array.isArray(table?.headers) && table.headers.length > 0
+        ? table.headers.map((header) => String(header ?? ''))
+        : ['Kolom 1'];
+    const normalizedRows = Array.isArray(table?.rows) && table.rows.length > 0
+        ? table.rows.map((row) => headers.map((_, index) => String(row?.[index] ?? '')))
+        : [headers.map(() => '')];
+
+    return {
+        headers,
+        rows: normalizedRows,
+    };
+};
+
+const parseStructuredTableContent = (content) => {
+    if (!content) {
+        return createDefaultTableData();
+    }
+
+    try {
+        const parsed = JSON.parse(content);
+
+        if (parsed?.kind === 'TABLE') {
+            return normalizeTableData(parsed);
+        }
+
+        if (parsed?.kind === 'SINGLE_COLUMN_TABLE') {
+            return normalizeTableData({
+                headers: [parsed.column_name || 'Kolom 1'],
+                rows: [[parsed.value || '']],
+            });
+        }
+    } catch (error) {
+        // Fall back to plain text handling for legacy records.
+    }
+
+    return normalizeTableData({
+        headers: ['Kolom 1'],
+        rows: [[String(content || '')]],
+    });
+};
+
+const serializeStructuredTableContent = ({ headers, rows }) => JSON.stringify({
+    kind: 'TABLE',
+    headers,
+    rows,
+});
+
+const getNodeDisplayContent = (node) => {
+    if ((node.content_format || getDefaultContentFormat(node.type)) !== 'TABLE') {
+        return node.content || '';
+    }
+
+    const parsed = parseStructuredTableContent(node.content);
+    return parsed.rows
+        .flatMap((row) => row)
+        .filter((cell) => String(cell).trim() !== '')
+        .join(' | ');
+};
+
+const TableContentPreview = ({ content, compact = false }) => {
+    const table = parseStructuredTableContent(content);
+
+    return (
+        <div className={`overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 ${compact ? 'mt-2' : ''}`}>
+            <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                        <tr>
+                            {table.headers.map((header, index) => (
+                                <th
+                                    key={`preview-header-${index}`}
+                                    className="border-b border-gray-200 px-3 py-2 text-left font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200"
+                                >
+                                    {header || `Kolom ${index + 1}`}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {table.rows.map((row, rowIndex) => (
+                            <tr key={`preview-row-${rowIndex}`} className="border-b border-gray-200 last:border-b-0 dark:border-gray-700">
+                                {row.map((cell, columnIndex) => (
+                                    <td
+                                        key={`preview-cell-${rowIndex}-${columnIndex}`}
+                                        className="px-3 py-2 whitespace-pre-wrap text-gray-800 dark:text-gray-200"
+                                    >
+                                        {cell || '-'}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
 };
 
 function insertNodeIntoTree(nodes, newNode) {
@@ -237,17 +386,26 @@ const MetricNode = ({
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getTypeColor()}`}>
                             {getNodeTypeLabel(node.type)}
                         </span>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                            {getContentFormatLabel(node.type, node.content_format)}
+                        </span>
                         <span className="text-xs text-gray-400 dark:text-gray-500">ID: {node.id}</span>
                         <span className="text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ml-2 hidden sm:inline-block">Lihat Detail →</span>
                     </div>
-                    <div className="text-sm font-medium text-gray-900 dark:text-white mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                        {highlightText(node.content, searchQuery)}
-                    </div>
+                    {(node.content_format || getDefaultContentFormat(node.type)) === 'TABLE' ? (
+                        <div className="transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                            <TableContentPreview content={node.content} compact />
+                        </div>
+                    ) : (
+                        <div className="text-sm font-medium text-gray-900 dark:text-white mt-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {highlightText(getNodeDisplayContent(node), searchQuery)}
+                        </div>
+                    )}
                 </div>
 
                 {!isTerbit && (
                     <div className="ml-4 flex flex-wrap justify-end gap-2 shrink-0 items-center">
-                        {(node.type === 'Header' || node.type === 'Statement') && (
+                        {canAddChildToNode(node) && (
                             <button
                                 onClick={() => onAddChild(node)}
                                 className="p-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/50 flex items-center gap-1"
@@ -319,11 +477,14 @@ export default function StandardBuilder() {
         parent_id: '',
         content: '',
         type: 'Header',
+        content_format: 'SUB_POINT',
     });
+    const [tableForm, setTableForm] = useState(createDefaultTableData);
 
     const [selectedIndicatorView, setSelectedIndicatorView] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedIds, setExpandedIds] = useState(new Set());
+    const [showBackToTop, setShowBackToTop] = useState(false);
     const nodeRefs = useRef({});
     const canManageStructure = hasRole('SuperAdmin')
         || user?.permissions?.includes('standard.create')
@@ -346,7 +507,7 @@ export default function StandardBuilder() {
 
             if (['Header', 'Statement'].includes(node.type)) {
                 const hasChildren = (node.children_recursive || []).length > 0;
-                const hasOwnContent = String(node.content || '').trim() !== '';
+                const hasOwnContent = String(getNodeDisplayContent(node) || '').trim() !== '';
 
                 if (!hasChildren && !hasOwnContent) {
                     statementWarnings.push(node);
@@ -364,7 +525,7 @@ export default function StandardBuilder() {
     const searchResults = searchQuery.trim()
         ? flatNodes
             .filter((node) => {
-                const haystack = `${node.content} ${node.type} ${node.id}`.toLowerCase();
+                const haystack = `${getNodeDisplayContent(node)} ${node.type} ${node.id}`.toLowerCase();
                 return haystack.includes(searchQuery.trim().toLowerCase());
             })
             .slice(0, 8)
@@ -373,6 +534,19 @@ export default function StandardBuilder() {
     useEffect(() => {
         fetchData();
     }, [id]);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            setShowBackToTop(window.scrollY > 320);
+        };
+
+        handleScroll();
+        window.addEventListener('scroll', handleScroll, { passive: true });
+
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+        };
+    }, []);
 
     const fetchData = async (showLoader = true) => {
         try {
@@ -455,6 +629,71 @@ export default function StandardBuilder() {
         });
     };
 
+    const handleBackToTop = () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth',
+        });
+    };
+
+    const updateTableHeader = (columnIndex, value) => {
+        setTableForm((current) => ({
+            ...current,
+            headers: current.headers.map((header, index) => (index === columnIndex ? value : header)),
+        }));
+    };
+
+    const updateTableCell = (rowIndex, columnIndex, value) => {
+        setTableForm((current) => ({
+            ...current,
+            rows: current.rows.map((row, currentRowIndex) => (
+                currentRowIndex === rowIndex
+                    ? row.map((cell, currentColumnIndex) => (currentColumnIndex === columnIndex ? value : cell))
+                    : row
+            )),
+        }));
+    };
+
+    const addTableColumn = () => {
+        setTableForm((current) => ({
+            headers: [...current.headers, `Kolom ${current.headers.length + 1}`],
+            rows: current.rows.map((row) => [...row, '']),
+        }));
+    };
+
+    const removeTableColumn = (columnIndex) => {
+        setTableForm((current) => {
+            if (current.headers.length === 1) {
+                return current;
+            }
+
+            return {
+                headers: current.headers.filter((_, index) => index !== columnIndex),
+                rows: current.rows.map((row) => row.filter((_, index) => index !== columnIndex)),
+            };
+        });
+    };
+
+    const addTableRow = () => {
+        setTableForm((current) => ({
+            ...current,
+            rows: [...current.rows, current.headers.map(() => '')],
+        }));
+    };
+
+    const removeTableRow = (rowIndex) => {
+        setTableForm((current) => {
+            if (current.rows.length === 1) {
+                return current;
+            }
+
+            return {
+                ...current,
+                rows: current.rows.filter((_, index) => index !== rowIndex),
+            };
+        });
+    };
+
     const handleAddRoot = () => {
         setEditingNode(null);
         setParentNode(null);
@@ -463,7 +702,9 @@ export default function StandardBuilder() {
             parent_id: '',
             content: '',
             type: 'Header',
+            content_format: 'SUB_POINT',
         });
+        setTableForm(createDefaultTableData());
         setIsModalOpen(true);
     };
 
@@ -483,7 +724,9 @@ export default function StandardBuilder() {
             parent_id: parent.id,
             content: '',
             type: nextType,
+            content_format: getDefaultContentFormat(nextType),
         });
+        setTableForm(createDefaultTableData());
         setIsModalOpen(true);
     };
 
@@ -495,12 +738,14 @@ export default function StandardBuilder() {
             parent_id: node.parent_id || '',
             content: node.content,
             type: node.type,
+            content_format: node.content_format || getDefaultContentFormat(node.type),
         });
+        setTableForm(parseStructuredTableContent(node.content));
         setIsModalOpen(true);
     };
 
     const handleDelete = async (node) => {
-        if (window.confirm(`Hapus node "${node.content.substring(0, 30)}..."?\nPeringatan: Menghapus ini akan memusnahkan SEMUA data di bawah hirarkinya!`)) {
+        if (window.confirm(`Hapus node "${getNodeDisplayContent(node).substring(0, 30)}..."?\nPeringatan: Menghapus ini akan memusnahkan SEMUA data di bawah hirarkinya!`)) {
             try {
                 await api.delete(`/metrics/${node.id}`);
                 setTree((current) => removeNodeFromTree(current, node.id));
@@ -518,6 +763,20 @@ export default function StandardBuilder() {
         try {
             const payload = { ...formData };
             if (!payload.parent_id) payload.parent_id = null;
+            if (payload.content_format === 'TABLE') {
+                const hasHeader = tableForm.headers.some((header) => header.trim() !== '');
+                const hasCell = tableForm.rows.some((row) => row.some((cell) => cell.trim() !== ''));
+
+                if (!hasHeader || !hasCell) {
+                    toast.warning('Tabel minimal harus memiliki satu nama kolom dan satu isi sel.');
+                    return;
+                }
+
+                payload.content = serializeStructuredTableContent({
+                    headers: tableForm.headers.map((header, index) => header.trim() || `Kolom ${index + 1}`),
+                    rows: tableForm.rows.map((row) => row.map((cell) => cell.trim())),
+                });
+            }
 
             if (editingNode) {
                 const response = await api.put(`/metrics/${editingNode.id}`, payload);
@@ -541,6 +800,7 @@ export default function StandardBuilder() {
             setIsModalOpen(false);
             setEditingNode(null);
             setParentNode(null);
+            setTableForm(createDefaultTableData());
             fetchData(false);
         } catch (err) {
             toast.error(err.response?.data?.message || 'Gagal menyimpan node.');
@@ -575,15 +835,6 @@ export default function StandardBuilder() {
                         )}
                     </p>
                 </div>
-                {canManageStructure && !['WAITING_APPROVAL', 'TERBIT'].includes(standard?.status) && (
-                    <button
-                        onClick={handleAddRoot}
-                        className="inline-flex items-center gap-1 px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                    >
-                        <Icon icon={Icons.add} width={18} />
-                        Tambah Poin Utama
-                    </button>
-                )}
             </div>
 
             <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -623,7 +874,7 @@ export default function StandardBuilder() {
                                         className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition hover:bg-blue-50"
                                     >
                                         <div className="min-w-0">
-                                            <div className="truncate text-sm font-medium text-gray-900">{highlightText(node.content, searchQuery)}</div>
+                                            <div className="truncate text-sm font-medium text-gray-900">{highlightText(getNodeDisplayContent(node), searchQuery)}</div>
                                             <div className="mt-1 text-xs text-gray-500">
                                                 {highlightText(`${node.type} • ID ${node.id}`, searchQuery)}
                                             </div>
@@ -747,10 +998,17 @@ export default function StandardBuilder() {
                                         }`}>
                                         {getNodeTypeLabel(selectedIndicatorView.type)}
                                     </span>
+                                    <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                                        {getContentFormatLabel(selectedIndicatorView.type, selectedIndicatorView.content_format)}
+                                    </span>
                                     <span className="ml-2 text-xs text-gray-500">ID: #{selectedIndicatorView.id}</span>
                                 </div>
                                 <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap mb-6">
-                                    {selectedIndicatorView.content}
+                                    {selectedIndicatorView.content_format === 'TABLE' ? (
+                                        <TableContentPreview content={selectedIndicatorView.content} />
+                                    ) : (
+                                        getNodeDisplayContent(selectedIndicatorView)
+                                    )}
                                 </div>
 
                                 {selectedIndicatorView.type === 'Indicator' && (
@@ -791,7 +1049,11 @@ export default function StandardBuilder() {
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipe Komponen</label>
                                         <select
                                             value={formData.type}
-                                            onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                type: e.target.value,
+                                                content_format: getDefaultContentFormat(e.target.value),
+                                            })}
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         >
                                             <option value="Header">Poin Utama</option>
@@ -805,23 +1067,134 @@ export default function StandardBuilder() {
                                         Tipe node ditentukan otomatis dari tombol yang dipilih: Poin Utama -&gt; Sub Poin -&gt; Isi.
                                     </div>
                                 )}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        {formData.type === 'Header'
-                                            ? 'Nama Poin Utama'
-                                            : formData.type === 'Statement'
-                                                ? 'Nama Sub Poin'
-                                                : 'Nama Isi'}
-                                    </label>
-                                    <textarea
-                                        required
-                                        rows="4"
-                                        value={formData.content}
-                                        onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400"
-                                        placeholder="Masukkan isi uraian di sini..."
-                                    ></textarea>
-                                </div>
+                                {formData.type !== 'Header' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Bentuk Konten</label>
+                                        <select
+                                            value={formData.content_format}
+                                            onChange={(e) => {
+                                                const nextFormat = e.target.value;
+                                                setFormData({ ...formData, content_format: nextFormat });
+                                                if (nextFormat === 'TABLE') {
+                                                    setTableForm(parseStructuredTableContent(formData.content));
+                                                } else {
+                                                    setTableForm(createDefaultTableData());
+                                                }
+                                            }}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                        >
+                                            {getContentFormatOptions(formData.type).map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                            Tentukan apakah node ini akan dipakai sebagai indikator, teks panjang, atau tabel.
+                                        </p>
+                                    </div>
+                                )}
+                                {formData.content_format === 'TABLE' ? (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Format Tabel</label>
+                                        <div className="mt-1 space-y-3">
+                                            <div className="overflow-auto rounded-xl border border-gray-300 dark:border-gray-600">
+                                                <table className="min-w-full border-collapse text-sm">
+                                                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                                        <tr>
+                                                            {tableForm.headers.map((header, columnIndex) => (
+                                                                <th key={`header-input-${columnIndex}`} className="min-w-[180px] border-b border-r border-gray-300 px-3 py-2 align-top last:border-r-0 dark:border-gray-600">
+                                                                    <div className="space-y-2">
+                                                                        <input
+                                                                            type="text"
+                                                                            value={header}
+                                                                            onChange={(e) => updateTableHeader(columnIndex, e.target.value)}
+                                                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                                            placeholder={`Kolom ${columnIndex + 1}`}
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => removeTableColumn(columnIndex)}
+                                                                            disabled={tableForm.headers.length === 1}
+                                                                            className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                        >
+                                                                            <Icon icon={Icons.delete} width={12} />
+                                                                            Hapus Kolom
+                                                                        </button>
+                                                                    </div>
+                                                                </th>
+                                                            ))}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {tableForm.rows.map((row, rowIndex) => (
+                                                            <tr key={`row-input-${rowIndex}`} className="border-b border-gray-300 last:border-b-0 dark:border-gray-600">
+                                                                {row.map((cell, columnIndex) => (
+                                                                    <td key={`cell-input-${rowIndex}-${columnIndex}`} className="border-r border-gray-300 px-3 py-2 align-top last:border-r-0 dark:border-gray-600">
+                                                                        <textarea
+                                                                            rows="3"
+                                                                            value={cell}
+                                                                            onChange={(e) => updateTableCell(rowIndex, columnIndex, e.target.value)}
+                                                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400"
+                                                                            placeholder="Isi sel..."
+                                                                        ></textarea>
+                                                                    </td>
+                                                                ))}
+                                                                <td className="whitespace-nowrap px-3 py-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => removeTableRow(rowIndex)}
+                                                                        disabled={tableForm.rows.length === 1}
+                                                                        className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                                                    >
+                                                                        <Icon icon={Icons.delete} width={12} />
+                                                                        Hapus Baris
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={addTableColumn}
+                                                    className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                                                >
+                                                    <Icon icon={Icons.add} width={14} />
+                                                    Tambah Kolom
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={addTableRow}
+                                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                                                >
+                                                    <Icon icon={Icons.add} width={14} />
+                                                    Tambah Baris
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            {formData.type === 'Header'
+                                                ? 'Nama Poin Utama'
+                                                : formData.type === 'Statement'
+                                                    ? 'Nama Sub Poin'
+                                                    : 'Nama Isi'}
+                                        </label>
+                                        <textarea
+                                            required
+                                            rows="4"
+                                            value={formData.content}
+                                            onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400"
+                                            placeholder="Masukkan isi uraian di sini..."
+                                        ></textarea>
+                                    </div>
+                                )}
                                 <div className="mt-5 sm:mt-6 flex space-x-3">
                                     <button
                                         type="submit"
@@ -841,6 +1214,17 @@ export default function StandardBuilder() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showBackToTop && (
+                <button
+                    type="button"
+                    onClick={handleBackToTop}
+                    className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-700"
+                >
+                    <Icon icon={Icons.sortAsc} width={16} />
+                    Back to Top
+                </button>
             )}
         </div>
     );

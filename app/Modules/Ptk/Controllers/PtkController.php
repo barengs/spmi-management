@@ -14,6 +14,11 @@ use Illuminate\Validation\Rule;
 
 class PtkController extends Controller
 {
+    private function hasAuditorRole(User $user): bool
+    {
+        return $user->hasRole('Auditor');
+    }
+
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -95,14 +100,22 @@ class PtkController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->can('ptk.view')) {
+        $user = $request->user();
+
+        if (! $user?->can('ptk.view')) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Anda tidak memiliki hak akses untuk melihat tindak koreksi.',
             ], 403);
         }
 
-        $user = $request->user();
+        if (! $this->hasAuditorRole($user) && ! $user->hasRole('SuperAdmin')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Halaman tindak koreksi hanya dapat diakses auditor.',
+            ], 403);
+        }
+
         $query = TrxPtk::query()
             ->with([
                 'standard:id,name,category,periode_tahun',
@@ -124,8 +137,12 @@ class PtkController extends Controller
         if (! $user->hasRole('SuperAdmin') && ! $user->can('ptk.verify') && ! $user->can('ptk.close')) {
             $query->where(function ($builder) use ($user) {
                 $builder
-                    ->where('assigned_user_id', $user->id)
-                    ->orWhere('responded_by', $user->id);
+                    ->where('created_by', $user->id)
+                    ->orWhere('assigned_user_id', $user->id)
+                    ->orWhere('target_date_responded_by', $user->id)
+                    ->orWhere('responded_by', $user->id)
+                    ->orWhere('verified_by', $user->id)
+                    ->orWhere('closed_by', $user->id);
 
                 if ($user->unit_id) {
                     $builder->orWhere('assigned_unit_id', $user->unit_id);

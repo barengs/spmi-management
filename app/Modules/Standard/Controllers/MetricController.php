@@ -14,6 +14,15 @@ use Illuminate\Validation\ValidationException;
 
 class MetricController extends Controller
 {
+    private function defaultContentFormatForType(string $type): string
+    {
+        return match ($type) {
+            'Header' => 'SUB_POINT',
+            'Statement' => 'INDICATOR',
+            default => 'LONG_TEXT',
+        };
+    }
+
     private function logMetricActivity(string $action, MstMetric $metric, mixed $oldData = null, mixed $newData = null): void
     {
         ActivityLog::record($action, MstMetric::class, $metric->id, $oldData, $newData);
@@ -94,6 +103,9 @@ class MetricController extends Controller
             ? $payload['parent_id']
             : $metric?->parent_id;
         $resolvedType = $payload['type'] ?? $metric?->type;
+        $resolvedContentFormat = $payload['content_format']
+            ?? $metric?->content_format
+            ?? $this->defaultContentFormatForType($resolvedType);
         $parent = $resolvedParentId ? MstMetric::findOrFail($resolvedParentId) : null;
 
         if ($resolvedParentId === null && $resolvedType === 'Indicator') {
@@ -107,6 +119,13 @@ class MetricController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Isi tidak dapat memiliki child node.',
+            ], 422);
+        }
+
+        if ($parent?->type === 'Statement' && ($parent->content_format ?? $this->defaultContentFormatForType($parent->type)) !== 'INDICATOR') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Sub Poin bertipe teks panjang atau tabel tidak dapat memiliki child isi.',
             ], 422);
         }
 
@@ -132,6 +151,13 @@ class MetricController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Node yang sudah memiliki child tidak dapat diubah menjadi Isi.',
+            ], 422);
+        }
+
+        if ($resolvedType === 'Statement' && in_array($resolvedContentFormat, ['LONG_TEXT', 'TABLE'], true) && $metric->children()->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Sub Poin yang sudah memiliki isi tidak dapat diubah menjadi teks panjang atau tabel.',
             ], 422);
         }
 
@@ -230,10 +256,12 @@ class MetricController extends Controller
             'parent_id'   => 'nullable|exists:mst_metrics,id',
             'content'     => 'required|string',
             'type'        => 'required|in:Header,Statement,Indicator',
+            'content_format' => 'nullable|in:SUB_POINT,INDICATOR,LONG_TEXT,TABLE',
             'order'       => 'nullable|integer',
         ]);
 
         $validated['pj'] = null;
+        $validated['content_format'] = $validated['content_format'] ?? $this->defaultContentFormatForType($validated['type']);
 
         if (empty($validated['order'])) {
             $validated['order'] = MstMetric::where('standard_id', $validated['standard_id'])
@@ -285,8 +313,13 @@ class MetricController extends Controller
             'parent_id' => 'nullable|exists:mst_metrics,id',
             'content'   => 'sometimes|required|string',
             'type'      => 'sometimes|required|in:Header,Statement,Indicator',
+            'content_format' => 'nullable|in:SUB_POINT,INDICATOR,LONG_TEXT,TABLE',
             'order'     => 'nullable|integer',
         ]);
+
+        if (! array_key_exists('content_format', $validated) && array_key_exists('type', $validated)) {
+            $validated['content_format'] = $this->defaultContentFormatForType($validated['type']);
+        }
 
         // Pencegahan circular reference jika mengubah parent_id
         if (array_key_exists('parent_id', $validated) && $validated['parent_id'] !== $metric->parent_id) {

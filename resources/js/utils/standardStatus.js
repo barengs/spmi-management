@@ -44,6 +44,9 @@ export function getPendingWrLabels(item) {
 }
 
 export function getApprovalStageLabel(stage, item = null) {
+    if (item?.status === 'TERBIT') return 'Final';
+    if (item?.status === 'REVISI') return 'Revisi';
+    if (item?.status === 'WAITING_APPROVAL' && !stage) return 'Menunggu Kepala LPMI';
     if (stage === 'HEAD_LPMI') return 'Menunggu Kepala LPMI';
     if (stage === 'WR') return `Menunggu ${formatWrList(getPendingWrLabels(item))}`;
     if (stage === 'RECTOR') return 'Menunggu Pimpinan / Rektor';
