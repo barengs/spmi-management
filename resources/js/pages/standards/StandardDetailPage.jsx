@@ -8,6 +8,7 @@ import { getApprovalStageLabel, getStandardStatusLabel, getStandardWrLabel, norm
 
 const tabs = [
     { id: 'information', label: 'Informasi' },
+    { id: 'indicators', label: 'Indikator' },
     { id: 'structure', label: 'Struktur' },
     { id: 'history', label: 'Riwayat' },
     { id: 'document', label: 'Dokumen' },
@@ -729,6 +730,54 @@ export default function StandardDetailPage() {
                                     </div>
                                 )}
                             </div>
+                        </section>
+                    )}
+
+                    {activeTab === 'indicators' && (
+                        <section className="space-y-4">
+                            <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
+                                <div className="text-sm font-semibold text-slate-100">Daftar Indikator IKU dan IKT</div>
+                                <div className="mt-2 text-sm leading-6 text-slate-400">
+                                    Data indikator diekstrak dari dokumen standar berdasarkan sumber seperti IKU No. 9.1 atau IKT No. 9.1.
+                                </div>
+                            </div>
+
+                            {(standard.indicator_entries || []).length > 0 ? (
+                                <div className="overflow-hidden rounded-3xl border border-slate-700 bg-slate-900">
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full border-collapse text-sm">
+                                            <thead className="bg-slate-800">
+                                                <tr>
+                                                    <th className="w-28 border-b border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">Tipe</th>
+                                                    <th className="w-40 border-b border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">Nomor IKU / IKT</th>
+                                                    <th className="border-b border-slate-700 px-4 py-3 text-left font-semibold text-slate-100">Isi Indikator</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {standard.indicator_entries.map((entry, index) => (
+                                                    <tr key={`${entry.type}-${entry.number}-${index}`} className="border-b border-slate-700 last:border-b-0">
+                                                        <td className="px-4 py-3 align-top">
+                                                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                                                entry.type === 'IKU'
+                                                                    ? 'bg-blue-950 text-blue-200'
+                                                                    : 'bg-emerald-950 text-emerald-200'
+                                                            }`}>
+                                                                {entry.type}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 align-top font-semibold text-slate-200">{entry.number || '-'}</td>
+                                                        <td className="px-4 py-3 align-top leading-6 text-slate-300">{entry.content || '-'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-900 px-6 py-10 text-center text-sm text-slate-400">
+                                    Dokumen standar ini tidak memiliki data indikator IKU atau IKT yang dapat dibaca.
+                                </div>
+                            )}
                         </section>
                     )}
 

@@ -27,6 +27,28 @@ const countUniqueIndicatorCodes = (text, prefix) => {
     return uniqueCodes.size || null;
 };
 
+const extractIndicatorEntries = (text) => {
+    const pattern = /\b(IKU|IKT)\s*(?:No\.?\s*)?\.?\s*(\d+(?:\.\d+)+)\s+([^\r\n]+)/gi;
+    const entries = [];
+    const seen = new Set();
+
+    for (const match of String(text || '').matchAll(pattern)) {
+        const entry = {
+            type: match[1].toUpperCase(),
+            number: match[2].trim(),
+            content: match[3].trim(),
+        };
+        const key = `${entry.type}|${entry.number}`;
+
+        if (!seen.has(key)) {
+            seen.add(key);
+            entries.push(entry);
+        }
+    }
+
+    return entries.length ? entries : null;
+};
+
 const buildNode = (type, content) => ({
     type,
     content: String(content || '').trim(),
@@ -351,6 +373,7 @@ const extractText = async (absolutePath) => {
                 page_count: pdf.numPages || null,
                 iku_count: countUniqueIndicatorCodes(rawLines.join('\n'), 'IKU'),
                 ikt_count: countUniqueIndicatorCodes(rawLines.join('\n'), 'IKT'),
+                indicator_entries: extractIndicatorEntries(rawLines.join('\n')),
             };
         })(),
     };

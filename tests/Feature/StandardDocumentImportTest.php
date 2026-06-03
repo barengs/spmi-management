@@ -79,6 +79,12 @@ class StandardDocumentImportTest extends TestCase
         $this->assertSame(3, MstMetric::where('type', 'Indicator')->count());
         $this->assertSame(2, $standard->iku_count);
         $this->assertSame(1, $standard->ikt_count);
+        $this->assertCount(3, $standard->indicator_entries);
+        $this->assertSame([
+            'type' => 'IKU',
+            'number' => '9.1',
+            'content' => 'Capaian pembelajaran lulusan.',
+        ], $standard->indicator_entries[0]);
     }
 
     public function test_standard_document_import_can_build_tree_automatically_from_uploaded_pdf(): void

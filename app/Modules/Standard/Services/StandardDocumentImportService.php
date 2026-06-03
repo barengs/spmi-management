@@ -145,7 +145,30 @@ class StandardDocumentImportService
             'page_count' => null,
             'iku_count' => $this->countUniqueIndicatorCodes($text, 'IKU'),
             'ikt_count' => $this->countUniqueIndicatorCodes($text, 'IKT'),
+            'indicator_entries' => $this->extractIndicatorEntries($text),
         ];
+    }
+
+    private function extractIndicatorEntries(string $text): ?array
+    {
+        preg_match_all(
+            '/\b(IKU|IKT)\s*(?:No\.?\s*)?\.?\s*(\d+(?:\.\d+)+)\s+([^\r\n]+)/iu',
+            $text,
+            $matches,
+            PREG_SET_ORDER
+        );
+
+        $entries = collect($matches)
+            ->map(fn (array $match) => [
+                'type' => mb_strtoupper($match[1]),
+                'number' => trim($match[2]),
+                'content' => trim($match[3]),
+            ])
+            ->unique(fn (array $entry) => $entry['type'] . '|' . $entry['number'])
+            ->values()
+            ->all();
+
+        return empty($entries) ? null : $entries;
     }
 
     private function countUniqueIndicatorCodes(string $text, string $prefix): ?int
