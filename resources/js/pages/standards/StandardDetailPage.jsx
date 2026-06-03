@@ -32,24 +32,6 @@ function formatDateTime(value) {
     });
 }
 
-function formatFileSize(value) {
-    if (!value || Number(value) <= 0) {
-        return '-';
-    }
-
-    const size = Number(value);
-
-    if (size < 1024) {
-        return `${size} B`;
-    }
-
-    if (size < 1024 * 1024) {
-        return `${(size / 1024).toFixed(1)} KB`;
-    }
-
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function getNodeTypeLabel(type) {
     if (type === 'Header') return 'Poin Utama';
     if (type === 'Statement') return 'Sub Poin';
@@ -70,7 +52,12 @@ function normalizeTableData(table) {
         ? table.rows.map((row) => headers.map((_, index) => String(row?.[index] ?? '')))
         : [headers.map(() => '')];
 
-    return { headers, rows };
+    return {
+        intro_text: String(table?.intro_text ?? ''),
+        table_note: String(table?.table_note ?? ''),
+        headers,
+        rows,
+    };
 }
 
 function parseStructuredTableContent(content) {
@@ -105,8 +92,14 @@ function TableContentPreview({ content }) {
     const table = parseStructuredTableContent(content);
 
     return (
-        <div className="mt-3 overflow-hidden rounded-xl border border-slate-700">
-            <div className="overflow-x-auto">
+        <div className="mt-3">
+            {table.intro_text && (
+                <div className="mb-3 whitespace-pre-wrap text-sm leading-6 text-slate-200">
+                    {table.intro_text}
+                </div>
+            )}
+            <div className="overflow-hidden rounded-xl border border-slate-700">
+                <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse text-sm">
                     <thead className="bg-slate-800">
                         <tr>
@@ -135,7 +128,13 @@ function TableContentPreview({ content }) {
                         ))}
                     </tbody>
                 </table>
+                </div>
             </div>
+            {table.table_note && (
+                <div className="mt-2 whitespace-pre-wrap text-xs italic leading-5 text-slate-400">
+                    {table.table_note}
+                </div>
+            )}
         </div>
     );
 }
@@ -322,6 +321,7 @@ export default function StandardDetailPage() {
     });
     const [settingsForm, setSettingsForm] = useState({
         name: '',
+        standard_code: '',
         category: 'Tambahan',
         periode_tahun: '',
         referensi_regulasi: '',
@@ -341,6 +341,7 @@ export default function StandardDetailPage() {
                 setTree(treeResponse.data.data || []);
                 setSettingsForm({
                     name: standardResponse.data.data?.name || '',
+                    standard_code: standardResponse.data.data?.standard_code || '',
                     category: standardResponse.data.data?.category || 'Tambahan',
                     periode_tahun: standardResponse.data.data?.periode_tahun || '',
                     referensi_regulasi: standardResponse.data.data?.referensi_regulasi || '',
@@ -492,6 +493,21 @@ export default function StandardDetailPage() {
         }));
     };
 
+    const handleReviseStandard = async () => {
+        if (!window.confirm('Revisi standar?\n\nStandar akan dianggap sebagai draft dan harus melakukan proses seperti pada pengajuan.')) {
+            return;
+        }
+
+        try {
+            const response = await api.post(`/standards/${standard.id}/revise`);
+            const revision = response.data.data;
+            toast.success(response.data.message || 'Draft revisi standar berhasil dibuat.');
+            navigate(`/standards/${revision.id}/builder`);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Draft revisi standar gagal dibuat.');
+        }
+    };
+
     const handleSettingsSubmit = async (event) => {
         event.preventDefault();
 
@@ -612,8 +628,18 @@ export default function StandardDetailPage() {
                             className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-amber-700 transition hover:bg-amber-100"
                         >
                             <Icon icon={Icons.edit} width={14} />
-                            Builder
+                            Edit Struktur
                         </Link>
+                    )}
+                    {canDraftStandard && standard.status === 'TERBIT' && (
+                        <button
+                            type="button"
+                            onClick={handleReviseStandard}
+                            className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-amber-700 transition hover:bg-amber-100"
+                        >
+                            <Icon icon={Icons.edit} width={14} />
+                            Revisi Standar
+                        </button>
                     )}
                     {canExportStandard && standard.status === 'TERBIT' && (
                         <button
@@ -661,20 +687,16 @@ export default function StandardDetailPage() {
                     {activeTab === 'information' && (
                         <section className="grid gap-4 lg:grid-cols-2">
                             <SummaryCard label="Nama Standar" value={standard.name} />
-                            <SummaryCard label="Versi" value={`v${standard.version_number || 1}`} hint={standard.root_standard_id ? 'Tersambung ke histori versi standar' : 'Versi awal standar'} />
+                            <SummaryCard label="Kode Standar" value={standard.standard_code || '-'} />
                             <SummaryCard label="Kategori" value={normalizeStandardCategory(standard.category)} />
                             <SummaryCard label="Periode Tahun" value={String(standard.periode_tahun || '-')} />
-                            <SummaryCard label="Versi Sebelumnya" value={standard.previous_standard ? `${standard.previous_standard.name} (v${standard.previous_standard.version_number || 1})` : '-'} />
-                            <SummaryCard label="Versi Pengganti" value={standard.superseded_by_standard ? `${standard.superseded_by_standard.name} (v${standard.superseded_by_standard.version_number || 1})` : '-'} />
-                            <SummaryCard label="Referensi Regulasi" value={standard.referensi_regulasi || '-'} />
+                            <SummaryCard label="Revisi Ke" value={standard.revision_number ?? '-'} />
+                            <SummaryCard label="Jumlah Halaman" value={standard.page_count ?? '-'} />
+                            <SummaryCard label="Jumlah IKU" value={standard.iku_count ?? '-'} />
+                            <SummaryCard label="Jumlah IKT" value={standard.ikt_count ?? '-'} />
                             <SummaryCard label="Dibuat" value={formatDateTime(standard.created_at)} />
                             <SummaryCard label="Terakhir Diubah" value={formatDateTime(standard.updated_at)} />
                             <SummaryCard label="Sumber Dokumen" value={standard.source_document_original_name || 'Manual dari sistem'} />
-                            <SummaryCard
-                                label="Ukuran Dokumen"
-                                value={formatFileSize(standard.source_document_size_bytes)}
-                                hint={standard.imported_from_document_at ? `Diimpor pada ${formatDateTime(standard.imported_from_document_at)}` : null}
-                            />
                             {standard.reject_reason ? (
                                 <div className="rounded-3xl border border-rose-900 bg-rose-950/60 p-5 text-sm text-rose-100 shadow-sm lg:col-span-2">
                                     <div className="text-xs font-semibold uppercase tracking-[0.16em] text-rose-300">Catatan Revisi</div>
@@ -973,8 +995,20 @@ export default function StandardDetailPage() {
                                     <input
                                         type="text"
                                         value={settingsForm.name}
-                                        onChange={(event) => handleSettingsChange('name', event.target.value)}
+                                        onChange={(event) => handleSettingsChange('name', event.target.value.toUpperCase())}
                                         disabled={!isDraft || settingsSubmitting}
+                                        className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-950 disabled:cursor-not-allowed disabled:opacity-60"
+                                    />
+                                </label>
+
+                                <label className="space-y-2">
+                                    <span className="text-sm font-medium text-slate-300">Kode Standar</span>
+                                    <input
+                                        type="text"
+                                        value={settingsForm.standard_code || ''}
+                                        onChange={(event) => handleSettingsChange('standard_code', event.target.value.toUpperCase())}
+                                        disabled={!isDraft || settingsSubmitting}
+                                        placeholder="SPMI/UIM/SMP/II/A"
                                         className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-950 disabled:cursor-not-allowed disabled:opacity-60"
                                     />
                                 </label>

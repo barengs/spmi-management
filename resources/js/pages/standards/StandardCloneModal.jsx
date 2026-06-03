@@ -13,7 +13,7 @@ export default function StandardCloneModal({ isOpen, onClose, originalStandard, 
     useEffect(() => {
         if (originalStandard && isOpen) {
             setFormData({
-                name: originalStandard.name + ' (Copy)',
+                name: `${originalStandard.name} (COPY)`.toUpperCase(),
                 periode_tahun: (parseInt(originalStandard.periode_tahun) || new Date().getFullYear()) + 1,
                 category: originalStandard.category || 'Tambahan'
             });
@@ -65,7 +65,7 @@ export default function StandardCloneModal({ isOpen, onClose, originalStandard, 
                                         type="text"
                                         required
                                         value={formData.name}
-                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                        onChange={e => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                     />
                                 </div>

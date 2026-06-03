@@ -174,7 +174,7 @@ class StandardImprovementController extends Controller
                 $newVersionNumber = (int) ($standard->version_number ?: 1) + 1;
 
                 $newStandard = $this->standardCloneController->cloneStandardTree($standard, [
-                    'name' => $standard->name,
+                    'name' => sprintf('%s - REVISI V%d', $standard->name, $newVersionNumber),
                     'category' => $standard->category,
                     'periode_tahun' => $targetPeriodYear,
                     'referensi_regulasi' => $standard->referensi_regulasi,

@@ -19,13 +19,14 @@ const getContentFormatOptions = (type) => {
 
     if (type === 'Statement') {
         return [
-            { value: 'INDICATOR', label: 'Isi / Indikator' },
+            { value: 'INDICATOR', label: 'Poin-Poin' },
             { value: 'LONG_TEXT', label: 'Teks Panjang' },
             { value: 'TABLE', label: 'Tabel' },
         ];
     }
 
     return [
+        { value: 'INDICATOR', label: 'Poin-Poin' },
         { value: 'LONG_TEXT', label: 'Teks Panjang' },
         { value: 'TABLE', label: 'Tabel' },
     ];
@@ -48,12 +49,14 @@ const getContentFormatLabel = (type, format) => {
 const getNextChildType = (parentType) => {
     if (parentType === 'Header') return 'Statement';
     if (parentType === 'Statement') return 'Indicator';
+    if (parentType === 'Indicator') return 'Indicator';
     return null;
 };
 
 const getAddChildLabel = (nodeType) => {
-    if (nodeType === 'Header') return 'Tambah Sub Poin';
+    if (nodeType === 'Header') return 'Tambah Isi';
     if (nodeType === 'Statement') return 'Tambah Isi';
+    if (nodeType === 'Indicator') return 'Tambah Poin Turunan';
     return 'Tambah';
 };
 
@@ -62,7 +65,7 @@ const canAddChildToNode = (node) => {
         return true;
     }
 
-    if (node.type === 'Statement') {
+    if (node.type === 'Statement' || node.type === 'Indicator') {
         return (node.content_format || getDefaultContentFormat(node.type)) === 'INDICATOR';
     }
 
@@ -70,6 +73,8 @@ const canAddChildToNode = (node) => {
 };
 
 const createDefaultTableData = () => ({
+    intro_text: '',
+    table_note: '',
     headers: ['Kolom 1'],
     rows: [['']],
 });
@@ -83,6 +88,8 @@ const normalizeTableData = (table) => {
         : [headers.map(() => '')];
 
     return {
+        intro_text: String(table?.intro_text ?? ''),
+        table_note: String(table?.table_note ?? ''),
         headers,
         rows: normalizedRows,
     };
@@ -116,8 +123,10 @@ const parseStructuredTableContent = (content) => {
     });
 };
 
-const serializeStructuredTableContent = ({ headers, rows }) => JSON.stringify({
+const serializeStructuredTableContent = ({ intro_text, table_note, headers, rows }) => JSON.stringify({
     kind: 'TABLE',
+    intro_text,
+    table_note,
     headers,
     rows,
 });
@@ -138,8 +147,14 @@ const TableContentPreview = ({ content, compact = false }) => {
     const table = parseStructuredTableContent(content);
 
     return (
-        <div className={`overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 ${compact ? 'mt-2' : ''}`}>
-            <div className="overflow-x-auto">
+        <div className={compact ? 'mt-2' : ''}>
+            {table.intro_text && (
+                <div className="mb-2 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">
+                    {table.intro_text}
+                </div>
+            )}
+            <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+                <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse text-sm">
                     <thead className="bg-gray-50 dark:bg-gray-700/50">
                         <tr>
@@ -168,7 +183,13 @@ const TableContentPreview = ({ content, compact = false }) => {
                         ))}
                     </tbody>
                 </table>
+                </div>
             </div>
+            {table.table_note && (
+                <div className="mt-2 whitespace-pre-wrap text-xs italic text-gray-500 dark:text-gray-400">
+                    {table.table_note}
+                </div>
+            )}
         </div>
     );
 };
@@ -389,7 +410,6 @@ const MetricNode = ({
                         <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
                             {getContentFormatLabel(node.type, node.content_format)}
                         </span>
-                        <span className="text-xs text-gray-400 dark:text-gray-500">ID: {node.id}</span>
                         <span className="text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ml-2 hidden sm:inline-block">Lihat Detail →</span>
                     </div>
                     {(node.content_format || getDefaultContentFormat(node.type)) === 'TABLE' ? (
@@ -480,6 +500,7 @@ export default function StandardBuilder() {
         content_format: 'SUB_POINT',
     });
     const [tableForm, setTableForm] = useState(createDefaultTableData);
+    const [pointItems, setPointItems] = useState(['']);
 
     const [selectedIndicatorView, setSelectedIndicatorView] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -694,6 +715,20 @@ export default function StandardBuilder() {
         });
     };
 
+    const updatePointItem = (index, value) => {
+        setPointItems((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+    };
+
+    const addPointItem = () => {
+        setPointItems((current) => [...current, '']);
+    };
+
+    const removePointItem = (index) => {
+        setPointItems((current) => (
+            current.length === 1 ? current : current.filter((_, itemIndex) => itemIndex !== index)
+        ));
+    };
+
     const handleAddRoot = () => {
         setEditingNode(null);
         setParentNode(null);
@@ -705,6 +740,7 @@ export default function StandardBuilder() {
             content_format: 'SUB_POINT',
         });
         setTableForm(createDefaultTableData());
+        setPointItems(['']);
         setIsModalOpen(true);
     };
 
@@ -727,6 +763,7 @@ export default function StandardBuilder() {
             content_format: getDefaultContentFormat(nextType),
         });
         setTableForm(createDefaultTableData());
+        setPointItems(['']);
         setIsModalOpen(true);
     };
 
@@ -741,6 +778,11 @@ export default function StandardBuilder() {
             content_format: node.content_format || getDefaultContentFormat(node.type),
         });
         setTableForm(parseStructuredTableContent(node.content));
+        setPointItems(
+            node.type === 'Indicator' && (node.content_format || getDefaultContentFormat(node.type)) === 'INDICATOR'
+                ? [node.content]
+                : ['']
+        );
         setIsModalOpen(true);
     };
 
@@ -751,7 +793,6 @@ export default function StandardBuilder() {
                 setTree((current) => removeNodeFromTree(current, node.id));
                 setSelectedIndicatorView((current) => (current?.id === node.id ? null : current));
                 toast.success('Node berhasil dihapus.');
-                fetchData(false);
             } catch (err) {
                 toast.error(err.response?.data?.message || 'Gagal menghapus node.');
             }
@@ -763,6 +804,17 @@ export default function StandardBuilder() {
         try {
             const payload = { ...formData };
             if (!payload.parent_id) payload.parent_id = null;
+            const pointValues = pointItems.map((item) => item.trim()).filter(Boolean);
+
+            if (payload.type === 'Indicator' && payload.content_format === 'INDICATOR') {
+                if (pointValues.length === 0) {
+                    toast.warning('Poin-Poin minimal harus memiliki satu isi poin.');
+                    return;
+                }
+
+                payload.content = pointValues[0];
+            }
+
             if (payload.content_format === 'TABLE') {
                 const hasHeader = tableForm.headers.some((header) => header.trim() !== '');
                 const hasCell = tableForm.rows.some((row) => row.some((cell) => cell.trim() !== ''));
@@ -773,20 +825,26 @@ export default function StandardBuilder() {
                 }
 
                 payload.content = serializeStructuredTableContent({
+                    intro_text: tableForm.intro_text.trim(),
+                    table_note: tableForm.table_note.trim(),
                     headers: tableForm.headers.map((header, index) => header.trim() || `Kolom ${index + 1}`),
                     rows: tableForm.rows.map((row) => row.map((cell) => cell.trim())),
                 });
             }
 
+            let savedNode;
+
             if (editingNode) {
                 const response = await api.put(`/metrics/${editingNode.id}`, payload);
                 const updatedNode = response.data.data;
+                savedNode = updatedNode;
                 setTree((current) => updateNodeInTree(current, updatedNode));
                 setSelectedIndicatorView((current) => (current?.id === updatedNode.id ? { ...current, ...updatedNode } : current));
                 toast.success('Node berhasil diperbarui.');
             } else {
                 const response = await api.post('/metrics', payload);
                 const createdNode = response.data.data;
+                savedNode = createdNode;
                 setTree((current) => insertNodeIntoTree(current, createdNode));
                 setExpandedIds((current) => {
                     const next = new Set(current);
@@ -797,11 +855,34 @@ export default function StandardBuilder() {
                 });
                 toast.success('Node baru berhasil ditambahkan.');
             }
+
+            const nestedPoints = payload.content_format === 'INDICATOR'
+                ? payload.type === 'Indicator'
+                    ? pointValues.slice(1)
+                    : pointValues
+                : [];
+
+            for (const [index, content] of nestedPoints.entries()) {
+                const response = await api.post('/metrics', {
+                    standard_id: id,
+                    parent_id: savedNode.id,
+                    content,
+                    type: 'Indicator',
+                    content_format: 'LONG_TEXT',
+                    order: index + 1,
+                });
+                setTree((current) => insertNodeIntoTree(current, response.data.data));
+            }
+
+            if (nestedPoints.length > 0) {
+                setExpandedIds((current) => new Set([...current, savedNode.id]));
+            }
+
             setIsModalOpen(false);
             setEditingNode(null);
             setParentNode(null);
             setTableForm(createDefaultTableData());
-            fetchData(false);
+            setPointItems(['']);
         } catch (err) {
             toast.error(err.response?.data?.message || 'Gagal menyimpan node.');
         }
@@ -816,14 +897,14 @@ export default function StandardBuilder() {
             <div className="mb-6 flex items-center justify-between">
                 <div>
                     <button
-                        onClick={() => navigate('/standards')}
+                        onClick={() => navigate(`/standards/${id}`)}
                         className="mb-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
                     >
                         <Icon icon={Icons.back} width={18} />
-                        Kembali ke Daftar Standar
+                        Kembali ke Halaman Detail
                     </button>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                        Builder: {standard?.name}
+                        Edit Struktur: {standard?.name}
                     </h1>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         Periode: {standard?.periode_tahun} | Kategori: {standard?.category}
@@ -849,7 +930,7 @@ export default function StandardBuilder() {
                         type="text"
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
-                        placeholder="Cari isi node, tipe, atau ID seperti Algolia..."
+                        placeholder="Cari isi atau tipe poin..."
                         className="w-full rounded-2xl border border-gray-300 py-2.5 pl-10 pr-12 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                     {searchQuery && (
@@ -1001,7 +1082,6 @@ export default function StandardBuilder() {
                                     <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
                                         {getContentFormatLabel(selectedIndicatorView.type, selectedIndicatorView.content_format)}
                                     </span>
-                                    <span className="ml-2 text-xs text-gray-500">ID: #{selectedIndicatorView.id}</span>
                                 </div>
                                 <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap mb-6">
                                     {selectedIndicatorView.content_format === 'TABLE' ? (
@@ -1080,6 +1160,9 @@ export default function StandardBuilder() {
                                                 } else {
                                                     setTableForm(createDefaultTableData());
                                                 }
+                                                if (nextFormat !== 'INDICATOR') {
+                                                    setPointItems(['']);
+                                                }
                                             }}
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         >
@@ -1090,7 +1173,7 @@ export default function StandardBuilder() {
                                             ))}
                                         </select>
                                         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                            Tentukan apakah node ini akan dipakai sebagai indikator, teks panjang, atau tabel.
+                                            Pilih Poin-Poin untuk membuat daftar atau penomoran seperti di Word. Setiap Poin-Poin dapat memiliki Poin Turunan untuk numbering bertingkat. Pilih Teks Panjang untuk paragraf atau Tabel untuk data berbentuk tabel.
                                         </p>
                                     </div>
                                 )}
@@ -1098,6 +1181,18 @@ export default function StandardBuilder() {
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Format Tabel</label>
                                         <div className="mt-1 space-y-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                                    Teks Pengantar <span className="font-normal text-gray-400">(opsional)</span>
+                                                </label>
+                                                <textarea
+                                                    rows="3"
+                                                    value={tableForm.intro_text}
+                                                    onChange={(e) => setTableForm((current) => ({ ...current, intro_text: e.target.value }))}
+                                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                    placeholder="Teks yang terlihat sebelum tabel..."
+                                                ></textarea>
+                                            </div>
                                             <div className="overflow-auto rounded-xl border border-gray-300 dark:border-gray-600">
                                                 <table className="min-w-full border-collapse text-sm">
                                                     <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -1174,9 +1269,21 @@ export default function StandardBuilder() {
                                                     Tambah Baris
                                                 </button>
                                             </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300">
+                                                    Catatan Tabel <span className="font-normal text-gray-400">(opsional, terlihat di bawah tabel)</span>
+                                                </label>
+                                                <textarea
+                                                    rows="2"
+                                                    value={tableForm.table_note}
+                                                    onChange={(e) => setTableForm((current) => ({ ...current, table_note: e.target.value }))}
+                                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                    placeholder="Catatan atau sumber tabel..."
+                                                ></textarea>
+                                            </div>
                                         </div>
                                     </div>
-                                ) : (
+                                ) : formData.content_format !== 'INDICATOR' || formData.type !== 'Indicator' ? (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                             {formData.type === 'Header'
@@ -1193,6 +1300,55 @@ export default function StandardBuilder() {
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400"
                                             placeholder="Masukkan isi uraian di sini..."
                                         ></textarea>
+                                    </div>
+                                ) : null}
+                                {formData.content_format === 'INDICATOR' && (
+                                    <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4 dark:border-blue-900/60 dark:bg-blue-950/30">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <label className="block text-sm font-semibold text-blue-900 dark:text-blue-200">
+                                                    Daftar Poin
+                                                </label>
+                                                <p className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
+                                                    {formData.type === 'Indicator'
+                                                        ? 'Field pertama menjadi isi poin ini. Field berikutnya disimpan sebagai poin turunan.'
+                                                        : 'Setiap field disimpan sebagai poin bernomor di bawah node ini.'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 space-y-3">
+                                            {pointItems.map((item, index) => (
+                                                <div key={`point-item-${index}`} className="flex items-start gap-2">
+                                                    <span className="mt-2 min-w-6 text-sm font-semibold text-blue-700 dark:text-blue-300">
+                                                        {index + 1}.
+                                                    </span>
+                                                    <textarea
+                                                        rows="2"
+                                                        value={item}
+                                                        onChange={(e) => updatePointItem(index, e.target.value)}
+                                                        className="block flex-1 rounded-md border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:border-blue-800 dark:bg-gray-700 dark:text-white"
+                                                        placeholder={`Masukkan poin ${index + 1}...`}
+                                                    ></textarea>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removePointItem(index)}
+                                                        disabled={pointItems.length === 1}
+                                                        className="mt-2 text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                                        title="Hapus poin"
+                                                    >
+                                                        <Icon icon={Icons.delete} width={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={addPointItem}
+                                            className="mt-3 inline-flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+                                        >
+                                            <Icon icon={Icons.add} width={14} />
+                                            Tambah Poin
+                                        </button>
                                     </div>
                                 )}
                                 <div className="mt-5 sm:mt-6 flex space-x-3">

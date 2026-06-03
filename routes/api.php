@@ -100,6 +100,7 @@ Route::prefix('v1')->group(function () {
             
             // Sprint 5: Cloning & Publish (Multi-level Authorization)
             Route::post('/{id}/clone',          [\App\Modules\Standard\Controllers\StandardCloneController::class, 'clone']);
+            Route::post('/{id}/revise',         [\App\Modules\Standard\Controllers\StandardCloneController::class, 'revise']);
             Route::patch('/{id}/submit',        [\App\Modules\Standard\Controllers\StandardController::class, 'submit']);
             Route::patch('/{id}/submit-review', [\App\Modules\Standard\Controllers\StandardController::class, 'submitReview']);
             Route::patch('/{id}/approve',       [\App\Modules\Standard\Controllers\StandardController::class, 'approve']);

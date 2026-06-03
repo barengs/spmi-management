@@ -63,6 +63,11 @@ api.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`;
         }
 
+        if (String(config.method || 'get').toLowerCase() === 'get') {
+            config.headers['Cache-Control'] = 'no-cache';
+            config.headers.Pragma = 'no-cache';
+        }
+
         // Let the browser set multipart boundaries automatically.
         if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
             delete config.headers['Content-Type'];
@@ -73,9 +78,17 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// Response interceptor: handle 401 Unauthorized globally
+// Response interceptor: clear cached reads after successful mutations.
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        const method = response.config?.method?.toLowerCase();
+
+        if (method && method !== 'get' && method !== 'head') {
+            responseCache.clear();
+        }
+
+        return response;
+    },
     (error) => {
         const isOfflineError = !navigator.onLine || (!error.response && (error.code === 'ERR_NETWORK' || error.message === 'Network Error'));
 

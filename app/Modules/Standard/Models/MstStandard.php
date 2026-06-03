@@ -15,6 +15,11 @@ class MstStandard extends Model
 
     protected $fillable = [
         'name',
+        'standard_code',
+        'revision_number',
+        'page_count',
+        'iku_count',
+        'ikt_count',
         'category',
         'periode_tahun',
         'version_number',
@@ -65,6 +70,10 @@ class MstStandard extends Model
         return [
             'is_active' => 'boolean',
             'version_number' => 'integer',
+            'revision_number' => 'integer',
+            'page_count' => 'integer',
+            'iku_count' => 'integer',
+            'ikt_count' => 'integer',
             'imported_from_document_at' => 'datetime',
             'review_submitted_at' => 'datetime',
             'head_lpmi_approved_at' => 'datetime',

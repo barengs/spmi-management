@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'espmi-v3';
+const CACHE_VERSION = 'espmi-v5';
 const APP_SHELL_CACHE = `app-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const APP_SHELL_FILES = ['/', '/offline.html', '/manifest.webmanifest', '/favicon.ico'];
@@ -36,8 +36,19 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    // API and health-check responses must always reflect the latest server state.
+    if (url.pathname.startsWith('/api/') || url.pathname === '/up') {
+        event.respondWith(fetch(request));
+        return;
+    }
+
     if (request.mode === 'navigate') {
         event.respondWith(networkFirst(request, '/'));
+        return;
+    }
+
+    if (['script', 'style', 'worker', 'manifest'].includes(request.destination)) {
+        event.respondWith(networkFirst(request));
         return;
     }
 
@@ -59,7 +70,7 @@ async function networkFirst(request, fallbackUrl) {
             return cachedResponse;
         }
 
-        const fallbackResponse = await caches.match(fallbackUrl);
+        const fallbackResponse = fallbackUrl ? await caches.match(fallbackUrl) : null;
 
         if (fallbackResponse) {
             return fallbackResponse;

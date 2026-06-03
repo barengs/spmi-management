@@ -115,10 +115,10 @@ class MetricController extends Controller
             ], 422);
         }
 
-        if ($parent?->type === 'Indicator') {
+        if ($parent?->type === 'Indicator' && ($parent->content_format ?? $this->defaultContentFormatForType($parent->type)) !== 'INDICATOR') {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Isi tidak dapat memiliki child node.',
+                'message' => 'Isi bertipe teks panjang atau tabel tidak dapat memiliki poin turunan.',
             ], 422);
         }
 
@@ -136,6 +136,13 @@ class MetricController extends Controller
             ], 422);
         }
 
+        if ($parent?->type === 'Indicator' && $resolvedType !== 'Indicator') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Poin turunan wajib bertipe Isi.',
+            ], 422);
+        }
+
         if ($parent?->type === 'Header' && $resolvedType === 'Indicator') {
             return response()->json([
                 'status' => 'error',
@@ -147,10 +154,10 @@ class MetricController extends Controller
             return null;
         }
 
-        if ($resolvedType === 'Indicator' && $metric->children()->exists()) {
+        if ($resolvedType === 'Indicator' && $resolvedContentFormat !== 'INDICATOR' && $metric->children()->exists()) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Node yang sudah memiliki child tidak dapat diubah menjadi Isi.',
+                'message' => 'Isi yang sudah memiliki poin turunan harus tetap menggunakan bentuk konten Poin-Poin.',
             ], 422);
         }
 
@@ -165,6 +172,13 @@ class MetricController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Sub Poin hanya boleh memiliki child bertipe Isi.',
+            ], 422);
+        }
+
+        if ($resolvedType === 'Indicator' && $metric->children()->where('type', '!=', 'Indicator')->exists()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Poin-Poin hanya boleh memiliki poin turunan bertipe Isi.',
             ], 422);
         }
 

@@ -11,6 +11,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class StandardCloneController extends Controller
 {
@@ -35,6 +37,7 @@ class StandardCloneController extends Controller
     {
         $newStandard = $sourceStandard->replicate();
         $newStandard->fill($overrides);
+        $newStandard->name = Str::upper(trim((string) ($overrides['name'] ?? $sourceStandard->name)));
         $newStandard->status = 'DRAFT';
         $newStandard->approval_stage = 'DRAFT';
         $newStandard->version_number = $overrides['version_number'] ?? (($sourceStandard->version_number ?? 1));
@@ -58,7 +61,7 @@ class StandardCloneController extends Controller
         $newStandard->rector_approved_by = null;
         $newStandard->rector_approved_at = null;
         $newStandard->reject_reason = null;
-        $newStandard->is_active = true;
+        $newStandard->is_active = $overrides['is_active'] ?? true;
         $newStandard->save();
 
         $rootMetrics = MstMetric::where('standard_id', $sourceStandard->id)
@@ -170,7 +173,7 @@ class StandardCloneController extends Controller
 
                 $importedStandard = $this->cloneStandardTree($sourceStandard, [
                     'periode_tahun' => $targetPeriod,
-                    'name' => $sourceStandard->name,
+                    'name' => sprintf('%s - %d', $sourceStandard->name, $targetPeriod),
                     'category' => $sourceStandard->category,
                     'referensi_regulasi' => $sourceStandard->referensi_regulasi,
                 ]);
@@ -198,8 +201,10 @@ class StandardCloneController extends Controller
             return $denied;
         }
 
+        $request->merge(['name' => Str::upper(trim((string) $request->input('name')))]);
+
         $validator = Validator::make($request->all(), [
-            'name'          => 'required|string|max:255',
+            'name'          => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')],
             'periode_tahun' => 'required|string|max:4',
             'category'      => 'nullable|string'
         ]);
@@ -243,6 +248,63 @@ class StandardCloneController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Create a working draft from an implemented standard without changing the
+     * currently published version.
+     */
+    public function revise(Request $request, $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user || ! ($user->can('standard.create') || $user->can('standard.update'))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk merevisi standar.',
+            ], 403);
+        }
+
+        $sourceStandard = MstStandard::findOrFail($id);
+
+        if ($sourceStandard->status !== 'TERBIT') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Hanya standar yang sudah diterbitkan yang dapat dibuatkan draft revisi.',
+            ], 422);
+        }
+
+        $existingDraft = MstStandard::query()
+            ->where('previous_standard_id', $sourceStandard->id)
+            ->whereIn('status', ['DRAFT', 'REVISI', 'WAITING_APPROVAL'])
+            ->latest('id')
+            ->first();
+
+        if ($existingDraft) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Draft revisi standar sudah tersedia.',
+                'data' => $existingDraft,
+            ]);
+        }
+
+        $revisedStandard = DB::transaction(fn () => $this->cloneStandardTree($sourceStandard, [
+            'name' => sprintf(
+                '%s - REVISI V%d',
+                $sourceStandard->name,
+                (int) ($sourceStandard->version_number ?: 1) + 1
+            ),
+            'version_number' => (int) ($sourceStandard->version_number ?: 1) + 1,
+            'root_standard_id' => $sourceStandard->root_standard_id ?: $sourceStandard->id,
+            'previous_standard_id' => $sourceStandard->id,
+            'is_active' => false,
+        ]));
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Draft revisi standar berhasil dibuat.',
+            'data' => $revisedStandard,
+        ], 201);
     }
 
     /**

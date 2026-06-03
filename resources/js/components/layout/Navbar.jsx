@@ -90,7 +90,7 @@ export default function Navbar({ toggleSidebar }) {
         }
 
         if (/^\/standards\/[^/]+\/builder$/.test(path)) {
-            return ['Standar', 'Builder Struktur'];
+            return ['Standar', 'Edit Struktur'];
         }
 
         if (/^\/standards\/[^/]+\/review$/.test(path)) {

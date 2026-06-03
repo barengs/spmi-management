@@ -9,6 +9,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
@@ -46,7 +48,7 @@ class StandardDocumentImportTest extends TestCase
 
         $response = $this->post('/api/v1/standards/import', [
             'name' => 'Standar Hasil Import',
-            'category' => 'Institusi',
+            'category' => 'Tambahan',
             'periode_tahun' => 2026,
             'file' => UploadedFile::fake()->create('standar-import.pdf', 120, 'application/pdf'),
             'extracted_text' => implode("\n", [
@@ -56,6 +58,10 @@ class StandardDocumentImportTest extends TestCase
                 'B. Misi',
                 '1) Menyelenggarakan pendidikan bermutu.',
                 '2) Melaksanakan penelitian unggul.',
+                'IKU No. 9.1 Capaian pembelajaran lulusan.',
+                'IKU No. 9.2 Prestasi akademik mahasiswa.',
+                'IKU No. 9.2 Prestasi akademik mahasiswa.',
+                'IKT No. 9.1 Target institusi.',
             ]),
         ]);
 
@@ -71,6 +77,8 @@ class StandardDocumentImportTest extends TestCase
         $this->assertSame(1, MstMetric::where('type', 'Header')->count());
         $this->assertSame(2, MstMetric::where('type', 'Statement')->count());
         $this->assertSame(3, MstMetric::where('type', 'Indicator')->count());
+        $this->assertSame(2, $standard->iku_count);
+        $this->assertSame(1, $standard->ikt_count);
     }
 
     public function test_standard_document_import_can_build_tree_automatically_from_uploaded_pdf(): void
@@ -89,7 +97,7 @@ class StandardDocumentImportTest extends TestCase
 
         $response = $this->post('/api/v1/standards/import', [
             'name' => 'Standar Auto PDF',
-            'category' => 'Institusi',
+            'category' => 'Tambahan',
             'periode_tahun' => 2026,
             'file' => $uploadedFile,
         ]);
@@ -97,10 +105,55 @@ class StandardDocumentImportTest extends TestCase
         $response->assertCreated();
         $response->assertJsonPath('status', 'success');
 
-        $standard = MstStandard::where('name', 'Standar Auto PDF')->firstOrFail();
+        $standard = MstStandard::where('name', 'STANDAR AUTO PDF')->firstOrFail();
         Storage::disk('local')->assertExists($standard->source_document_path);
 
         $this->assertGreaterThan(0, MstMetric::where('standard_id', $standard->id)->count());
         $this->assertGreaterThan(0, MstMetric::where('standard_id', $standard->id)->where('type', 'Header')->count());
+    }
+
+    public function test_standard_document_import_can_build_tree_automatically_from_uploaded_docx(): void
+    {
+        Storage::fake('local');
+        $this->actingAsLpmAdmin();
+
+        $phpWord = new PhpWord();
+        $section = $phpWord->addSection();
+        $section->addText('1. Visi dan Misi');
+        $section->addText('A. Visi');
+        $section->addText('Menjadi perguruan tinggi unggul.');
+        $section->addText('B. Misi');
+        $section->addText('1) Menyelenggarakan pendidikan bermutu.');
+
+        $docxPath = tempnam(sys_get_temp_dir(), 'standard-import-') . '.docx';
+        IOFactory::createWriter($phpWord, 'Word2007')->save($docxPath);
+
+        try {
+            $uploadedFile = new UploadedFile(
+                $docxPath,
+                'standar-import.docx',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                null,
+                true
+            );
+
+            $response = $this->post('/api/v1/standards/import', [
+                'name' => 'Standar Auto DOCX',
+                'category' => 'Tambahan',
+                'periode_tahun' => 2026,
+                'file' => $uploadedFile,
+            ]);
+
+            $response->assertCreated();
+            $response->assertJsonPath('status', 'success');
+
+            $standard = MstStandard::where('name', 'STANDAR AUTO DOCX')->firstOrFail();
+            Storage::disk('local')->assertExists($standard->source_document_path);
+
+            $this->assertGreaterThan(0, MstMetric::where('standard_id', $standard->id)->count());
+            $this->assertGreaterThan(0, MstMetric::where('standard_id', $standard->id)->where('type', 'Header')->count());
+        } finally {
+            @unlink($docxPath);
+        }
     }
 }

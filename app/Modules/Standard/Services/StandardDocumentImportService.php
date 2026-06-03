@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Validation\ValidationException;
+use PhpOffice\PhpWord\IOFactory;
 
 class StandardDocumentImportService
 {
@@ -39,19 +40,40 @@ class StandardDocumentImportService
 
     public function import(MstStandard $standard, ?array $structureTree = null, ?string $extractedText = null): array
     {
+        $documentData = ['metadata' => []];
+
+        try {
+            $documentData = $this->extractFromStoredDocument($standard);
+        } catch (ValidationException $exception) {
+            if (! $structureTree && ! $extractedText) {
+                throw $exception;
+            }
+        }
+
         if (! $structureTree && ! $extractedText) {
-            ['structure_tree' => $structureTree, 'extracted_text' => $extractedText] = $this->extractFromStoredDocument($standard);
+            ['structure_tree' => $structureTree, 'extracted_text' => $extractedText] = $documentData;
+        }
+
+        if ($extractedText) {
+            $documentData['metadata'] = array_filter(
+                array_merge(
+                    $this->extractMetadataFromText($extractedText),
+                    Arr::get($documentData, 'metadata', [])
+                ),
+                fn ($value) => $value !== null
+            );
         }
 
         $nodes = $structureTree ?: $this->buildTreeFromExtractedText($extractedText);
 
         if (empty($nodes)) {
             throw ValidationException::withMessages([
-                'document' => 'Struktur standar tidak berhasil dibaca dari dokumen yang diunggah. Pastikan PDF memiliki text layer yang dapat diekstrak.',
+                'document' => 'Struktur standar tidak berhasil dibaca dari dokumen yang diunggah. Pastikan PDF memiliki text layer atau DOCX memiliki teks yang dapat diekstrak.',
             ]);
         }
 
-        return DB::transaction(function () use ($standard, $nodes) {
+        return DB::transaction(function () use ($standard, $nodes, $documentData) {
+            $standard->forceFill(Arr::get($documentData, 'metadata', []))->save();
             $standard->metrics()->delete();
 
             $created = $this->persistNodes($standard->id, $nodes);
@@ -71,11 +93,24 @@ class StandardDocumentImportService
             ]);
         }
 
+        $absolutePath = Storage::disk('local')->path($standard->source_document_path);
+        $extension = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
+
+        if ($extension === 'docx') {
+            $extractedText = $this->extractTextFromDocx($absolutePath);
+
+            return [
+                'structure_tree' => $this->buildTreeFromExtractedText($extractedText),
+                'extracted_text' => $extractedText,
+                'metadata' => $this->extractMetadataFromText($extractedText),
+            ];
+        }
+
         $process = Process::path(base_path())
             ->run([
                 'node',
                 base_path('scripts/extract-standard-pdf.mjs'),
-                Storage::disk('local')->path($standard->source_document_path),
+                $absolutePath,
             ]);
 
         if ($process->failed()) {
@@ -95,7 +130,73 @@ class StandardDocumentImportService
         return [
             'structure_tree' => Arr::get($decoded, 'structure_tree', []),
             'extracted_text' => Arr::get($decoded, 'extracted_text'),
+            'metadata' => Arr::get($decoded, 'metadata', []),
         ];
+    }
+
+    private function extractMetadataFromText(string $text): array
+    {
+        preg_match('/^Kode\s*:\s*(.+)$/imu', $text, $codeMatch);
+        preg_match('/^Revisi\s*:\s*(\d+)$/imu', $text, $revisionMatch);
+
+        return [
+            'standard_code' => filled($codeMatch[1] ?? null) ? trim($codeMatch[1]) : null,
+            'revision_number' => isset($revisionMatch[1]) ? (int) $revisionMatch[1] : null,
+            'page_count' => null,
+            'iku_count' => $this->countUniqueIndicatorCodes($text, 'IKU'),
+            'ikt_count' => $this->countUniqueIndicatorCodes($text, 'IKT'),
+        ];
+    }
+
+    private function countUniqueIndicatorCodes(string $text, string $prefix): ?int
+    {
+        preg_match_all(
+            '/\b' . preg_quote($prefix, '/') . '\s*(?:No\.?\s*)?\.?\s*\d+(?:\.\d+)+/iu',
+            $text,
+            $matches
+        );
+
+        $uniqueCodes = collect($matches[0] ?? [])
+            ->map(fn (string $value) => mb_strtoupper(preg_replace('/\s+/u', '', $value) ?? $value))
+            ->unique();
+
+        return $uniqueCodes->isEmpty() ? null : $uniqueCodes->count();
+    }
+
+    private function extractTextFromDocx(string $absolutePath): string
+    {
+        try {
+            $phpWord = IOFactory::load($absolutePath, 'Word2007');
+        } catch (\Throwable $exception) {
+            throw ValidationException::withMessages([
+                'document' => 'Dokumen DOCX gagal dibaca. Pastikan file tidak rusak dan memiliki teks yang dapat diekstrak.',
+            ]);
+        }
+
+        $lines = [];
+
+        foreach ($phpWord->getSections() as $section) {
+            $this->collectWordElementText($section->getElements(), $lines);
+        }
+
+        return trim(implode("\n", array_filter($lines, fn (string $line) => trim($line) !== '')));
+    }
+
+    private function collectWordElementText(array $elements, array &$lines): void
+    {
+        foreach ($elements as $element) {
+            if (method_exists($element, 'getText')) {
+                $text = trim((string) $element->getText());
+
+                if ($text !== '') {
+                    $lines[] = $text;
+                }
+            }
+
+            if (method_exists($element, 'getElements')) {
+                $this->collectWordElementText($element->getElements(), $lines);
+            }
+        }
     }
 
     public function buildTreeFromExtractedText(?string $text): array

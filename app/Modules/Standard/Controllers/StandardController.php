@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StandardController extends Controller
@@ -120,6 +121,13 @@ class StandardController extends Controller
         }
 
         return null;
+    }
+
+    private function canDraftStandards(Request $request): bool
+    {
+        $user = $request->user();
+
+        return (bool) ($user && ($user->can('standard.create') || $user->can('standard.update')));
     }
 
     private function denyUnlessCanAudit(Request $request, string $message): ?JsonResponse
@@ -364,6 +372,15 @@ class StandardController extends Controller
 
         $query = MstStandard::query()->with(['previousStandard:id,name,version_number,periode_tahun', 'supersededByStandard:id,name,version_number,periode_tahun']);
 
+        // Read-only users keep seeing the implemented version while a revision
+        // draft is being prepared in parallel.
+        if (! $this->canDraftStandards($request)) {
+            $query->where(function ($builder) {
+                $builder->where('is_active', true)
+                    ->orWhere('status', 'TERBIT');
+            });
+        }
+
         if ($request->has('category')) {
             $query->where('category', $request->category);
         }
@@ -390,8 +407,14 @@ class StandardController extends Controller
             return $denied;
         }
 
+        $request->merge([
+            'name' => Str::upper(trim((string) $request->input('name'))),
+            'standard_code' => Str::upper(trim((string) $request->input('standard_code'))),
+        ]);
+
         $validated = $request->validate([
-            'name'               => 'required|string|max:255',
+            'name'               => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')],
+            'standard_code'      => ['required', 'string', 'max:255', 'regex:/^SPMI\/UIM\/.+/i'],
             'category'           => 'required|in:' . $this->allowedCategories(),
             'periode_tahun'      => 'nullable|integer',
             'is_active'          => 'boolean',
@@ -422,13 +445,15 @@ class StandardController extends Controller
             ], 403);
         }
 
+        $request->merge(['name' => Str::upper(trim((string) $request->input('name')))]);
+
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')],
             'category' => 'required|in:' . $this->allowedCategories(),
             'periode_tahun' => 'nullable|integer',
             'is_active' => 'boolean',
             'referensi_regulasi' => 'nullable|string',
-            'file' => 'required|file|mimes:pdf|max:20480',
+            'file' => 'required|file|mimes:pdf,docx|max:20480',
             'structure_tree' => 'nullable',
             'extracted_text' => 'nullable|string',
         ]);
@@ -526,6 +551,20 @@ class StandardController extends Controller
             'improvements.newStandard:id,name,periode_tahun,version_number,status',
         ])->findOrFail($id);
 
+        if (
+            ! $this->canDraftStandards($request)
+            && $standard->status === 'DRAFT'
+            && $standard->previousStandard?->status === 'TERBIT'
+        ) {
+            $standard = MstStandard::with([
+                'previousStandard:id,name,version_number,periode_tahun,status',
+                'supersededByStandard:id,name,version_number,periode_tahun,status',
+                'newerVersions:id,name,periode_tahun,version_number,status,previous_standard_id',
+                'improvements.finding:id,standard_id,metric_id,status,finding_summary,created_at',
+                'improvements.newStandard:id,name,periode_tahun,version_number,status',
+            ])->findOrFail($standard->previous_standard_id);
+        }
+
         $metricIds = MstMetric::query()
             ->where('standard_id', $standard->id)
             ->pluck('id');
@@ -622,8 +661,16 @@ class StandardController extends Controller
             ], 403);
         }
 
+        if ($request->has('name')) {
+            $request->merge(['name' => Str::upper(trim((string) $request->input('name')))]);
+        }
+        if ($request->has('standard_code')) {
+            $request->merge(['standard_code' => Str::upper(trim((string) $request->input('standard_code')))]);
+        }
+
         $validated = $request->validate([
-            'name'               => 'sometimes|required|string|max:255',
+            'name'               => ['sometimes', 'required', 'string', 'max:255', Rule::unique('mst_standards', 'name')->ignore($standard->id)],
+            'standard_code'      => ['sometimes', 'required', 'string', 'max:255', 'regex:/^SPMI\/UIM\/.+/i'],
             'category'           => 'sometimes|required|in:' . $this->allowedCategories(),
             'periode_tahun'      => 'nullable|integer',
             'is_active'          => 'boolean',

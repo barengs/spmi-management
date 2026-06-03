@@ -85,4 +85,80 @@ class StandardStructureValidationTest extends TestCase
         $response->assertStatus(422);
         $response->assertJsonPath('status', 'error');
     }
+
+    public function test_poin_poin_content_can_have_nested_numbering_items(): void
+    {
+        $this->actingAsLpmAdmin();
+
+        $standard = MstStandard::create([
+            'name' => 'Standar Nested Poin',
+            'category' => 'Institusi',
+            'periode_tahun' => 2026,
+            'is_active' => true,
+            'status' => 'DRAFT',
+        ]);
+
+        $subPoint = MstMetric::create([
+            'standard_id' => $standard->id,
+            'parent_id' => null,
+            'content' => 'Daftar persyaratan',
+            'type' => 'Statement',
+            'content_format' => 'INDICATOR',
+            'order' => 1,
+        ]);
+
+        $listItem = MstMetric::create([
+            'standard_id' => $standard->id,
+            'parent_id' => $subPoint->id,
+            'content' => 'Persyaratan utama',
+            'type' => 'Indicator',
+            'content_format' => 'INDICATOR',
+            'order' => 1,
+        ]);
+
+        $response = $this->postJson('/api/v1/metrics', [
+            'standard_id' => $standard->id,
+            'parent_id' => $listItem->id,
+            'content' => 'Persyaratan turunan',
+            'type' => 'Indicator',
+            'content_format' => 'LONG_TEXT',
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.parent_id', $listItem->id);
+        $response->assertJsonPath('data.type', 'Indicator');
+    }
+
+    public function test_long_text_content_cannot_have_nested_numbering_items(): void
+    {
+        $this->actingAsLpmAdmin();
+
+        $standard = MstStandard::create([
+            'name' => 'Standar Teks Panjang',
+            'category' => 'Institusi',
+            'periode_tahun' => 2026,
+            'is_active' => true,
+            'status' => 'DRAFT',
+        ]);
+
+        $longTextItem = MstMetric::create([
+            'standard_id' => $standard->id,
+            'parent_id' => null,
+            'content' => 'Paragraf tanpa daftar turunan',
+            'type' => 'Statement',
+            'content_format' => 'LONG_TEXT',
+            'order' => 1,
+        ]);
+
+        $response = $this->postJson('/api/v1/metrics', [
+            'standard_id' => $standard->id,
+            'parent_id' => $longTextItem->id,
+            'content' => 'Poin yang tidak diperbolehkan',
+            'type' => 'Indicator',
+            'content_format' => 'LONG_TEXT',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('status', 'error');
+    }
 }

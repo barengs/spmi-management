@@ -19,6 +19,14 @@ const normalizeText = (text) => String(text || '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
+const countUniqueIndicatorCodes = (text, prefix) => {
+    const pattern = new RegExp(`\\b${prefix}\\s*(?:No\\.?\\s*)?\\.?\\s*\\d+(?:\\.\\d+)+`, 'gi');
+    const matches = String(text || '').match(pattern) || [];
+    const uniqueCodes = new Set(matches.map((value) => value.replace(/\s+/g, '').toUpperCase()));
+
+    return uniqueCodes.size || null;
+};
+
 const buildNode = (type, content) => ({
     type,
     content: String(content || '').trim(),
@@ -316,11 +324,13 @@ const extractText = async (absolutePath) => {
     }).promise;
 
     const pages = [];
+    const rawLines = [];
 
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
         const page = await pdf.getPage(pageNumber);
         const textContent = await page.getTextContent();
         const pageLines = reconstructPageLines(textContent.items);
+        rawLines.push(...pageLines);
         const pageText = pageLines.join('\n').trim();
 
         if (pageText) {
@@ -328,18 +338,32 @@ const extractText = async (absolutePath) => {
         }
     }
 
-    return cropToStandardBody(
-        pages.join('\n').split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-    ).join('\n');
+    return {
+        extractedText: cropToStandardBody(
+            pages.join('\n').split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+        ).join('\n'),
+        metadata: (() => {
+            const revisionValue = rawLines.find((line) => /^revisi\s*:/i.test(line))?.replace(/^revisi\s*:\s*/i, '').trim();
+
+            return {
+                standard_code: rawLines.find((line) => /^kode\s*:/i.test(line))?.replace(/^kode\s*:\s*/i, '').trim() || null,
+                revision_number: revisionValue !== undefined && /^\d+$/.test(revisionValue) ? Number(revisionValue) : null,
+                page_count: pdf.numPages || null,
+                iku_count: countUniqueIndicatorCodes(rawLines.join('\n'), 'IKU'),
+                ikt_count: countUniqueIndicatorCodes(rawLines.join('\n'), 'IKT'),
+            };
+        })(),
+    };
 };
 
 try {
-    const extractedText = await extractText(path.resolve(filePath));
+    const { extractedText, metadata } = await extractText(path.resolve(filePath));
     const structureTree = buildTreeFromText(extractedText);
 
     process.stdout.write(JSON.stringify({
         extracted_text: extractedText,
         structure_tree: structureTree,
+        metadata,
     }));
 } catch (error) {
     console.error(error?.message || String(error));

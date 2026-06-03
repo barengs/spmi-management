@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
@@ -332,6 +332,7 @@ const summarizeStructureTree = (nodes) => {
 };
 
 export default function StandardIndex() {
+    const navigate = useNavigate();
     const [standards, setStandards] = useState([]);
     const [pendingAuditCounts, setPendingAuditCounts] = useState({});
     const [loading, setLoading] = useState(true);
@@ -398,6 +399,7 @@ export default function StandardIndex() {
     const [isParsingImportFile, setIsParsingImportFile] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
+        standard_code: 'SPMI/UIM/',
         category: 'Tambahan',
         periode_tahun: new Date().getFullYear(),
         is_active: true,
@@ -549,6 +551,7 @@ export default function StandardIndex() {
             setCloneSourceId('');
             setFormData({
                 name: '',
+                standard_code: 'SPMI/UIM/',
                 category: 'Tambahan',
                 periode_tahun: selectedPeriod || new Date().getFullYear(),
                 is_active: true,
@@ -562,6 +565,7 @@ export default function StandardIndex() {
             setEditingStandard(standard);
             setFormData({
                 name: standard.name,
+                standard_code: standard.standard_code || 'SPMI/UIM/',
                 category: standard.category,
                 periode_tahun: standard.periode_tahun || '',
                 is_active: standard.is_active,
@@ -571,6 +575,7 @@ export default function StandardIndex() {
             setEditingStandard(null);
             setFormData({
                 name: '',
+                standard_code: 'SPMI/UIM/',
                 category: 'Tambahan',
                 periode_tahun: new Date().getFullYear(),
                 is_active: true,
@@ -591,6 +596,7 @@ export default function StandardIndex() {
         setImportSummary(null);
         setFormData({
             name: '',
+            standard_code: '',
             category: 'Tambahan',
             periode_tahun: selectedPeriod || new Date().getFullYear(),
             is_active: true,
@@ -645,6 +651,16 @@ export default function StandardIndex() {
             return;
         }
 
+        const extension = file.name.split('.').pop()?.toLowerCase();
+
+        if (extension === 'docx') {
+            setFormData((current) => ({
+                ...current,
+                name: file.name.replace(/\.[^.]+$/u, '').toUpperCase(),
+            }));
+            return;
+        }
+
         setIsParsingImportFile(true);
 
         try {
@@ -658,7 +674,7 @@ export default function StandardIndex() {
 
             setFormData((current) => ({
                 ...current,
-                name: file.name.replace(/\.[^.]+$/u, ''),
+                name: file.name.replace(/\.[^.]+$/u, '').toUpperCase(),
             }));
         } catch (error) {
             setImportExtractedText('');
@@ -706,18 +722,27 @@ export default function StandardIndex() {
 
     const handleImportSubmit = async (e) => {
         e.preventDefault();
-        if (!importFile) {
-            toast.warning('Pilih dokumen PDF standar terlebih dahulu.');
-            return;
-        }
 
-        if (!importStructureTree.length) {
+        const importExtension = importFile?.name.split('.').pop()?.toLowerCase();
+
+        if (importFile && importExtension === 'pdf' && !importStructureTree.length) {
             toast.warning('Struktur poin belum berhasil dibaca dari dokumen.');
             return;
         }
 
         setIsSubmitting(true);
         try {
+            if (!importFile) {
+                const response = await api.post('/standards', formData);
+                const createdStandard = response.data.data;
+                upsertStandard(createdStandard);
+                setSelectedPeriod(createdStandard.periode_tahun ? String(createdStandard.periode_tahun) : 'Tanpa Periode');
+                toast.success('Standar berhasil dibuat tanpa dokumen sumber.');
+                handleCloseImportModal();
+                fetchStandards();
+                return;
+            }
+
             const payload = new FormData();
             payload.append('name', formData.name);
             payload.append('category', formData.category);
@@ -725,8 +750,12 @@ export default function StandardIndex() {
             payload.append('is_active', formData.is_active ? '1' : '0');
             payload.append('referensi_regulasi', formData.referensi_regulasi || '');
             payload.append('file', importFile);
-            payload.append('extracted_text', importExtractedText);
-            payload.append('structure_tree', JSON.stringify(importStructureTree));
+            if (importExtractedText) {
+                payload.append('extracted_text', importExtractedText);
+            }
+            if (importStructureTree.length) {
+                payload.append('structure_tree', JSON.stringify(importStructureTree));
+            }
 
             const response = await api.post('/standards/import', payload, {
                 headers: {
@@ -769,6 +798,21 @@ export default function StandardIndex() {
             } catch (err) {
                 toast.error(err.response?.data?.message || 'Gagal mengajukan standar.');
             }
+        }
+    };
+
+    const handleReviseStandard = async (standard) => {
+        if (!window.confirm('Revisi standar?\n\nStandar akan dianggap sebagai draft dan harus melakukan proses seperti pada pengajuan.')) {
+            return;
+        }
+
+        try {
+            const response = await api.post(`/standards/${standard.id}/revise`);
+            const revision = response.data.data;
+            toast.success(response.data.message || 'Draft revisi standar berhasil dibuat.');
+            navigate(`/standards/${revision.id}/builder`);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Draft revisi standar gagal dibuat.');
         }
     };
 
@@ -956,8 +1000,20 @@ export default function StandardIndex() {
                             to={`/standards/${item.id}/builder`}
                             className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-700 transition hover:bg-amber-100 hover:text-amber-900"
                         >
-                            Builder
+                            Edit Struktur
                         </Link>
+                    );
+                }
+
+                if (canDraftStandards && item.status === 'TERBIT') {
+                    actionButtons.push(
+                        <button
+                            key="revise"
+                            onClick={() => handleReviseStandard(item)}
+                            className="rounded bg-amber-50 px-2 py-1 font-semibold text-amber-700 transition hover:bg-amber-100 hover:text-amber-900"
+                        >
+                            Revisi Standar
+                        </button>
                     );
                 }
 
@@ -993,7 +1049,7 @@ export default function StandardIndex() {
                 );
             }
         })
-    ], [canDraftStandards, canExportStandards, canSubmitStandards, isPimpinan]);
+    ], [canDraftStandards, canExportStandards, canSubmitStandards, isPimpinan, navigate]);
 
     const table = useReactTable({
         data: filteredStandards,
@@ -1260,10 +1316,24 @@ export default function StandardIndex() {
                                             type="text"
                                             required
                                             value={formData.name}
-                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
                                             placeholder="Contoh: Standar Kompetensi Lulusan"
                                         />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Kode Standar <span className="text-red-500">*</span></label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={formData.standard_code}
+                                            onChange={(e) => setFormData({ ...formData, standard_code: e.target.value.toUpperCase() })}
+                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
+                                            placeholder="SPMI/UIM/SMP/II/A"
+                                        />
+                                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                            Isi bagian kode setelah prefix SPMI/UIM/, contoh SMP/II/A.
+                                        </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
@@ -1357,7 +1427,7 @@ export default function StandardIndex() {
                                     Tambah Standar Mutu Baru
                                 </h3>
                                 <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 mb-5">
-                                    Lengkapi data standar dan upload dokumen PDF. Nama standar akan terisi otomatis dari nama file yang dipilih.
+                                    Lengkapi data standar. Dokumen PDF dapat diunggah jika berkas standar sudah tersedia.
                                 </div>
                                 <form onSubmit={handleImportSubmit} className="mt-5 space-y-5">
                                     <div>
@@ -1366,7 +1436,7 @@ export default function StandardIndex() {
                                             type="text"
                                             required
                                             value={formData.name}
-                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
                                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white py-2 px-3"
                                             placeholder="Akan terisi otomatis dari nama file"
                                         />
@@ -1389,17 +1459,16 @@ export default function StandardIndex() {
                                     </div>
                                     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                                         <label className="mb-1 block text-sm font-semibold text-amber-900">
-                                            Dokumen Upload <span className="text-red-500">*</span>
+                                            Dokumen Upload <span className="font-normal text-amber-700">(Opsional)</span>
                                         </label>
                                         <input
                                             type="file"
-                                            accept="application/pdf"
-                                            required
+                                            accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.docx"
                                             onChange={handleImportFileChange}
                                             className="block w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         />
                                         <div className="mt-2 text-xs text-amber-800">
-                                            Format yang didukung: PDF dengan text layer.
+                                            Unggah berkas standar yang sudah tersedia. Format yang didukung: PDF dengan text layer atau DOCX.
                                         </div>
                                     </div>
                                     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -1407,7 +1476,8 @@ export default function StandardIndex() {
                                         <div className="mt-1">
                                             {isParsingImportFile && 'Sedang membaca dokumen PDF...'}
                                             {!isParsingImportFile && importSummary && `Tree terbaca: ${importSummary.headers} header, ${importSummary.statements} pasal, ${importSummary.indicators} indikator.`}
-                                            {!isParsingImportFile && !importSummary && 'Tree poin akan muncul setelah PDF berhasil dibaca.'}
+                                            {!isParsingImportFile && importFile?.name.toLowerCase().endsWith('.docx') && 'Dokumen DOCX akan dibaca oleh server saat standar disimpan.'}
+                                            {!isParsingImportFile && !importSummary && !importFile && 'Tanpa berkas, standar akan dibuat kosong dan strukturnya dapat disusun melalui Edit Struktur.'}
                                         </div>
                                     </div>
                                     <div className="mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense pt-4 border-t border-gray-200 dark:border-gray-700">
