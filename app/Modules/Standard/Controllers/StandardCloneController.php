@@ -204,7 +204,7 @@ class StandardCloneController extends Controller
         $request->merge(['name' => Str::upper(trim((string) $request->input('name')))]);
 
         $validator = Validator::make($request->all(), [
-            'name'          => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')],
+            'name'          => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')->whereNull('deleted_at')],
             'periode_tahun' => 'required|string|max:4',
             'category'      => 'nullable|string'
         ]);

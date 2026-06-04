@@ -4,6 +4,7 @@ namespace App\Modules\Standard\Services;
 
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
+use App\Modules\Standard\Models\MstStandardIndicator;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -45,13 +46,12 @@ class StandardDocumentImportService
         try {
             $documentData = $this->extractFromStoredDocument($standard);
         } catch (ValidationException $exception) {
-            if (! $structureTree && ! $extractedText) {
-                throw $exception;
-            }
+            $documentData = ['metadata' => []];
         }
 
         if (! $structureTree && ! $extractedText) {
-            ['structure_tree' => $structureTree, 'extracted_text' => $extractedText] = $documentData;
+            $structureTree = Arr::get($documentData, 'structure_tree');
+            $extractedText = Arr::get($documentData, 'extracted_text');
         }
 
         if ($extractedText) {
@@ -67,16 +67,34 @@ class StandardDocumentImportService
         $nodes = $structureTree ?: $this->buildTreeFromExtractedText($extractedText);
 
         if (empty($nodes)) {
-            throw ValidationException::withMessages([
-                'document' => 'Struktur standar tidak berhasil dibaca dari dokumen yang diunggah. Pastikan PDF memiliki text layer atau DOCX memiliki teks yang dapat diekstrak.',
-            ]);
+            return DB::transaction(function () use ($standard) {
+                $standard->forceFill([
+                    'standard_code' => null,
+                    'document_date' => null,
+                    'revision_number' => null,
+                    'page_count' => null,
+                    'iku_count' => null,
+                    'ikt_count' => null,
+                    'indicator_entries' => null,
+                ])->save();
+                $standard->metrics()->delete();
+                $standard->indicators()->delete();
+
+                return [
+                    'root_count' => 0,
+                    'node_count' => 0,
+                    'document_only' => true,
+                ];
+            });
         }
 
         return DB::transaction(function () use ($standard, $nodes, $documentData) {
             $standard->forceFill(Arr::get($documentData, 'metadata', []))->save();
             $standard->metrics()->delete();
+            $standard->indicators()->delete();
 
             $created = $this->persistNodes($standard->id, $nodes);
+            $this->persistIndicatorEntries($standard, Arr::get($documentData, 'metadata.indicator_entries', []));
 
             return [
                 'root_count' => count($nodes),
@@ -136,54 +154,177 @@ class StandardDocumentImportService
 
     private function extractMetadataFromText(string $text): array
     {
-        preg_match('/^Kode\s*:\s*(.+)$/imu', $text, $codeMatch);
-        preg_match('/^Revisi\s*:\s*(\d+)$/imu', $text, $revisionMatch);
+        $code = $this->extractDocumentField($text, 'Kode');
+        $documentDate = $this->extractDocumentField($text, 'Tanggal');
+        $revision = $this->extractDocumentField($text, 'Revisi');
+        $pageRange = $this->extractDocumentField($text, 'Halaman');
+
+        $indicatorEntries = $this->extractIndicatorEntries($text);
 
         return [
-            'standard_code' => filled($codeMatch[1] ?? null) ? trim($codeMatch[1]) : null,
-            'revision_number' => isset($revisionMatch[1]) ? (int) $revisionMatch[1] : null,
-            'page_count' => null,
-            'iku_count' => $this->countUniqueIndicatorCodes($text, 'IKU'),
-            'ikt_count' => $this->countUniqueIndicatorCodes($text, 'IKT'),
-            'indicator_entries' => $this->extractIndicatorEntries($text),
+            'standard_code' => filled($code) ? trim($code) : null,
+            'document_date' => filled($documentDate) ? trim($documentDate) : null,
+            'revision_number' => filled($revision) && preg_match('/^\d+$/', trim($revision)) ? (int) trim($revision) : null,
+            'page_count' => $this->extractPageCount($pageRange),
+            'iku_count' => $this->countIndicatorEntries($indicatorEntries, 'IKU'),
+            'ikt_count' => $this->countIndicatorEntries($indicatorEntries, 'IKT'),
+            'indicator_entries' => $indicatorEntries,
         ];
+    }
+
+    private function extractDocumentField(string $text, string $label): ?string
+    {
+        if (! preg_match('/(?:^|\b)' . preg_quote($label, '/') . '\s*:?\s*([^\r\n]+)/imu', $text, $match)) {
+            return null;
+        }
+
+        $value = preg_replace('/^(?:kode|tanggal|revisi|halaman)\s*:?\s*/iu', '', $match[1]) ?? $match[1];
+
+        return trim($value) !== '' ? trim($value) : null;
+    }
+
+    private function extractPageCount(?string $value): ?int
+    {
+        if (! filled($value)) {
+            return null;
+        }
+
+        if (preg_match('/(\d+)\s*[-–]\s*(\d+)/u', $value, $rangeMatch)) {
+            return (int) $rangeMatch[2];
+        }
+
+        return preg_match('/\d+/u', $value, $numberMatch) ? (int) $numberMatch[0] : null;
     }
 
     private function extractIndicatorEntries(string $text): ?array
     {
-        preg_match_all(
-            '/\b(IKU|IKT)\s*(?:No\.?\s*)?\.?\s*(\d+(?:\.\d+)+)\s+([^\r\n]+)/iu',
-            $text,
-            $matches,
-            PREG_SET_ORDER
+        $searchText = $this->extractIndicatorSectionText($text);
+        $hasExplicitIndicatorSection = (bool) preg_match('/indikator\s+ketercapaian\s+standar\b/iu', $text);
+        $entries = [];
+        $seen = [];
+        $currentKey = null;
+        $pendingContent = [];
+
+        foreach (preg_split('/\R/u', $searchText) ?: [] as $line) {
+            $line = trim($line);
+
+            if ($this->shouldSkipIndicatorLine($line)) {
+                continue;
+            }
+
+            if (preg_match('/\b(IKU|IKT)[ \t]*(?:(?:No\.?)[ \t]*)?\.?[ \t]*(\d+(?:\.\d+)*)\b[ \t]*([^\r\n]*)/iu', $line, $match)) {
+                $type = mb_strtoupper($match[1]);
+                $number = trim($match[2]);
+                $content = trim($match[3] ?? '');
+                $content = $this->cleanIndicatorContentLine($content);
+                $key = $type . '|' . $number;
+                $currentKey = $key;
+
+                if (! isset($seen[$key])) {
+                    $seen[$key] = count($entries);
+                    $initialContent = trim(implode(' ', array_filter([...$pendingContent, $content])));
+                    $pendingContent = [];
+                    $entries[] = [
+                        'type' => $type,
+                        'number' => $number,
+                        'content' => $initialContent !== '' ? $initialContent : null,
+                    ];
+                    continue;
+                }
+
+                if ($content !== '') {
+                    $index = $seen[$key];
+                    $entries[$index]['content'] = trim(($entries[$index]['content'] ? $entries[$index]['content'] . ' ' : '') . $content);
+                }
+
+                continue;
+            }
+
+            if ($currentKey !== null && isset($seen[$currentKey])) {
+                $index = $seen[$currentKey];
+                $line = $this->cleanIndicatorContentLine($line);
+
+                if ($line !== '') {
+                    $entries[$index]['content'] = trim(($entries[$index]['content'] ? $entries[$index]['content'] . ' ' : '') . $line);
+                }
+                continue;
+            }
+
+            $line = $this->cleanIndicatorContentLine($line);
+            if ($hasExplicitIndicatorSection && $line !== '') {
+                $pendingContent[] = $line;
+            }
+        }
+
+        return empty($entries) ? null : array_map(
+            fn (array $entry) => [
+                'type' => $entry['type'],
+                'number' => $entry['number'],
+                'content' => filled($entry['content'] ?? null) ? $entry['content'] : null,
+            ],
+            array_values($entries)
         );
-
-        $entries = collect($matches)
-            ->map(fn (array $match) => [
-                'type' => mb_strtoupper($match[1]),
-                'number' => trim($match[2]),
-                'content' => trim($match[3]),
-            ])
-            ->unique(fn (array $entry) => $entry['type'] . '|' . $entry['number'])
-            ->values()
-            ->all();
-
-        return empty($entries) ? null : $entries;
     }
 
-    private function countUniqueIndicatorCodes(string $text, string $prefix): ?int
+    private function shouldSkipIndicatorLine(string $line): bool
     {
-        preg_match_all(
-            '/\b' . preg_quote($prefix, '/') . '\s*(?:No\.?\s*)?\.?\s*\d+(?:\.\d+)+/iu',
-            $text,
-            $matches
-        );
+        if ($line === '') {
+            return true;
+        }
 
-        $uniqueCodes = collect($matches[0] ?? [])
-            ->map(fn (string $value) => mb_strtoupper(preg_replace('/\s+/u', '', $value) ?? $value))
-            ->unique();
+        return (bool) preg_match('/^(no|sumber|indikator|no\s+sumber\s+indikator|\d+|[-–]+)$/iu', $line)
+            || (bool) preg_match('/indikator\s+ketercapaian\s+standar/iu', $line);
+    }
 
-        return $uniqueCodes->isEmpty() ? null : $uniqueCodes->count();
+    private function cleanIndicatorContentLine(string $line): string
+    {
+        $line = trim($line);
+        $line = preg_replace('/^\d+\s+/u', '', $line) ?? $line;
+
+        return trim($line);
+    }
+
+    private function extractIndicatorSectionText(string $text): string
+    {
+        if (! preg_match_all('/indikator\s+ketercapaian\s+standar\b/iu', $text, $matches, PREG_OFFSET_CAPTURE)) {
+            return $text;
+        }
+
+        foreach (array_reverse($matches[0]) as $match) {
+            $sectionText = substr($text, $match[1]);
+
+            if (! preg_match('/\b(IKU|IKT)[ \t]*(?:(?:No\.?)[ \t]*)?\.?[ \t]*\d+(?:\.\d+)*/iu', $sectionText)) {
+                continue;
+            }
+
+            if (preg_match('/\R\s*(?:\d+\.\s*)?(?:dokumen terkait|referensi)\b/iu', $sectionText, $nextMatch, PREG_OFFSET_CAPTURE, strlen($match[0]))) {
+                return substr($sectionText, 0, $nextMatch[0][1]);
+            }
+
+            return $sectionText;
+        }
+
+        return $text;
+    }
+
+    private function countIndicatorEntries(?array $entries, string $type): ?int
+    {
+        $count = collect($entries ?: [])->where('type', $type)->count();
+
+        return $count > 0 ? $count : null;
+    }
+
+    private function persistIndicatorEntries(MstStandard $standard, ?array $entries): void
+    {
+        foreach (array_values($entries ?: []) as $index => $entry) {
+            MstStandardIndicator::create([
+                'standard_id' => $standard->id,
+                'type' => $entry['type'],
+                'number' => $entry['number'],
+                'content' => $entry['content'] ?? null,
+                'order' => $index + 1,
+            ]);
+        }
     }
 
     private function extractTextFromDocx(string $absolutePath): string

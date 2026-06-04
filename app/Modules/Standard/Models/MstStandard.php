@@ -16,6 +16,7 @@ class MstStandard extends Model
     protected $fillable = [
         'name',
         'standard_code',
+        'document_date',
         'revision_number',
         'page_count',
         'iku_count',
@@ -89,6 +90,11 @@ class MstStandard extends Model
     public function metrics(): HasMany
     {
         return $this->hasMany(MstMetric::class, 'standard_id');
+    }
+
+    public function indicators(): HasMany
+    {
+        return $this->hasMany(MstStandardIndicator::class, 'standard_id')->orderBy('order');
     }
 
     public function rootStandard(): BelongsTo

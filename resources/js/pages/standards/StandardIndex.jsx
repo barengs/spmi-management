@@ -29,6 +29,11 @@ const buildNode = (type, content) => ({
     children: [],
 });
 
+const canDeleteInitialDraftStandard = (standard) => (
+    standard?.status === 'DRAFT'
+    && !standard?.previous_standard_id
+);
+
 const majorSectionPatterns = [
     /^visi dan misi$/i,
     /^rasionalisasi\b/i,
@@ -723,13 +728,6 @@ export default function StandardIndex() {
     const handleImportSubmit = async (e) => {
         e.preventDefault();
 
-        const importExtension = importFile?.name.split('.').pop()?.toLowerCase();
-
-        if (importFile && importExtension === 'pdf' && !importStructureTree.length) {
-            toast.warning('Struktur poin belum berhasil dibaca dari dokumen.');
-            return;
-        }
-
         setIsSubmitting(true);
         try {
             if (!importFile) {
@@ -1038,6 +1036,18 @@ export default function StandardIndex() {
                             className="rounded bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-900"
                         >
                             Export
+                        </button>
+                    );
+                }
+
+                if (canDraftStandards && canDeleteInitialDraftStandard(item)) {
+                    actionButtons.push(
+                        <button
+                            key="delete"
+                            onClick={() => handleDelete(item.id)}
+                            className="rounded bg-rose-50 px-2 py-1 font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-900"
+                        >
+                            Hapus
                         </button>
                     );
                 }

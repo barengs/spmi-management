@@ -107,6 +107,35 @@ class StandardRevisionTest extends TestCase
         $duplicateResponse->assertJsonValidationErrors('name');
     }
 
+    public function test_soft_deleted_standard_name_can_be_reused(): void
+    {
+        $permission = Permission::firstOrCreate(['name' => 'standard.create', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
+        $role->givePermissionTo($permission);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $deletedStandard = MstStandard::create([
+            'name' => 'STANDAR SUDAH DIHAPUS',
+            'standard_code' => 'SPMI/UIM/SMP/II/Z',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'status' => 'DRAFT',
+        ]);
+        $deletedStandard->delete();
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/v1/standards', [
+            'name' => 'Standar Sudah Dihapus',
+            'standard_code' => 'SPMI/UIM/SMP/II/Z',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.name', 'STANDAR SUDAH DIHAPUS');
+    }
+
     public function test_revision_draft_must_complete_approval_before_replacing_implemented_version(): void
     {
         $permissions = collect([
@@ -171,6 +200,135 @@ class StandardRevisionTest extends TestCase
             'id' => $revisionId,
             'is_active' => true,
             'status' => 'TERBIT',
+        ]);
+    }
+
+    public function test_initial_unimplemented_draft_with_zero_revision_can_be_deleted(): void
+    {
+        $permission = Permission::firstOrCreate(['name' => 'standard.delete', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
+        $role->givePermissionTo($permission);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $draft = MstStandard::create([
+            'name' => 'DRAFT BELUM IMPLEMENTASI',
+            'standard_code' => 'SPMI/UIM/SMP/II/D',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'revision_number' => 0,
+            'version_number' => 1,
+            'is_active' => true,
+            'status' => 'DRAFT',
+        ]);
+
+        $response = $this->actingAs($user, 'api')->deleteJson("/api/v1/standards/{$draft->id}");
+
+        $response->assertOk();
+        $this->assertSoftDeleted('mst_standards', ['id' => $draft->id]);
+    }
+
+    public function test_initial_unimplemented_draft_with_document_revision_can_be_deleted(): void
+    {
+        $permission = Permission::firstOrCreate(['name' => 'standard.delete', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
+        $role->givePermissionTo($permission);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $draft = MstStandard::create([
+            'name' => 'DRAFT IMPORT REVISI DOKUMEN',
+            'standard_code' => 'SPMI-UIM/SMI/I/A',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'revision_number' => 4,
+            'version_number' => 1,
+            'is_active' => true,
+            'status' => 'DRAFT',
+        ]);
+
+        $response = $this->actingAs($user, 'api')->deleteJson("/api/v1/standards/{$draft->id}");
+
+        $response->assertOk();
+        $this->assertSoftDeleted('mst_standards', ['id' => $draft->id]);
+    }
+
+    public function test_draft_with_dash_standard_code_can_update_active_status(): void
+    {
+        $permission = Permission::firstOrCreate(['name' => 'standard.update', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
+        $role->givePermissionTo($permission);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $draft = MstStandard::create([
+            'name' => 'DRAFT KODE DASH',
+            'standard_code' => 'SPMI-UIM/SMI/I/A',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'revision_number' => 4,
+            'version_number' => 1,
+            'is_active' => true,
+            'status' => 'DRAFT',
+        ]);
+
+        $response = $this->actingAs($user, 'api')->putJson("/api/v1/standards/{$draft->id}", [
+            'name' => $draft->name,
+            'standard_code' => $draft->standard_code,
+            'category' => $draft->category,
+            'periode_tahun' => $draft->periode_tahun,
+            'is_active' => false,
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('mst_standards', [
+            'id' => $draft->id,
+            'is_active' => false,
+        ]);
+    }
+
+    public function test_revision_draft_from_implemented_standard_cannot_be_deleted_directly(): void
+    {
+        $permission = Permission::firstOrCreate(['name' => 'standard.delete', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
+        $role->givePermissionTo($permission);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $published = MstStandard::create([
+            'name' => 'STANDAR TERBIT UNTUK REVISI',
+            'standard_code' => 'SPMI/UIM/SMP/II/E',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'revision_number' => 1,
+            'version_number' => 1,
+            'is_active' => true,
+            'status' => 'TERBIT',
+            'approval_stage' => 'FINAL',
+        ]);
+
+        $revisionDraft = MstStandard::create([
+            'name' => 'STANDAR TERBIT UNTUK REVISI REV 2',
+            'standard_code' => 'SPMI/UIM/SMP/II/E',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'revision_number' => 2,
+            'version_number' => 2,
+            'previous_standard_id' => $published->id,
+            'is_active' => false,
+            'status' => 'DRAFT',
+        ]);
+
+        $response = $this->actingAs($user, 'api')->deleteJson("/api/v1/standards/{$revisionDraft->id}");
+
+        $response->assertForbidden();
+        $this->assertDatabaseHas('mst_standards', [
+            'id' => $revisionDraft->id,
+            'deleted_at' => null,
         ]);
     }
 }

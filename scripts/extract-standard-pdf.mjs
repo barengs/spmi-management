@@ -19,34 +19,147 @@ const normalizeText = (text) => String(text || '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-const countUniqueIndicatorCodes = (text, prefix) => {
-    const pattern = new RegExp(`\\b${prefix}\\s*(?:No\\.?\\s*)?\\.?\\s*\\d+(?:\\.\\d+)+`, 'gi');
-    const matches = String(text || '').match(pattern) || [];
-    const uniqueCodes = new Set(matches.map((value) => value.replace(/\s+/g, '').toUpperCase()));
+const extractIndicatorSectionText = (text) => {
+    const source = String(text || '');
+    const matches = Array.from(source.matchAll(/indikator\s+ketercapaian\s+standar\b/gi));
 
-    return uniqueCodes.size || null;
+    if (!matches.length) {
+        return source;
+    }
+
+    for (const match of matches.reverse()) {
+        const sectionText = source.slice(match.index);
+
+        if (!/\b(IKU|IKT)[ \t]*(?:(?:No\.?)[ \t]*)?\.?[ \t]*\d+(?:\.\d+)*/i.test(sectionText)) {
+            continue;
+        }
+
+        const nextSectionMatch = sectionText.slice(match[0].length).match(/\n\s*(?:\d+\.\s*)?(?:dokumen terkait|referensi)\b/i);
+
+        if (!nextSectionMatch || nextSectionMatch.index === undefined) {
+            return sectionText;
+        }
+
+        return sectionText.slice(0, match[0].length + nextSectionMatch.index);
+    }
+
+    return source;
+};
+
+const countIndicatorEntries = (entries, type) => {
+    const count = (entries || []).filter((entry) => entry.type === type).length;
+
+    return count || null;
 };
 
 const extractIndicatorEntries = (text) => {
-    const pattern = /\b(IKU|IKT)\s*(?:No\.?\s*)?\.?\s*(\d+(?:\.\d+)+)\s+([^\r\n]+)/gi;
+    const searchText = extractIndicatorSectionText(text);
+    const hasExplicitIndicatorSection = /indikator\s+ketercapaian\s+standar\b/i.test(String(text || ''));
+    const codePattern = /\b(IKU|IKT)[ \t]*(?:(?:No\.?)[ \t]*)?\.?[ \t]*(\d+(?:\.\d+)*)\b[ \t]*([^\r\n]*)/i;
     const entries = [];
     const seen = new Set();
+    const indexByKey = new Map();
+    let currentKey = null;
+    let pendingContent = [];
 
-    for (const match of String(text || '').matchAll(pattern)) {
-        const entry = {
-            type: match[1].toUpperCase(),
-            number: match[2].trim(),
-            content: match[3].trim(),
-        };
-        const key = `${entry.type}|${entry.number}`;
+    for (const rawLine of String(searchText || '').split(/\r?\n/)) {
+        const line = rawLine.trim();
 
-        if (!seen.has(key)) {
-            seen.add(key);
-            entries.push(entry);
+        if (shouldSkipIndicatorLine(line)) {
+            continue;
+        }
+
+        const match = line.match(codePattern);
+
+        if (match) {
+            const inlineContent = cleanIndicatorContentLine(match[3]?.trim() || '');
+            const initialContent = [...pendingContent, inlineContent].filter(Boolean).join(' ').trim() || null;
+            pendingContent = [];
+
+            const entry = {
+                type: match[1].toUpperCase(),
+                number: match[2].trim(),
+                content: initialContent,
+            };
+            const key = `${entry.type}|${entry.number}`;
+            currentKey = key;
+
+            if (!seen.has(key)) {
+                seen.add(key);
+                indexByKey.set(key, entries.length);
+                entries.push(entry);
+                continue;
+            }
+
+            appendIndicatorContent(entries[indexByKey.get(key)], entry.content);
+            continue;
+        }
+
+        if (currentKey && indexByKey.has(currentKey)) {
+            appendIndicatorContent(entries[indexByKey.get(currentKey)], cleanIndicatorContentLine(line));
+            continue;
+        }
+
+        const pendingLine = cleanIndicatorContentLine(line);
+        if (hasExplicitIndicatorSection && pendingLine) {
+            pendingContent.push(pendingLine);
         }
     }
 
     return entries.length ? entries : null;
+};
+
+const shouldSkipIndicatorLine = (line) => {
+    if (!line) {
+        return true;
+    }
+
+    return /^(no|sumber|indikator|no\s+sumber\s+indikator|\d+|[-–]+)$/i.test(line)
+        || /indikator\s+ketercapaian\s+standar/i.test(line);
+};
+
+const cleanIndicatorContentLine = (line) => String(line || '')
+    .trim()
+    .replace(/^\d+\s+/u, '')
+    .trim();
+
+const appendIndicatorContent = (entry, content) => {
+    const nextContent = String(content || '').trim();
+
+    if (!entry || !nextContent) {
+        return;
+    }
+
+    entry.content = `${entry.content ? `${entry.content} ` : ''}${nextContent}`.trim();
+};
+
+const extractDocumentField = (text, label) => {
+    const pattern = new RegExp(`(?:^|\\b)${label}\\s*:?\\s*([^\\n\\r]+)`, 'i');
+    const match = String(text || '').match(pattern);
+
+    if (!match?.[1]) {
+        return null;
+    }
+
+    return match[1]
+        .replace(/^(?:kode|tanggal|revisi|halaman)\s*:?/i, '')
+        .trim() || null;
+};
+
+const extractPageCount = (value, fallback = null) => {
+    const text = String(value || '').trim();
+
+    if (!text) {
+        return fallback;
+    }
+
+    const rangeMatch = text.match(/(\d+)\s*[-–]\s*(\d+)/);
+    if (rangeMatch) {
+        return Number(rangeMatch[2]);
+    }
+
+    const numberMatch = text.match(/\d+/);
+    return numberMatch ? Number(numberMatch[0]) : fallback;
 };
 
 const buildNode = (type, content) => ({
@@ -279,7 +392,7 @@ const buildTreeFromText = (text) => {
     return tree.filter((header) => header.content || header.children.length > 0);
 };
 
-const reconstructPageLines = (items) => {
+const reconstructPageLines = (items, { skipBoilerplate = true } = {}) => {
     const textItems = items
         .filter((item) => typeof item.str === 'string' && item.str.trim() !== '')
         .map((item) => ({
@@ -335,7 +448,7 @@ const reconstructPageLines = (items) => {
 
             return line.replace(/[ \t]+/g, ' ').trim();
         })
-        .filter((line) => !shouldSkipLine(line));
+        .filter((line) => !skipBoilerplate || !shouldSkipLine(line));
 };
 
 const extractText = async (absolutePath) => {
@@ -352,7 +465,8 @@ const extractText = async (absolutePath) => {
         const page = await pdf.getPage(pageNumber);
         const textContent = await page.getTextContent();
         const pageLines = reconstructPageLines(textContent.items);
-        rawLines.push(...pageLines);
+        const metadataLines = reconstructPageLines(textContent.items, { skipBoilerplate: false });
+        rawLines.push(...metadataLines);
         const pageText = pageLines.join('\n').trim();
 
         if (pageText) {
@@ -365,15 +479,18 @@ const extractText = async (absolutePath) => {
             pages.join('\n').split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
         ).join('\n'),
         metadata: (() => {
-            const revisionValue = rawLines.find((line) => /^revisi\s*:/i.test(line))?.replace(/^revisi\s*:\s*/i, '').trim();
+            const rawText = rawLines.join('\n');
+            const revisionValue = extractDocumentField(rawText, 'revisi');
+            const indicatorEntries = extractIndicatorEntries(rawText);
 
             return {
-                standard_code: rawLines.find((line) => /^kode\s*:/i.test(line))?.replace(/^kode\s*:\s*/i, '').trim() || null,
+                standard_code: extractDocumentField(rawText, 'kode'),
+                document_date: extractDocumentField(rawText, 'tanggal'),
                 revision_number: revisionValue !== undefined && /^\d+$/.test(revisionValue) ? Number(revisionValue) : null,
-                page_count: pdf.numPages || null,
-                iku_count: countUniqueIndicatorCodes(rawLines.join('\n'), 'IKU'),
-                ikt_count: countUniqueIndicatorCodes(rawLines.join('\n'), 'IKT'),
-                indicator_entries: extractIndicatorEntries(rawLines.join('\n')),
+                page_count: extractPageCount(extractDocumentField(rawText, 'halaman'), pdf.numPages || null),
+                iku_count: countIndicatorEntries(indicatorEntries, 'IKU'),
+                ikt_count: countIndicatorEntries(indicatorEntries, 'IKT'),
+                indicator_entries: indicatorEntries,
             };
         })(),
     };

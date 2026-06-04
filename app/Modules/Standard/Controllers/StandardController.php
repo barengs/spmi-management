@@ -413,8 +413,8 @@ class StandardController extends Controller
         ]);
 
         $validated = $request->validate([
-            'name'               => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')],
-            'standard_code'      => ['required', 'string', 'max:255', 'regex:/^SPMI\/UIM\/.+/i'],
+            'name'               => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')->whereNull('deleted_at')],
+            'standard_code'      => ['required', 'string', 'max:255', 'regex:/^SPMI[\/-]UIM[\/-].+/i'],
             'category'           => 'required|in:' . $this->allowedCategories(),
             'periode_tahun'      => 'nullable|integer',
             'is_active'          => 'boolean',
@@ -448,7 +448,7 @@ class StandardController extends Controller
         $request->merge(['name' => Str::upper(trim((string) $request->input('name')))]);
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')],
+            'name' => ['required', 'string', 'max:255', Rule::unique('mst_standards', 'name')->whereNull('deleted_at')],
             'category' => 'required|in:' . $this->allowedCategories(),
             'periode_tahun' => 'nullable|integer',
             'is_active' => 'boolean',
@@ -549,6 +549,7 @@ class StandardController extends Controller
             'newerVersions:id,name,periode_tahun,version_number,status,previous_standard_id',
             'improvements.finding:id,standard_id,metric_id,status,finding_summary,created_at',
             'improvements.newStandard:id,name,periode_tahun,version_number,status',
+            'indicators:id,standard_id,type,number,content,order',
         ])->findOrFail($id);
 
         if (
@@ -562,6 +563,7 @@ class StandardController extends Controller
                 'newerVersions:id,name,periode_tahun,version_number,status,previous_standard_id',
                 'improvements.finding:id,standard_id,metric_id,status,finding_summary,created_at',
                 'improvements.newStandard:id,name,periode_tahun,version_number,status',
+                'indicators:id,standard_id,type,number,content,order',
             ])->findOrFail($standard->previous_standard_id);
         }
 
@@ -669,8 +671,8 @@ class StandardController extends Controller
         }
 
         $validated = $request->validate([
-            'name'               => ['sometimes', 'required', 'string', 'max:255', Rule::unique('mst_standards', 'name')->ignore($standard->id)],
-            'standard_code'      => ['sometimes', 'required', 'string', 'max:255', 'regex:/^SPMI\/UIM\/.+/i'],
+            'name'               => ['sometimes', 'required', 'string', 'max:255', Rule::unique('mst_standards', 'name')->whereNull('deleted_at')->ignore($standard->id)],
+            'standard_code'      => ['sometimes', 'nullable', 'string', 'max:255', 'regex:/^SPMI[\/-]UIM[\/-].+/i'],
             'category'           => 'sometimes|required|in:' . $this->allowedCategories(),
             'periode_tahun'      => 'nullable|integer',
             'is_active'          => 'boolean',
@@ -697,10 +699,13 @@ class StandardController extends Controller
 
         $standard = MstStandard::findOrFail($id);
 
-        if (in_array($standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
+        $isInitialDraft = $standard->status === 'DRAFT'
+            && ! $standard->previous_standard_id;
+
+        if (! $isInitialDraft) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Tidak dapat menghapus standar yang sedang Diajukan atau sudah Diterbitkan.'
+                'message' => 'Hanya standar DRAFT yang belum diterapkan dan bukan salinan revisi yang dapat dihapus.'
             ], 403);
         }
 

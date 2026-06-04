@@ -446,7 +446,16 @@ export default function StandardDetailPage() {
 
     const flattenedTree = useMemo(() => flattenNodes(tree), [tree]);
     const historyItems = useMemo(() => buildHistoryItems(standard), [standard]);
+    const standardIndicators = useMemo(() => {
+        if (Array.isArray(standard?.indicators) && standard.indicators.length > 0) {
+            return standard.indicators;
+        }
+
+        return Array.isArray(standard?.indicator_entries) ? standard.indicator_entries : [];
+    }, [standard]);
     const isDraft = standard?.status === 'DRAFT';
+    const canDeleteCurrentStandard = isDraft
+        && !standard?.previous_standard_id;
     const isImprovementLocked = standard?.status !== 'TERBIT';
     const improvementActionLabels = {
         REVISI: 'Perlu diperbaiki dan diterapkan lagi',
@@ -530,8 +539,8 @@ export default function StandardDetailPage() {
     };
 
     const handleDeleteStandard = async () => {
-        if (!isDraft) {
-            toast.warning('Standar hanya dapat dihapus saat status masih DRAFT.');
+        if (!canDeleteCurrentStandard) {
+            toast.warning('Hanya standar DRAFT yang belum diterapkan dan bukan salinan revisi yang dapat dihapus.');
             return;
         }
 
@@ -689,6 +698,7 @@ export default function StandardDetailPage() {
                         <section className="grid gap-4 lg:grid-cols-2">
                             <SummaryCard label="Nama Standar" value={standard.name} />
                             <SummaryCard label="Kode Standar" value={standard.standard_code || '-'} />
+                            <SummaryCard label="Tanggal Dokumen" value={standard.document_date || '-'} />
                             <SummaryCard label="Kategori" value={normalizeStandardCategory(standard.category)} />
                             <SummaryCard label="Periode Tahun" value={String(standard.periode_tahun || '-')} />
                             <SummaryCard label="Revisi Ke" value={standard.revision_number ?? '-'} />
@@ -738,11 +748,11 @@ export default function StandardDetailPage() {
                             <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
                                 <div className="text-sm font-semibold text-slate-100">Daftar Indikator IKU dan IKT</div>
                                 <div className="mt-2 text-sm leading-6 text-slate-400">
-                                    Data indikator diekstrak dari dokumen standar berdasarkan sumber seperti IKU No. 9.1 atau IKT No. 9.1.
+                                    Data indikator diekstrak dari dokumen standar berdasarkan sumber seperti IKU No. 9.1, IKT No. 9.1, IKU.05, atau IKT.01.
                                 </div>
                             </div>
 
-                            {(standard.indicator_entries || []).length > 0 ? (
+                            {standardIndicators.length > 0 ? (
                                 <div className="overflow-hidden rounded-3xl border border-slate-700 bg-slate-900">
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full border-collapse text-sm">
@@ -754,7 +764,7 @@ export default function StandardDetailPage() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {standard.indicator_entries.map((entry, index) => (
+                                                {standardIndicators.map((entry, index) => (
                                                     <tr key={`${entry.type}-${entry.number}-${index}`} className="border-b border-slate-700 last:border-b-0">
                                                         <td className="px-4 py-3 align-top">
                                                             <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
@@ -1034,7 +1044,7 @@ export default function StandardDetailPage() {
                             <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
                                 <div className="text-sm font-semibold text-slate-100">Pengaturan Standar</div>
                                 <div className="mt-2 text-sm leading-6 text-slate-400">
-                                    Edit dan hapus standar hanya tersedia saat status masih `DRAFT`.
+                                    Edit standar hanya tersedia saat status masih `DRAFT`. Hapus standar tersedia untuk draft yang belum diterapkan dan bukan salinan revisi.
                                 </div>
                             </div>
 
@@ -1124,7 +1134,7 @@ export default function StandardDetailPage() {
                                         <button
                                             type="button"
                                             onClick={handleDeleteStandard}
-                                            disabled={!isDraft || settingsSubmitting}
+                                            disabled={!canDeleteCurrentStandard || settingsSubmitting}
                                             className="rounded-full border border-rose-700 bg-rose-950/60 px-5 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-900 disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             Hapus Standar
