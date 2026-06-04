@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
+import TanStackDataTable from '../../components/ui/TanStackDataTable';
 
 const emptyForm = {
     nidn_npk: '',
@@ -211,6 +212,92 @@ export default function UserManagementPage() {
         }
     };
 
+    const userColumns = useMemo(() => [
+        {
+            accessorKey: 'name',
+            header: 'Pengguna',
+            cell: ({ row }) => (
+                <div>
+                    <div className="font-medium text-gray-900">{row.original.name}</div>
+                    <div className="mt-1 text-sm text-gray-500">{row.original.email}</div>
+                    <div className="mt-1 text-xs uppercase tracking-[0.16em] text-gray-400">
+                        {row.original.nidn_npk || 'Tanpa NIDN/NPK'}
+                    </div>
+                </div>
+            ),
+            meta: { cellClassName: 'px-6 py-4 align-top' },
+        },
+        {
+            accessorKey: 'unit.name',
+            header: 'Unit',
+            cell: ({ row }) => row.original.unit?.name || '-',
+            meta: { cellClassName: 'px-6 py-4 align-top text-sm text-gray-600' },
+        },
+        {
+            accessorKey: 'roles',
+            header: 'Role',
+            cell: ({ row }) => (
+                <div className="flex flex-wrap gap-2">
+                    {(row.original.roles || []).length > 0 ? row.original.roles.map((role) => (
+                        <span key={role.id} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            {role.name}
+                        </span>
+                    )) : (
+                        <span className="text-sm text-gray-400">Belum ada role</span>
+                    )}
+                </div>
+            ),
+            meta: { cellClassName: 'px-6 py-4 align-top' },
+        },
+        {
+            accessorKey: 'is_active',
+            header: 'Status',
+            cell: ({ row }) => (
+                <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${row.original.is_active ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {row.original.is_active ? 'Aktif' : 'Nonaktif'}
+                </span>
+            ),
+            meta: { cellClassName: 'px-6 py-4 align-top' },
+        },
+        {
+            id: 'actions',
+            header: 'Aksi',
+            meta: {
+                headerClassName: 'px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-gray-500',
+                cellClassName: 'px-6 py-4 align-top',
+            },
+            cell: ({ row }) => (
+                <div className="flex justify-end gap-2">
+                    <button
+                        type="button"
+                        onClick={() => openEditModal(row.original)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                    >
+                        <Icon icon={Icons.edit} width={14} />
+                        Edit
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => sendReset(row.original)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+                    >
+                        <Icon icon={Icons.refresh} width={14} />
+                        Reset
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => deactivateUser(row.original)}
+                        disabled={!row.original.is_active}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                        <Icon icon={Icons.delete} width={14} />
+                        Nonaktifkan
+                    </button>
+                </div>
+            ),
+        },
+    ], []);
+
     return (
         <div className="space-y-6 p-6 sm:p-8">
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -323,96 +410,17 @@ export default function UserManagementPage() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Pengguna</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Unit</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Role</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Status</th>
-                                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 bg-white">
-                            {loading && (
-                                <tr>
-                                    <td colSpan="5" className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Memuat data pengguna...
-                                    </td>
-                                </tr>
-                            )}
-
-                            {!loading && users.length === 0 && (
-                                <tr>
-                                    <td colSpan="5" className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Belum ada data pengguna yang sesuai dengan filter.
-                                    </td>
-                                </tr>
-                            )}
-
-                            {!loading && users.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-50/80">
-                                    <td className="px-6 py-4 align-top">
-                                        <div className="font-medium text-gray-900">{user.name}</div>
-                                        <div className="mt-1 text-sm text-gray-500">{user.email}</div>
-                                        <div className="mt-1 text-xs uppercase tracking-[0.16em] text-gray-400">
-                                            {user.nidn_npk || 'Tanpa NIDN/NPK'}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 align-top text-sm text-gray-600">
-                                        {user.unit?.name || '-'}
-                                    </td>
-                                    <td className="px-6 py-4 align-top">
-                                        <div className="flex flex-wrap gap-2">
-                                            {(user.roles || []).length > 0 ? user.roles.map((role) => (
-                                                <span key={role.id} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                                                    {role.name}
-                                                </span>
-                                            )) : (
-                                                <span className="text-sm text-gray-400">Belum ada role</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 align-top">
-                                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${user.is_active ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                                            {user.is_active ? 'Aktif' : 'Nonaktif'}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 align-top">
-                                        <div className="flex justify-end gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => openEditModal(user)}
-                                                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                                            >
-                                                <Icon icon={Icons.edit} width={14} />
-                                                Edit
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => sendReset(user)}
-                                                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
-                                            >
-                                                <Icon icon={Icons.refresh} width={14} />
-                                                Reset
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => deactivateUser(user)}
-                                                disabled={!user.is_active}
-                                                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
-                                            >
-                                                <Icon icon={Icons.delete} width={14} />
-                                                Nonaktifkan
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                <TanStackDataTable
+                    columns={userColumns}
+                    data={users}
+                    loading={loading}
+                    loadingMessage="Memuat data pengguna..."
+                    emptyMessage="Belum ada data pengguna yang sesuai dengan filter."
+                    page={1}
+                    pageSize={Math.max(1, users.length)}
+                    tbodyClassName="divide-y divide-gray-100 bg-white"
+                    rowClassName="hover:bg-gray-50/80"
+                />
 
                 {pagination && pagination.last_page > 1 && (
                     <div className="flex flex-col gap-3 border-t border-gray-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">

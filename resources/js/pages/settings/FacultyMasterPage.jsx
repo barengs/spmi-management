@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
-import TablePagination from '../../components/ui/TablePagination';
+import TanStackDataTable from '../../components/ui/TanStackDataTable';
 
 const emptyFacultyForm = {
     name: '',
@@ -41,14 +41,41 @@ export default function FacultyMasterPage() {
             .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'))
     ), [search, units]);
 
-    const totalPages = Math.max(1, Math.ceil(faculties.length / PAGE_SIZE));
-    const paginatedFaculties = useMemo(() => (
-        faculties.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-    ), [faculties, page]);
+    const facultyColumns = useMemo(() => [
+        {
+            accessorKey: 'name',
+            header: 'Nama Fakultas',
+            meta: { cellClassName: 'px-6 py-4 text-sm font-medium text-gray-900' },
+        },
+        {
+            accessorKey: 'code',
+            header: 'Kode',
+            cell: ({ row }) => row.original.code || '-',
+            meta: { cellClassName: 'px-6 py-4 text-sm text-gray-600' },
+        },
+        {
+            id: 'actions',
+            header: 'Aksi',
+            meta: {
+                headerClassName: 'px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500',
+                cellClassName: 'px-6 py-4 text-right',
+            },
+            cell: ({ row }) => (
+                <button
+                    type="button"
+                    onClick={() => deleteFaculty(row.original)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                >
+                    <Icon icon={Icons.delete} width={14} />
+                    Hapus
+                </button>
+            ),
+        },
+    ], []);
 
     useEffect(() => {
-        setPage((current) => Math.min(current, totalPages));
-    }, [totalPages]);
+        setPage(1);
+    }, [search]);
 
     const handleCreateFaculty = async (event) => {
         event.preventDefault();
@@ -169,55 +196,16 @@ export default function FacultyMasterPage() {
                     />
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Nama Fakultas</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Kode</th>
-                                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 bg-white">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Memuat data fakultas...
-                                    </td>
-                                </tr>
-                            ) : faculties.length === 0 ? (
-                                <tr>
-                                    <td colSpan={3} className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Belum ada data fakultas.
-                                    </td>
-                                </tr>
-                            ) : (
-                                paginatedFaculties.map((faculty) => (
-                                    <tr key={faculty.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{faculty.name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{faculty.code || '-'}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button
-                                                type="button"
-                                                onClick={() => deleteFaculty(faculty)}
-                                                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
-                                            >
-                                                <Icon icon={Icons.delete} width={14} />
-                                                Hapus
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-                <TablePagination
+                <TanStackDataTable
+                    columns={facultyColumns}
+                    data={faculties}
+                    loading={loading}
+                    loadingMessage="Memuat data fakultas..."
+                    emptyMessage="Belum ada data fakultas."
                     page={page}
-                    totalPages={totalPages}
-                    totalItems={faculties.length}
                     pageSize={PAGE_SIZE}
                     onPageChange={setPage}
+                    tbodyClassName="divide-y divide-gray-100 bg-white"
                 />
             </section>
         </div>

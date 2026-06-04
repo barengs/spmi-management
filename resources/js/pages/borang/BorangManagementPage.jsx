@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import api from '../../services/api';
 import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
-import TablePagination from '../../components/ui/TablePagination';
+import TanStackDataTable from '../../components/ui/TanStackDataTable';
 
 export default function BorangManagementPage() {
     const PAGE_SIZE = 10;
@@ -103,9 +103,41 @@ export default function BorangManagementPage() {
     ), [facultyProdiRows, pairsFacultyFilter, pairsSearch]);
 
     const pairTotalPages = Math.max(1, Math.ceil(filteredFacultyProdiRows.length / PAGE_SIZE));
-    const paginatedFacultyProdiRows = useMemo(() => (
-        filteredFacultyProdiRows.slice((pairsPage - 1) * PAGE_SIZE, pairsPage * PAGE_SIZE)
-    ), [filteredFacultyProdiRows, pairsPage]);
+    const facultyProdiColumns = useMemo(() => [
+        {
+            accessorKey: 'prodi.name',
+            header: 'Nama Prodi',
+            cell: ({ row }) => <span className="font-semibold text-gray-900">{row.original.prodi.name}</span>,
+        },
+        {
+            accessorKey: 'faculty.name',
+            header: 'Nama Fakultas',
+            cell: ({ row }) => row.original.faculty.name,
+        },
+        ...(!canManageBorang ? [{
+            accessorKey: 'schedule.standard.name',
+            header: 'Standar',
+            cell: ({ row }) => row.original.schedule?.standard?.name || '-',
+        }] : []),
+        {
+            id: 'actions',
+            header: 'Aksi',
+            meta: {
+                headerClassName: 'px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500',
+                cellClassName: 'px-6 py-4 text-right',
+            },
+            cell: ({ row }) => (
+                <button
+                    type="button"
+                    onClick={() => window.location.assign(`/borang/prodi/${row.original.prodi.id}`)}
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                >
+                    <Icon icon={Icons.eye} width={16} />
+                    {canManageBorang || isReadOnlyBorang ? 'Lihat Dokumen' : 'Lihat Checklist'}
+                </button>
+            ),
+        },
+    ], [canManageBorang, isReadOnlyBorang]);
 
     useEffect(() => {
         setPairsPage(1);
@@ -165,59 +197,13 @@ export default function BorangManagementPage() {
                     />
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Nama Prodi</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Nama Fakultas</th>
-                                {!canManageBorang && (
-                                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Standar</th>
-                                )}
-                                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={canManageBorang ? 3 : 4} className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Memuat data borang...
-                                    </td>
-                                </tr>
-                            ) : filteredFacultyProdiRows.length === 0 ? (
-                                <tr>
-                                    <td colSpan={canManageBorang ? 3 : 4} className="px-6 py-10 text-center text-sm text-gray-500">
-                                        {canManageBorang ? 'Belum ada data fakultas dan prodi.' : isReadOnlyBorang ? 'Belum ada prodi borang yang ditugaskan kepada Anda.' : 'Belum ada prodi audit yang ditugaskan kepada Anda.'}
-                                    </td>
-                                </tr>
-                            ) : (
-                                paginatedFacultyProdiRows.map(({ faculty, prodi, schedule }) => (
-                                    <tr key={schedule?.id ? `schedule-${schedule.id}` : `${faculty.id}-${prodi.id}`} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">{prodi.name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-700">{faculty.name}</td>
-                                        {!canManageBorang && (
-                                            <td className="px-6 py-4 text-sm text-gray-700">{schedule?.standard?.name || '-'}</td>
-                                        )}
-                                        <td className="px-6 py-4 text-right">
-                                            <button
-                                                type="button"
-                                                onClick={() => window.location.assign(`/borang/prodi/${prodi.id}`)}
-                                                className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
-                                            >
-                                                <Icon icon={Icons.eye} width={16} />
-                                                {canManageBorang || isReadOnlyBorang ? 'Lihat Dokumen' : 'Lihat Checklist'}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-                <TablePagination
+                <TanStackDataTable
+                    columns={facultyProdiColumns}
+                    data={filteredFacultyProdiRows}
+                    loading={loading}
+                    loadingMessage="Memuat data borang..."
+                    emptyMessage={canManageBorang ? 'Belum ada data fakultas dan prodi.' : isReadOnlyBorang ? 'Belum ada prodi borang yang ditugaskan kepada Anda.' : 'Belum ada prodi audit yang ditugaskan kepada Anda.'}
                     page={pairsPage}
-                    totalPages={pairTotalPages}
-                    totalItems={filteredFacultyProdiRows.length}
                     pageSize={PAGE_SIZE}
                     onPageChange={setPairsPage}
                 />

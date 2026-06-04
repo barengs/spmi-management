@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import api from '../../services/api';
 import { useAuth } from '../../services/authStore';
 import Icon, { Icons } from '../../components/ui/Icon';
+import TanStackDataTable from '../../components/ui/TanStackDataTable';
 
 function formatDate(value) {
     if (!value) {
@@ -97,6 +98,64 @@ export default function ReportPage() {
         auditReports.filter((item) => !selectedProdi || String(item.prodi?.id) === selectedProdi)
     ), [auditReports, selectedProdi]);
 
+    const reportColumns = useMemo(() => [
+        {
+            accessorKey: 'prodi.name',
+            header: 'Prodi',
+            cell: ({ row }) => row.original.prodi?.name || '-',
+            meta: { cellClassName: 'px-4 py-3 font-medium text-slate-900' },
+        },
+        {
+            accessorKey: 'faculty.name',
+            header: 'Fakultas',
+            cell: ({ row }) => row.original.faculty?.name || '-',
+            meta: { cellClassName: 'px-4 py-3' },
+        },
+        {
+            accessorKey: 'scheduled_start',
+            header: 'Tanggal Audit',
+            cell: ({ row }) => formatDate(row.original.scheduled_start),
+            meta: { cellClassName: 'px-4 py-3' },
+        },
+        {
+            id: 'auditor',
+            header: 'Auditor',
+            cell: ({ row }) => (
+                <div>
+                    <div>{row.original.lead_auditor?.name || '-'}</div>
+                    {row.original.auditor?.name && row.original.auditor?.name !== row.original.lead_auditor?.name && (
+                        <div className="text-xs text-slate-500">{row.original.auditor.name}</div>
+                    )}
+                </div>
+            ),
+            meta: { cellClassName: 'px-4 py-3' },
+        },
+        {
+            accessorKey: 'overall_status',
+            header: 'Status',
+            cell: ({ row }) => (
+                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getAuditScheduleStatusBadge(row.original.overall_status)}`}>
+                    {getAuditScheduleStatusLabel(row.original.overall_status)}
+                </span>
+            ),
+            meta: { cellClassName: 'px-4 py-3' },
+        },
+        {
+            id: 'actions',
+            header: 'Aksi',
+            cell: ({ row }) => (
+                <Link
+                    to={`/report/${row.original.id}`}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
+                >
+                    <Icon icon={Icons.report} width={14} />
+                    Lihat Detail
+                </Link>
+            ),
+            meta: { cellClassName: 'px-4 py-3' },
+        },
+    ], []);
+
     return (
         <div className="space-y-6 p-6 sm:p-8">
             <section className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50 p-6 shadow-sm">
@@ -129,63 +188,19 @@ export default function ReportPage() {
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-                {loading && (
-                    <div className="px-6 py-10 text-center text-sm text-slate-500">
-                        Memuat laporan audit...
-                    </div>
-                )}
-
-                {!loading && filteredReports.length === 0 && (
-                    <div className="px-6 py-10 text-center text-sm text-slate-500">
-                        Belum ada laporan audit yang sesuai dengan filter.
-                    </div>
-                )}
-
-                {!loading && filteredReports.length > 0 && (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-slate-200 text-sm">
-                            <thead className="bg-slate-50 text-slate-700">
-                                <tr>
-                                    <th className="px-4 py-3 text-left font-semibold">Prodi</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Fakultas</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Tanggal Audit</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Auditor</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Status</th>
-                                    <th className="px-4 py-3 text-left font-semibold">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
-                                {filteredReports.map((report) => (
-                                    <tr key={report.id}>
-                                        <td className="px-4 py-3 font-medium text-slate-900">{report.prodi?.name || '-'}</td>
-                                        <td className="px-4 py-3">{report.faculty?.name || '-'}</td>
-                                        <td className="px-4 py-3">{formatDate(report.scheduled_start)}</td>
-                                        <td className="px-4 py-3">
-                                            <div>{report.lead_auditor?.name || '-'}</div>
-                                            {report.auditor?.name && report.auditor?.name !== report.lead_auditor?.name && (
-                                                <div className="text-xs text-slate-500">{report.auditor.name}</div>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getAuditScheduleStatusBadge(report.overall_status)}`}>
-                                                {getAuditScheduleStatusLabel(report.overall_status)}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <Link
-                                                to={`/report/${report.id}`}
-                                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
-                                            >
-                                                <Icon icon={Icons.report} width={14} />
-                                                Lihat Detail
-                                            </Link>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+                <TanStackDataTable
+                    columns={reportColumns}
+                    data={filteredReports}
+                    loading={loading}
+                    loadingMessage="Memuat laporan audit..."
+                    emptyMessage="Belum ada laporan audit yang sesuai dengan filter."
+                    page={1}
+                    pageSize={Math.max(1, filteredReports.length)}
+                    tableClassName="min-w-full divide-y divide-slate-200 text-sm"
+                    theadClassName="bg-slate-50 text-slate-700"
+                    tbodyClassName="divide-y divide-slate-200 bg-white text-slate-700"
+                    rowClassName=""
+                />
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">

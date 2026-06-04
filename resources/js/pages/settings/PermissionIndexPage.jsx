@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
+import TanStackDataTable from '../../components/ui/TanStackDataTable';
 
 export default function PermissionIndexPage() {
     const [permissions, setPermissions] = useState([]);
@@ -40,6 +41,45 @@ export default function PermissionIndexPage() {
             return matchesModule && matchesSearch;
         });
     }, [moduleFilter, permissions, search]);
+
+    const permissionColumns = useMemo(() => [
+        {
+            accessorKey: 'label',
+            header: 'Permission',
+            cell: ({ row }) => (
+                <div>
+                    <div className="font-medium text-gray-900">{row.original.label}</div>
+                    <div className="mt-1 text-sm text-gray-500">{row.original.name}</div>
+                </div>
+            ),
+            meta: { cellClassName: 'px-6 py-4' },
+        },
+        {
+            accessorKey: 'module',
+            header: 'Modul',
+            cell: ({ row }) => row.original.module || 'lainnya',
+            meta: { cellClassName: 'px-6 py-4 text-sm text-gray-600' },
+        },
+        {
+            id: 'actions',
+            header: 'Aksi',
+            meta: {
+                headerClassName: 'px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-gray-500',
+                cellClassName: 'px-6 py-4',
+            },
+            cell: ({ row }) => (
+                <div className="flex justify-end">
+                    <Link
+                        to={`/settings/permissions/${row.original.id}/edit`}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+                    >
+                        <Icon icon={Icons.edit} width={14} />
+                        Edit
+                    </Link>
+                </div>
+            ),
+        },
+    ], []);
 
     return (
         <div className="space-y-6 p-6 sm:p-8">
@@ -96,51 +136,17 @@ export default function PermissionIndexPage() {
             </section>
 
             <section className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Permission</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Modul</th>
-                                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 bg-white">
-                            {loading && (
-                                <tr>
-                                    <td colSpan="3" className="px-6 py-10 text-center text-sm text-gray-500">Memuat data permission...</td>
-                                </tr>
-                            )}
-
-                            {!loading && filteredPermissions.length === 0 && (
-                                <tr>
-                                    <td colSpan="3" className="px-6 py-10 text-center text-sm text-gray-500">Belum ada permission yang sesuai dengan filter.</td>
-                                </tr>
-                            )}
-
-                            {!loading && filteredPermissions.map((permission) => (
-                                <tr key={permission.id} className="hover:bg-gray-50/80">
-                                    <td className="px-6 py-4">
-                                        <div className="font-medium text-gray-900">{permission.label}</div>
-                                        <div className="mt-1 text-sm text-gray-500">{permission.name}</div>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">{permission.module || 'lainnya'}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex justify-end">
-                                            <Link
-                                                to={`/settings/permissions/${permission.id}/edit`}
-                                                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-                                            >
-                                                <Icon icon={Icons.edit} width={14} />
-                                                Edit
-                                            </Link>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                <TanStackDataTable
+                    columns={permissionColumns}
+                    data={filteredPermissions}
+                    loading={loading}
+                    loadingMessage="Memuat data permission..."
+                    emptyMessage="Belum ada permission yang sesuai dengan filter."
+                    page={1}
+                    pageSize={Math.max(1, filteredPermissions.length)}
+                    tbodyClassName="divide-y divide-gray-100 bg-white"
+                    rowClassName="hover:bg-gray-50/80"
+                />
             </section>
         </div>
     );

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import Icon, { Icons } from '../../components/ui/Icon';
-import TablePagination from '../../components/ui/TablePagination';
+import TanStackDataTable from '../../components/ui/TanStackDataTable';
 
 const emptyProdiForm = {
     name: '',
@@ -52,14 +52,47 @@ export default function ProdiMasterPage() {
             .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'))
     ), [faculties, search, units]);
 
-    const totalPages = Math.max(1, Math.ceil(prodis.length / PAGE_SIZE));
-    const paginatedProdis = useMemo(() => (
-        prodis.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-    ), [page, prodis]);
+    const prodiColumns = useMemo(() => [
+        {
+            accessorKey: 'name',
+            header: 'Nama Prodi',
+            meta: { cellClassName: 'px-6 py-4 text-sm font-medium text-gray-900' },
+        },
+        {
+            accessorKey: 'faculty.name',
+            header: 'Fakultas',
+            cell: ({ row }) => row.original.faculty?.name || '-',
+            meta: { cellClassName: 'px-6 py-4 text-sm text-gray-600' },
+        },
+        {
+            accessorKey: 'code',
+            header: 'Kode',
+            cell: ({ row }) => row.original.code || '-',
+            meta: { cellClassName: 'px-6 py-4 text-sm text-gray-600' },
+        },
+        {
+            id: 'actions',
+            header: 'Aksi',
+            meta: {
+                headerClassName: 'px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500',
+                cellClassName: 'px-6 py-4 text-right',
+            },
+            cell: ({ row }) => (
+                <button
+                    type="button"
+                    onClick={() => deleteProdi(row.original)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                >
+                    <Icon icon={Icons.delete} width={14} />
+                    Hapus
+                </button>
+            ),
+        },
+    ], []);
 
     useEffect(() => {
-        setPage((current) => Math.min(current, totalPages));
-    }, [totalPages]);
+        setPage(1);
+    }, [search]);
 
     const handleCreateProdi = async (event) => {
         event.preventDefault();
@@ -201,57 +234,16 @@ export default function ProdiMasterPage() {
                     />
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Nama Prodi</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Fakultas</th>
-                                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Kode</th>
-                                <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 bg-white">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={4} className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Memuat data prodi...
-                                    </td>
-                                </tr>
-                            ) : prodis.length === 0 ? (
-                                <tr>
-                                    <td colSpan={4} className="px-6 py-10 text-center text-sm text-gray-500">
-                                        Belum ada data prodi.
-                                    </td>
-                                </tr>
-                            ) : (
-                                paginatedProdis.map((prodi) => (
-                                    <tr key={prodi.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{prodi.name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{prodi.faculty?.name || '-'}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{prodi.code || '-'}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button
-                                                type="button"
-                                                onClick={() => deleteProdi(prodi)}
-                                                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
-                                            >
-                                                <Icon icon={Icons.delete} width={14} />
-                                                Hapus
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-                <TablePagination
+                <TanStackDataTable
+                    columns={prodiColumns}
+                    data={prodis}
+                    loading={loading}
+                    loadingMessage="Memuat data prodi..."
+                    emptyMessage="Belum ada data prodi."
                     page={page}
-                    totalPages={totalPages}
-                    totalItems={prodis.length}
                     pageSize={PAGE_SIZE}
                     onPageChange={setPage}
+                    tbodyClassName="divide-y divide-gray-100 bg-white"
                 />
             </section>
         </div>
