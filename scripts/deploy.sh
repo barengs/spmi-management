@@ -23,17 +23,19 @@ need_cmd() {
 
 usage() {
     cat <<EOF
-Usage: ./scripts/deploy.sh [--pull] [--seed] [--no-build]
+Usage: ./scripts/deploy.sh [--pull] [--seed] [--seed-users] [--no-build]
 
 Options:
-  --pull      Run git pull before deploy
-  --seed      Run php artisan db:seed after app is healthy
-  --no-build  Skip docker compose build
+  --pull        Run git pull before deploy
+  --seed        Run php artisan db:seed after app is healthy
+  --seed-users  Run php artisan db:seed --class=UserOnlySeeder after app is healthy
+  --no-build    Skip docker compose build
 EOF
 }
 
 RUN_PULL=false
 RUN_SEED=false
+RUN_SEED_USERS=false
 RUN_BUILD=true
 
 while [ $# -gt 0 ]; do
@@ -43,6 +45,9 @@ while [ $# -gt 0 ]; do
             ;;
         --seed)
             RUN_SEED=true
+            ;;
+        --seed-users)
+            RUN_SEED_USERS=true
             ;;
         --no-build)
             RUN_BUILD=false
@@ -117,6 +122,11 @@ done
 if [ "$RUN_SEED" = "true" ]; then
     log "Running database seeders..."
     APP_ENV_FILE="$APP_ENV_FILE" docker compose -f "$COMPOSE_FILE" exec -T app php artisan db:seed --force
+fi
+
+if [ "$RUN_SEED_USERS" = "true" ]; then
+    log "Running user-only seeder..."
+    APP_ENV_FILE="$APP_ENV_FILE" docker compose -f "$COMPOSE_FILE" exec -T app php artisan db:seed --class=UserOnlySeeder --force
 fi
 
 log "Deployment finished."
