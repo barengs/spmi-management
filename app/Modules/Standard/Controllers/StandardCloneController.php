@@ -41,6 +41,9 @@ class StandardCloneController extends Controller
         $newStandard->status = 'DRAFT';
         $newStandard->approval_stage = 'DRAFT';
         $newStandard->version_number = $overrides['version_number'] ?? (($sourceStandard->version_number ?? 1));
+        $newStandard->revision_number = array_key_exists('revision_number', $overrides)
+            ? $overrides['revision_number']
+            : $sourceStandard->revision_number;
         $newStandard->root_standard_id = $overrides['root_standard_id'] ?? ($sourceStandard->root_standard_id ?: $sourceStandard->id);
         $newStandard->previous_standard_id = $overrides['previous_standard_id'] ?? null;
         $newStandard->superseded_by_standard_id = null;
@@ -61,7 +64,7 @@ class StandardCloneController extends Controller
         $newStandard->rector_approved_by = null;
         $newStandard->rector_approved_at = null;
         $newStandard->reject_reason = null;
-        $newStandard->is_active = $overrides['is_active'] ?? true;
+        $newStandard->is_active = $overrides['is_active'] ?? false;
         $newStandard->save();
 
         $rootMetrics = MstMetric::where('standard_id', $sourceStandard->id)
@@ -289,12 +292,8 @@ class StandardCloneController extends Controller
         }
 
         $revisedStandard = DB::transaction(fn () => $this->cloneStandardTree($sourceStandard, [
-            'name' => sprintf(
-                '%s - REVISI V%d',
-                $sourceStandard->name,
-                (int) ($sourceStandard->version_number ?: 1) + 1
-            ),
-            'version_number' => (int) ($sourceStandard->version_number ?: 1) + 1,
+            'name' => $sourceStandard->name,
+            'revision_number' => $sourceStandard->revision_number,
             'root_standard_id' => $sourceStandard->root_standard_id ?: $sourceStandard->id,
             'previous_standard_id' => $sourceStandard->id,
             'is_active' => false,

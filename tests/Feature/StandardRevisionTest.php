@@ -36,6 +36,7 @@ class StandardRevisionTest extends TestCase
             'category' => 'Tambahan',
             'periode_tahun' => 2026,
             'version_number' => 1,
+            'revision_number' => 4,
             'is_active' => true,
             'status' => 'TERBIT',
             'approval_stage' => 'FINAL',
@@ -56,7 +57,7 @@ class StandardRevisionTest extends TestCase
         $firstResponse->assertJsonPath('data.status', 'DRAFT');
         $firstResponse->assertJsonPath('data.is_active', false);
         $firstResponse->assertJsonPath('data.previous_standard_id', $published->id);
-        $firstResponse->assertJsonPath('data.version_number', 2);
+        $firstResponse->assertJsonPath('data.revision_number', 4);
 
         $draftId = $firstResponse->json('data.id');
 
@@ -154,6 +155,7 @@ class StandardRevisionTest extends TestCase
             'category' => 'Tambahan',
             'periode_tahun' => 2026,
             'version_number' => 1,
+            'revision_number' => 4,
             'is_active' => true,
             'status' => 'TERBIT',
             'approval_stage' => 'FINAL',
@@ -170,6 +172,7 @@ class StandardRevisionTest extends TestCase
         $revisionResponse = $this->actingAs($user, 'api')
             ->postJson("/api/v1/standards/{$published->id}/revise");
         $revisionId = $revisionResponse->json('data.id');
+        $revisionResponse->assertJsonPath('data.revision_number', 4);
 
         $submitResponse = $this->patchJson("/api/v1/standards/{$revisionId}/submit");
 
@@ -191,6 +194,7 @@ class StandardRevisionTest extends TestCase
         $finalResponse->assertOk();
         $finalResponse->assertJsonPath('data.status', 'TERBIT');
         $finalResponse->assertJsonPath('data.approval_stage', 'FINAL');
+        $finalResponse->assertJsonPath('data.revision_number', 5);
         $this->assertDatabaseHas('mst_standards', [
             'id' => $published->id,
             'is_active' => false,

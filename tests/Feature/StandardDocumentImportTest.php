@@ -42,7 +42,42 @@ class StandardDocumentImportTest extends TestCase
         return $user;
     }
 
-    public function test_standard_document_import_stores_uploaded_pdf_and_metric_tree(): void
+    private function actingAsPublishingAdmin(): User
+    {
+        $permissions = collect(['standard.create', 'standard.publish'])
+            ->map(fn (string $name) => Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']));
+        $role = Role::firstOrCreate(['name' => 'Publishing Admin', 'guard_name' => 'web']);
+        $role->syncPermissions($permissions);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+        $this->actingAs($user, 'api');
+
+        return $user;
+    }
+
+    private function createDocxUpload(string $name, array $lines = []): UploadedFile
+    {
+        $phpWord = new PhpWord();
+        $section = $phpWord->addSection();
+
+        foreach ($lines as $line) {
+            $section->addText($line);
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'standard-docx-fixture-') . '.docx';
+        IOFactory::createWriter($phpWord, 'Word2007')->save($path);
+
+        return new UploadedFile(
+            $path,
+            $name,
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            null,
+            true
+        );
+    }
+
+    public function test_standard_document_import_stores_uploaded_docx_and_metric_tree(): void
     {
         Storage::fake('local');
         $this->actingAsLpmAdmin();
@@ -51,7 +86,7 @@ class StandardDocumentImportTest extends TestCase
             'name' => 'Standar Hasil Import',
             'category' => 'Tambahan',
             'periode_tahun' => 2026,
-            'file' => UploadedFile::fake()->create('standar-import.pdf', 120, 'application/pdf'),
+            'file' => $this->createDocxUpload('standar-import.docx', ['Dokumen standar']),
             'extracted_text' => implode("\n", [
                 '1. Visi dan Misi',
                 'A. Visi',
@@ -100,7 +135,7 @@ class StandardDocumentImportTest extends TestCase
             'name' => 'Standar Indikator Tabel',
             'category' => 'Tambahan',
             'periode_tahun' => 2026,
-            'file' => UploadedFile::fake()->create('standar-indikator.pdf', 120, 'application/pdf'),
+            'file' => $this->createDocxUpload('standar-indikator.docx', ['Dokumen indikator']),
             'extracted_text' => implode("\n", [
                 '1. Visi dan Misi',
                 'A. Visi',
@@ -152,7 +187,7 @@ class StandardDocumentImportTest extends TestCase
             'name' => 'Standar Dokumen Tidak Terbaca',
             'category' => 'Tambahan',
             'periode_tahun' => 2026,
-            'file' => UploadedFile::fake()->create('standar-scan.pdf', 120, 'application/pdf'),
+            'file' => $this->createDocxUpload('standar-tidak-terbaca.docx'),
         ]);
 
         $response->assertCreated();
@@ -175,35 +210,21 @@ class StandardDocumentImportTest extends TestCase
         $this->assertSame(0, MstStandardIndicator::where('standard_id', $standard->id)->count());
     }
 
-    public function test_standard_document_import_can_build_tree_automatically_from_uploaded_pdf(): void
+    public function test_standard_document_import_rejects_pdf(): void
     {
         Storage::fake('local');
         $this->actingAsLpmAdmin();
 
-        $sourcePath = base_path('documents/examples/standart-1.pdf');
-        $uploadedFile = new UploadedFile(
-            $sourcePath,
-            'standart-1.pdf',
-            'application/pdf',
-            null,
-            true
-        );
-
-        $response = $this->post('/api/v1/standards/import', [
-            'name' => 'Standar Auto PDF',
+        $response = $this->postJson('/api/v1/standards/import', [
+            'name' => 'Standar PDF Ditolak',
             'category' => 'Tambahan',
             'periode_tahun' => 2026,
-            'file' => $uploadedFile,
+            'file' => UploadedFile::fake()->create('standar.pdf', 120, 'application/pdf'),
         ]);
 
-        $response->assertCreated();
-        $response->assertJsonPath('status', 'success');
-
-        $standard = MstStandard::where('name', 'STANDAR AUTO PDF')->firstOrFail();
-        Storage::disk('local')->assertExists($standard->source_document_path);
-
-        $this->assertGreaterThan(0, MstMetric::where('standard_id', $standard->id)->count());
-        $this->assertGreaterThan(0, MstMetric::where('standard_id', $standard->id)->where('type', 'Header')->count());
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('file');
+        $this->assertDatabaseMissing('mst_standards', ['name' => 'STANDAR PDF DITOLAK']);
     }
 
     public function test_standard_document_import_can_build_tree_automatically_from_uploaded_docx(): void
@@ -218,6 +239,19 @@ class StandardDocumentImportTest extends TestCase
         $section->addText('Menjadi perguruan tinggi unggul.');
         $section->addText('B. Misi');
         $section->addText('1) Menyelenggarakan pendidikan bermutu.');
+        $metadataTable = $section->addTable();
+        $metadataTable->addRow();
+        $metadataTable->addCell()->addText('Kode');
+        $metadataTable->addCell()->addText('SPMI-UIM/SMPus/IX');
+        $metadataTable->addRow();
+        $metadataTable->addCell()->addText('Tanggal');
+        $metadataTable->addCell()->addText('12 April 2022');
+        $metadataTable->addRow();
+        $metadataTable->addCell()->addText('Revisi');
+        $metadataTable->addCell()->addText('4');
+        $metadataTable->addRow();
+        $metadataTable->addCell()->addText('Halaman');
+        $metadataTable->addCell()->addText('1-15');
 
         $docxPath = tempnam(sys_get_temp_dir(), 'standard-import-') . '.docx';
         IOFactory::createWriter($phpWord, 'Word2007')->save($docxPath);
@@ -246,8 +280,118 @@ class StandardDocumentImportTest extends TestCase
 
             $this->assertGreaterThan(0, MstMetric::where('standard_id', $standard->id)->count());
             $this->assertGreaterThan(0, MstMetric::where('standard_id', $standard->id)->where('type', 'Header')->count());
+            $this->assertSame('SPMI-UIM/SMPus/IX', $standard->standard_code);
+            $this->assertSame('12 April 2022', $standard->document_date);
+            $this->assertSame(4, $standard->revision_number);
+            $this->assertSame(15, $standard->page_count);
         } finally {
             @unlink($docxPath);
         }
+    }
+
+    public function test_docx_metadata_normalizes_table_separators_and_split_code_spacing(): void
+    {
+        Storage::fake('local');
+        $this->actingAsLpmAdmin();
+
+        $response = $this->post('/api/v1/standards/import', [
+            'name' => 'Standar Metadata Terpisah',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'file' => $this->createDocxUpload('metadata.docx', ['Dokumen standar']),
+            'extracted_text' => implode("\n", [
+                'Kode | : SPMI-UIM/SMP us /I X',
+                'Tanggal | : 12 April 2022',
+                'Revisi | : 4',
+                'Halaman | : 1-15',
+                '1. Visi dan Misi',
+                'A. Visi',
+                'Menjadi perguruan tinggi unggul.',
+            ]),
+        ]);
+
+        $response->assertCreated();
+
+        $standard = MstStandard::where('name', 'STANDAR METADATA TERPISAH')->firstOrFail();
+        $this->assertSame('SPMI-UIM/SMPus/IX', $standard->standard_code);
+        $this->assertSame('12 April 2022', $standard->document_date);
+        $this->assertSame(4, $standard->revision_number);
+        $this->assertSame(15, $standard->page_count);
+    }
+
+    public function test_docx_metadata_supports_common_label_and_value_variations(): void
+    {
+        Storage::fake('local');
+        $this->actingAsLpmAdmin();
+
+        $response = $this->post('/api/v1/standards/import', [
+            'name' => 'Standar Variasi Metadata',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'file' => $this->createDocxUpload('variasi-metadata.docx', ['Dokumen standar']),
+            'extracted_text' => implode("\n", [
+                'Nomor Dokumen : SPMI / UIM / SMI / I / A',
+                'Tgl : 7 Juni 2026',
+                'Rev. : 04',
+                'Jumlah Halaman : Halaman 1 dari 21',
+                '1. Visi dan Misi',
+                'A. Visi',
+                'Menjadi perguruan tinggi unggul.',
+            ]),
+        ]);
+
+        $response->assertCreated();
+
+        $standard = MstStandard::where('name', 'STANDAR VARIASI METADATA')->firstOrFail();
+        $this->assertSame('SPMI/UIM/SMI/I/A', $standard->standard_code);
+        $this->assertSame('7 Juni 2026', $standard->document_date);
+        $this->assertSame(4, $standard->revision_number);
+        $this->assertSame(21, $standard->page_count);
+        $this->assertNull($standard->iku_count);
+        $this->assertNull($standard->ikt_count);
+    }
+
+    public function test_document_import_can_be_published_directly_by_authorized_user(): void
+    {
+        Storage::fake('local');
+        $user = $this->actingAsPublishingAdmin();
+
+        $response = $this->post('/api/v1/standards/import', [
+            'name' => 'Standar Terbit Langsung',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'initial_status' => 'TERBIT',
+            'file' => $this->createDocxUpload('terbit-langsung.docx', [
+                '1. Visi dan Misi',
+                'A. Visi',
+                'Menjadi perguruan tinggi unggul.',
+            ]),
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.status', 'TERBIT');
+        $response->assertJsonPath('data.approval_stage', 'FINAL');
+        $response->assertJsonPath('data.is_active', true);
+
+        $standard = MstStandard::where('name', 'STANDAR TERBIT LANGSUNG')->firstOrFail();
+        $this->assertSame($user->id, $standard->approved_by);
+        $this->assertNotNull($standard->rector_approved_at);
+    }
+
+    public function test_document_import_cannot_be_published_directly_without_publish_permission(): void
+    {
+        Storage::fake('local');
+        $this->actingAsLpmAdmin();
+
+        $response = $this->post('/api/v1/standards/import', [
+            'name' => 'Standar Terbit Ditolak',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'initial_status' => 'TERBIT',
+            'file' => $this->createDocxUpload('terbit-ditolak.docx', ['Dokumen standar']),
+        ]);
+
+        $response->assertForbidden();
+        $this->assertDatabaseMissing('mst_standards', ['name' => 'STANDAR TERBIT DITOLAK']);
     }
 }

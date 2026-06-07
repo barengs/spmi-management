@@ -4,12 +4,338 @@ namespace App\Modules\Standard\Services;
 
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
+use PhpOffice\PhpWord\IOFactory;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Settings;
+use PhpOffice\PhpWord\SimpleType\Jc;
+use PhpOffice\PhpWord\SimpleType\VerticalJc;
 
 class StandardExportService
 {
     private int $headerCounter = 0;
 
     private int $statementCounter = 0;
+
+    public function saveDocx(MstStandard $standard): string
+    {
+        Settings::setOutputEscapingEnabled(true);
+
+        $phpWord = new PhpWord();
+        $phpWord->setDefaultFontName('Times New Roman');
+        $phpWord->setDefaultFontSize(11);
+        $section = $phpWord->addSection([
+            'marginTop' => 1250,
+            'marginRight' => 1150,
+            'marginBottom' => 1250,
+            'marginLeft' => 1150,
+        ]);
+
+        $this->buildNativeWordDocument($section, $standard);
+
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'standard_export_');
+        if ($temporaryPath === false) {
+            throw new \RuntimeException('Gagal membuat file sementara untuk ekspor standar.');
+        }
+
+        $docxPath = $temporaryPath . '.docx';
+        @unlink($temporaryPath);
+
+        try {
+            IOFactory::createWriter($phpWord, 'Word2007')->save($docxPath);
+        } catch (\Throwable $exception) {
+            @unlink($docxPath);
+            throw $exception;
+        }
+
+        return $docxPath;
+    }
+
+    private function buildNativeWordDocument(mixed $section, MstStandard $standard): void
+    {
+        $tree = MstMetric::where('standard_id', $standard->id)
+            ->whereNull('parent_id')
+            ->orderBy('order')
+            ->with('childrenRecursive')
+            ->get();
+
+        $documentCode = $standard->standard_code ?: $this->getDocumentCode($standard);
+        $effectivePeriod = $standard->periode_tahun
+            ? sprintf('%s / %s', $standard->periode_tahun, (int) $standard->periode_tahun + 1)
+            : '-';
+        $documentDate = $standard->document_date
+            ?: $standard->rector_approved_at?->format('d F Y')
+            ?: $standard->updated_at?->format('d F Y')
+            ?: now()->format('d F Y');
+        $pageRange = $standard->page_count
+            ? '1-' . $standard->page_count
+            : '1-' . max(1, $tree->count() + 3);
+
+        $borderedTable = [
+            'borderSize' => 8,
+            'borderColor' => '000000',
+            'cellMargin' => 90,
+        ];
+        $center = ['alignment' => Jc::CENTER, 'spaceAfter' => 0];
+        $cellStyle = ['valign' => VerticalJc::CENTER];
+
+        $header = $section->addTable($borderedTable + ['width' => 100 * 50, 'unit' => 'pct']);
+        $header->addRow(1250);
+        $logoCell = $header->addCell(1700, $cellStyle);
+        $logoPath = public_path('logo-uim.png');
+        if (is_file($logoPath)) {
+            $logoCell->addImage($logoPath, [
+                'width' => 74,
+                'height' => 74,
+                'alignment' => Jc::CENTER,
+            ]);
+        } else {
+            $logoCell->addText('E-SPMI', ['bold' => true, 'size' => 12], $center);
+        }
+
+        $identityCell = $header->addCell(5000, $cellStyle);
+        $identityCell->addText('UNIVERSITAS ISLAM MADURA', ['bold' => true, 'size' => 13], $center);
+        $identityCell->addText('SISTEM PENJAMINAN MUTU INTERNAL', ['bold' => true, 'size' => 10], $center);
+        $identityCell->addText('DOKUMEN STANDAR MUTU', ['bold' => true, 'size' => 11], $center);
+
+        $controlCell = $header->addCell(3300, ['valign' => VerticalJc::CENTER, 'gridSpan' => 1]);
+        $control = $controlCell->addTable($borderedTable);
+        foreach ([
+            ['Kode', $documentCode],
+            ['Tanggal', $documentDate],
+            ['Status', (string) $standard->status],
+            ['Revisi', (string) ($standard->revision_number ?? 0)],
+            ['Halaman', $pageRange],
+        ] as [$label, $value]) {
+            $control->addRow();
+            $control->addCell(900, $cellStyle)->addText($label, ['bold' => true, 'size' => 9]);
+            $control->addCell(2100, $cellStyle)->addText((string) $value, ['size' => 9]);
+        }
+
+        $section->addTextBreak();
+        $section->addText('STANDAR SPMI', ['bold' => true, 'size' => 12], $center);
+        $section->addText(mb_strtoupper($standard->name), ['bold' => true, 'size' => 15], $center);
+        $section->addText('Periode ' . $effectivePeriod, ['size' => 11], $center);
+        $section->addTextBreak();
+
+        $this->addProcessTable($section, $borderedTable);
+
+        $section->addTextBreak();
+        $section->addText('INFORMASI DOKUMEN', ['bold' => true, 'size' => 12]);
+        $meta = $section->addTable($borderedTable);
+        foreach ([
+            ['Kategori', (string) $standard->category],
+            ['Periode', $effectivePeriod],
+            ['Nomor Dokumen', $documentCode],
+            ['Referensi Regulasi', (string) ($standard->referensi_regulasi ?: '-')],
+        ] as [$label, $value]) {
+            $meta->addRow();
+            $meta->addCell(2500, $cellStyle)->addText($label, ['bold' => true]);
+            $meta->addCell(7000, $cellStyle)->addText((string) $value);
+        }
+
+        $section->addTextBreak();
+        $section->addText('ISI DOKUMEN', ['bold' => true, 'size' => 12]);
+        $this->headerCounter = 0;
+        $this->statementCounter = 0;
+        if ($tree->isEmpty()) {
+            $section->addText('-');
+        } else {
+            $this->renderNativeTree($section, $tree->all());
+        }
+
+        $section->addTextBreak();
+        $this->addApprovalTable($section, $standard, $borderedTable);
+        $section->addTextBreak();
+        $section->addText(
+            'Dokumen ini dibangun dari data standar terbaru di sistem. Perubahan pada informasi dan struktur standar tercermin pada hasil ekspor.',
+            ['italic' => true, 'size' => 9],
+            ['alignment' => Jc::BOTH]
+        );
+    }
+
+    private function addProcessTable(mixed $section, array $tableStyle): void
+    {
+        $table = $section->addTable($tableStyle);
+        $headers = ['Proses', 'Penanggung Jawab', 'Jabatan', 'Tanda Tangan'];
+        $table->addRow();
+        foreach ($headers as $header) {
+            $table->addCell(2400, ['bgColor' => 'D9E2F3', 'valign' => VerticalJc::CENTER])
+                ->addText($header, ['bold' => true], ['alignment' => Jc::CENTER]);
+        }
+
+        foreach ([
+            ['Perumusan', 'Tim Perumus', 'Perumus Standar'],
+            ['Pemeriksaan', 'Tim Pemeriksa', 'Pemeriksa Standar'],
+            ['Persetujuan', 'Pimpinan Unit', 'Pemberi Persetujuan'],
+            ['Penetapan', 'Rektor', 'Penetap Standar'],
+        ] as $row) {
+            $table->addRow(750);
+            foreach ($row as $value) {
+                $table->addCell(2400, ['valign' => VerticalJc::CENTER])->addText($value);
+            }
+            $table->addCell(2400, ['valign' => VerticalJc::CENTER])->addText('');
+        }
+    }
+
+    /**
+     * @param array<int, MstMetric> $nodes
+     */
+    private function renderNativeTree(mixed $section, array $nodes, int $depth = 0): void
+    {
+        foreach ($nodes as $node) {
+            $prefix = '';
+            $fontStyle = ['size' => 11];
+
+            if ($node->type === 'Header') {
+                $prefix = ++$this->headerCounter . '. ';
+                $this->statementCounter = 0;
+                $fontStyle['bold'] = true;
+            } elseif ($node->type === 'Statement') {
+                $prefix = $this->toAlpha(++$this->statementCounter) . '. ';
+                $fontStyle['bold'] = true;
+            }
+
+            $paragraphStyle = [
+                'alignment' => Jc::BOTH,
+                'indentation' => ['left' => $depth * 360],
+                'spaceAfter' => 100,
+            ];
+            $nodeContent = $this->stripExistingNodePrefix((string) $node->content, (string) $node->type);
+
+            if (($node->content_format ?? null) === 'TABLE') {
+                if ($prefix !== '') {
+                    $section->addText($prefix, $fontStyle, $paragraphStyle);
+                }
+                $this->addStructuredTable($section, (string) $node->content, $depth);
+            } else {
+                $section->addText($prefix . $nodeContent, $fontStyle, $paragraphStyle);
+            }
+
+            if ($node->childrenRecursive->isNotEmpty()) {
+                $this->renderNativeTree($section, $node->childrenRecursive->all(), $depth + 1);
+            }
+        }
+    }
+
+    private function stripExistingNodePrefix(string $content, string $type): string
+    {
+        return match ($type) {
+            'Header' => preg_replace('/^\s*\d+\s*[.)]\s*/u', '', $content) ?? $content,
+            'Statement' => preg_replace('/^\s*[a-z]\s*[.)]\s*/iu', '', $content) ?? $content,
+            default => $content,
+        };
+    }
+
+    private function addStructuredTable(mixed $section, string $content, int $depth): void
+    {
+        $tableData = $this->parseStructuredTable($content);
+        $indent = $depth * 360;
+
+        if ($tableData['intro_text'] !== '') {
+            $section->addText(
+                $tableData['intro_text'],
+                [],
+                ['alignment' => Jc::BOTH, 'indentation' => ['left' => $indent], 'spaceAfter' => 100]
+            );
+        }
+
+        $table = $section->addTable([
+            'borderSize' => 8,
+            'borderColor' => '000000',
+            'cellMargin' => 90,
+        ]);
+        $columnCount = max(1, count($tableData['headers']));
+        $cellWidth = (int) floor(9500 / $columnCount);
+
+        $table->addRow();
+        foreach ($tableData['headers'] as $header) {
+            $table->addCell($cellWidth, ['bgColor' => 'D9E2F3', 'valign' => VerticalJc::CENTER])
+                ->addText($header ?: '-', ['bold' => true], ['alignment' => Jc::CENTER]);
+        }
+
+        foreach ($tableData['rows'] as $row) {
+            $table->addRow();
+            foreach ($tableData['headers'] as $index => $_header) {
+                $table->addCell($cellWidth, ['valign' => VerticalJc::CENTER])
+                    ->addText((string) ($row[$index] ?? '-'));
+            }
+        }
+
+        if ($tableData['table_note'] !== '') {
+            $section->addText(
+                $tableData['table_note'],
+                ['italic' => true, 'size' => 9],
+                ['indentation' => ['left' => $indent], 'spaceBefore' => 80, 'spaceAfter' => 100]
+            );
+        }
+    }
+
+    /**
+     * @return array{intro_text: string, table_note: string, headers: array<int, string>, rows: array<int, array<int, string>>}
+     */
+    private function parseStructuredTable(string $content): array
+    {
+        $decoded = json_decode($content, true);
+        if (! is_array($decoded)) {
+            return [
+                'intro_text' => '',
+                'table_note' => '',
+                'headers' => ['Kolom 1'],
+                'rows' => [[$content]],
+            ];
+        }
+
+        if (($decoded['kind'] ?? null) === 'SINGLE_COLUMN_TABLE') {
+            return [
+                'intro_text' => '',
+                'table_note' => '',
+                'headers' => [(string) ($decoded['column_name'] ?? 'Kolom 1')],
+                'rows' => [[(string) ($decoded['value'] ?? '')]],
+            ];
+        }
+
+        $headers = array_values(array_map(
+            fn (mixed $value): string => (string) $value,
+            is_array($decoded['headers'] ?? null) && $decoded['headers'] !== [] ? $decoded['headers'] : ['Kolom 1']
+        ));
+        $rows = [];
+        foreach (is_array($decoded['rows'] ?? null) ? $decoded['rows'] : [] as $row) {
+            $row = is_array($row) ? $row : [$row];
+            $rows[] = array_map(
+                fn (int $index): string => (string) ($row[$index] ?? ''),
+                array_keys($headers)
+            );
+        }
+
+        return [
+            'intro_text' => (string) ($decoded['intro_text'] ?? ''),
+            'table_note' => (string) ($decoded['table_note'] ?? ''),
+            'headers' => $headers,
+            'rows' => $rows !== [] ? $rows : [array_fill(0, count($headers), '')],
+        ];
+    }
+
+    private function addApprovalTable(mixed $section, MstStandard $standard, array $tableStyle): void
+    {
+        $section->addText('TABEL PERSETUJUAN', ['bold' => true, 'size' => 12]);
+        $table = $section->addTable($tableStyle);
+        $table->addRow();
+        foreach (['Peran', 'Disetujui Pada', 'Tanda Tangan'] as $header) {
+            $table->addCell(3200, ['bgColor' => 'D9E2F3', 'valign' => VerticalJc::CENTER])
+                ->addText($header, ['bold' => true], ['alignment' => Jc::CENTER]);
+        }
+
+        foreach ([
+            ['Kepala LPMI', $standard->head_lpmi_approved_at?->format('d F Y H:i')],
+            $this->getWrApprovalRow($standard),
+            ['Rektor', $standard->rector_approved_at?->format('d F Y H:i')],
+        ] as [$role, $approvedAt]) {
+            $table->addRow(750);
+            $table->addCell(3200, ['valign' => VerticalJc::CENTER])->addText($role);
+            $table->addCell(3200, ['valign' => VerticalJc::CENTER])->addText($approvedAt ?: '-');
+            $table->addCell(3200, ['valign' => VerticalJc::CENTER])->addText('');
+        }
+    }
 
     private function getTemplateFamily(MstStandard $standard): string
     {
@@ -108,8 +434,7 @@ class StandardExportService
         $effectivePeriod = $standard->periode_tahun
             ? sprintf('%s / %s', $standard->periode_tahun, (int) $standard->periode_tahun + 1)
             : '-';
-        $versionNumber = $standard->version_number ?: 1;
-        $revisionNumber = max(0, $versionNumber - 1);
+        $revisionNumber = $standard->revision_number ?? 0;
         $documentDate = $standard->rector_approved_at?->format('d F Y')
             ?: $standard->updated_at?->format('d F Y')
             ?: now()->format('d F Y');
@@ -176,10 +501,6 @@ class StandardExportService
                     <tr>
                         <td class="label">Kode</td>
                         <td>{$this->escape($documentCode)}</td>
-                    </tr>
-                    <tr>
-                        <td class="label">Versi</td>
-                        <td>v{$this->escape((string) $versionNumber)}</td>
                     </tr>
                     <tr>
                         <td class="label">Tanggal</td>
@@ -267,7 +588,7 @@ class StandardExportService
     </table>
 
     <p class="approval-notes">
-        Catatan: jika standar berasal dari impor dokumen atau telah memiliki dokumen sumber terunggah, sistem akan mengunduh file sumber asli. Template ini digunakan khusus untuk standar yang disusun manual di dalam sistem.
+        Catatan: dokumen ini dibangun dari data standar terbaru di sistem. Perubahan pada informasi dan struktur standar akan tercermin pada setiap hasil ekspor.
     </p>
 
     <p class="closing">

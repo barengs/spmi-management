@@ -308,8 +308,8 @@ export default function StandardDetailPage() {
     const [tree, setTree] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('information');
-    const [documentBlobUrl, setDocumentBlobUrl] = useState(null);
-    const [documentLoading, setDocumentLoading] = useState(false);
+    const [documentPreviewUrl, setDocumentPreviewUrl] = useState(null);
+    const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
     const [settingsSubmitting, setSettingsSubmitting] = useState(false);
     const [improvementLoading, setImprovementLoading] = useState(false);
     const [improvementSubmitting, setImprovementSubmitting] = useState(false);
@@ -359,61 +359,43 @@ export default function StandardDetailPage() {
     }, [id]);
 
     useEffect(() => {
-        if (!standard?.source_document_path) {
-            setDocumentBlobUrl((current) => {
-                if (current) {
-                    URL.revokeObjectURL(current);
-                }
-
-                return null;
-            });
-            setDocumentLoading(false);
+        if (activeTab !== 'document' || !standard?.id) {
             return undefined;
         }
 
-        let isMounted = true;
-        let nextBlobUrl = null;
+        let mounted = true;
+        let createdUrl = null;
 
-        const fetchDocument = async () => {
+        const loadPreview = async () => {
             try {
-                setDocumentLoading(true);
-                const response = await api.get(`/standards/${standard.id}/source-document/download`, {
+                setDocumentPreviewLoading(true);
+                const response = await api.get(`/standards/${standard.id}/preview`, {
                     responseType: 'blob',
                 });
 
-                if (!isMounted) {
-                    return;
-                }
+                if (!mounted) return;
 
-                nextBlobUrl = window.URL.createObjectURL(response.data);
-                setDocumentBlobUrl((current) => {
-                    if (current) {
-                        window.URL.revokeObjectURL(current);
-                    }
-
-                    return nextBlobUrl;
+                createdUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+                setDocumentPreviewUrl((current) => {
+                    if (current) window.URL.revokeObjectURL(current);
+                    return createdUrl;
                 });
             } catch (error) {
-                if (isMounted) {
-                    toast.error(error.response?.data?.message || 'Dokumen sumber gagal dimuat.');
+                if (mounted) {
+                    toast.error(error.response?.data?.message || 'Preview PDF gagal dimuat.');
                 }
             } finally {
-                if (isMounted) {
-                    setDocumentLoading(false);
-                }
+                if (mounted) setDocumentPreviewLoading(false);
             }
         };
 
-        fetchDocument();
+        loadPreview();
 
         return () => {
-            isMounted = false;
-
-            if (nextBlobUrl) {
-                window.URL.revokeObjectURL(nextBlobUrl);
-            }
+            mounted = false;
+            if (createdUrl) window.URL.revokeObjectURL(createdUrl);
         };
-    }, [standard?.id, standard?.source_document_path]);
+    }, [activeTab, standard?.id, tree]);
 
     useEffect(() => {
         if (activeTab !== 'improvement') {
@@ -475,11 +457,9 @@ export default function StandardDetailPage() {
             const contentType = response.headers['content-type'] || 'application/octet-stream';
             const contentDisposition = response.headers['content-disposition'] || '';
             const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
-            const fallbackExtension = contentType.includes('pdf')
-                ? 'pdf'
-                : contentType.includes('word') || contentType.includes('msword')
-                    ? 'doc'
-                    : 'bin';
+            const fallbackExtension = contentType.includes('wordprocessingml')
+                ? 'docx'
+                : 'bin';
             const fileName = fileNameMatch?.[1]
                 || `${(standard.name || 'standar').replace(/[\\/:*?"<>|]+/g, '-')}-${standard.periode_tahun || 'tanpa-periode'}.${fallbackExtension}`;
             const blob = new Blob([response.data], { type: contentType });
@@ -651,7 +631,7 @@ export default function StandardDetailPage() {
                             Revisi Standar
                         </button>
                     )}
-                    {canExportStandard && standard.status === 'TERBIT' && (
+                    {canExportStandard && (standard.status === 'TERBIT' || canDraftStandard) && (
                         <button
                             type="button"
                             onClick={handleExport}
@@ -795,13 +775,13 @@ export default function StandardDetailPage() {
                         <section className="space-y-6">
                             {(standard.previous_standard || (standard.newer_versions || []).length > 0 || (standard.improvements || []).length > 0) && (
                                 <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
-                                    <div className="text-sm font-semibold text-slate-100">Riwayat Versi dan Peningkatan</div>
+                                    <div className="text-sm font-semibold text-slate-100">Riwayat Revisi dan Peningkatan</div>
                                     <div className="mt-3 space-y-3 text-sm text-slate-300">
                                         {standard.previous_standard ? (
-                                            <div>Versi sebelumnya: {standard.previous_standard.name} (v{standard.previous_standard.version_number || 1})</div>
+                                            <div>Revisi sebelumnya: {standard.previous_standard.name} (revisi {standard.previous_standard.revision_number ?? 0})</div>
                                         ) : null}
                                         {(standard.newer_versions || []).map((item) => (
-                                            <div key={item.id}>Versi lanjutan: {item.name} (v{item.version_number || 1}) • periode {item.periode_tahun || '-'}</div>
+                                            <div key={item.id}>Revisi lanjutan: {item.name} (revisi {item.revision_number ?? '-'}) • periode {item.periode_tahun || '-'}</div>
                                         ))}
                                         {(standard.improvements || []).map((item) => (
                                             <div key={item.id}>
@@ -850,42 +830,35 @@ export default function StandardDetailPage() {
                                                     {standard.source_document_original_name || 'Dokumen sumber'}
                                                 </div>
                                                 <div className="mt-1 text-sm text-slate-400">
-                                                    Dokumen asli yang diunggah saat import standar ditampilkan langsung di bawah ini.
+                                                    Preview di bawah menampilkan isi standar terbaru yang tersimpan di sistem.
                                                 </div>
                                             </div>
-                                            <a
-                                                href={documentBlobUrl || '#'}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                download={standard.source_document_original_name || 'dokumen-standar.pdf'}
-                                                onClick={(event) => {
-                                                    if (!documentBlobUrl) {
-                                                        event.preventDefault();
-                                                    }
-                                                }}
+                                            <button
+                                                type="button"
+                                                onClick={handleExport}
                                                 className="inline-flex items-center gap-2 rounded-full border border-slate-600 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-emerald-400 hover:text-emerald-300"
                                             >
                                                 <Icon icon={Icons.document} width={14} />
-                                                Unduh Dokumen
-                                            </a>
+                                                Unduh DOCX Terbaru
+                                            </button>
                                         </div>
                                     </div>
 
-                                    {documentLoading ? (
-                                        <div className="rounded-3xl border border-slate-700 bg-slate-900 px-6 py-10 text-center text-sm text-slate-400">
-                                            Memuat dokumen sumber...
+                                    {documentPreviewLoading ? (
+                                        <div className="rounded-3xl border border-slate-700 bg-slate-900 px-6 py-12 text-center text-sm text-slate-400">
+                                            Membuat preview PDF terbaru...
                                         </div>
-                                    ) : documentBlobUrl ? (
-                                        <div className="overflow-hidden rounded-3xl border border-slate-700 bg-slate-900">
+                                    ) : documentPreviewUrl ? (
+                                        <div className="overflow-hidden rounded-3xl border border-slate-700 bg-slate-950">
                                             <iframe
-                                                title={standard.source_document_original_name || 'Dokumen standar'}
-                                                src={documentBlobUrl}
-                                                className="h-[70vh] w-full bg-white"
+                                                title={`Preview PDF ${standard.name}`}
+                                                src={documentPreviewUrl}
+                                                className="h-[78vh] min-h-[720px] w-full bg-slate-200"
                                             />
                                         </div>
                                     ) : (
-                                        <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-900 px-6 py-10 text-center text-sm text-slate-400">
-                                            Preview dokumen belum tersedia.
+                                        <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-900 px-6 py-12 text-center text-sm text-slate-400">
+                                            Preview PDF belum tersedia.
                                         </div>
                                     )}
                                 </>

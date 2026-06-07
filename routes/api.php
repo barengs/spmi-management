@@ -93,6 +93,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/cycle-import/candidates', [\App\Modules\Standard\Controllers\StandardCloneController::class, 'cycleImportCandidates']);
             Route::post('/cycle-import',       [\App\Modules\Standard\Controllers\StandardCloneController::class, 'cycleImport']);
             Route::get('/{id}',                 [\App\Modules\Standard\Controllers\StandardController::class, 'show']);
+            Route::get('/{id}/preview',          [\App\Modules\Standard\Controllers\StandardController::class, 'preview']);
             Route::get('/{id}/export',          [\App\Modules\Standard\Controllers\StandardController::class, 'export']);
             Route::get('/{id}/source-document/download', [\App\Modules\Standard\Controllers\StandardController::class, 'downloadSourceDocument']);
             Route::put('/{id}',                 [\App\Modules\Standard\Controllers\StandardController::class, 'update']);

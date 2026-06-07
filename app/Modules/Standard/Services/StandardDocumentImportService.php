@@ -5,12 +5,15 @@ namespace App\Modules\Standard\Services;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
 use App\Modules\Standard\Models\MstStandardIndicator;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Process;
 use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpWord\IOFactory;
+use ZipArchive;
 
 class StandardDocumentImportService
 {
@@ -39,6 +42,16 @@ class StandardDocumentImportService
         '/^peningkatan standar$/iu',
     ];
 
+    public function refreshMetadataFromSource(MstStandard $standard): array
+    {
+        $documentData = $this->extractFromStoredDocument($standard);
+        $metadata = Arr::except(Arr::get($documentData, 'metadata', []), ['indicator_entries']);
+
+        $standard->forceFill($metadata)->save();
+
+        return $metadata;
+    }
+
     public function import(MstStandard $standard, ?array $structureTree = null, ?string $extractedText = null): array
     {
         $documentData = ['metadata' => []];
@@ -57,8 +70,8 @@ class StandardDocumentImportService
         if ($extractedText) {
             $documentData['metadata'] = array_filter(
                 array_merge(
-                    $this->extractMetadataFromText($extractedText),
-                    Arr::get($documentData, 'metadata', [])
+                    Arr::get($documentData, 'metadata', []),
+                    $this->extractMetadataFromText($extractedText)
                 ),
                 fn ($value) => $value !== null
             );
@@ -114,57 +127,34 @@ class StandardDocumentImportService
         $absolutePath = Storage::disk('local')->path($standard->source_document_path);
         $extension = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
 
-        if ($extension === 'docx') {
-            $extractedText = $this->extractTextFromDocx($absolutePath);
-
-            return [
-                'structure_tree' => $this->buildTreeFromExtractedText($extractedText),
-                'extracted_text' => $extractedText,
-                'metadata' => $this->extractMetadataFromText($extractedText),
-            ];
-        }
-
-        $process = Process::path(base_path())
-            ->run([
-                'node',
-                base_path('scripts/extract-standard-pdf.mjs'),
-                $absolutePath,
-            ]);
-
-        if ($process->failed()) {
+        if ($extension !== 'docx') {
             throw ValidationException::withMessages([
-                'document' => 'Dokumen gagal diproses otomatis. Pastikan PDF memiliki text layer yang dapat dibaca sistem.',
+                'document' => 'Format dokumen tidak didukung. Gunakan berkas DOCX.',
             ]);
         }
 
-        $decoded = json_decode($process->output(), true);
-
-        if (! is_array($decoded)) {
-            throw ValidationException::withMessages([
-                'document' => 'Hasil pembacaan dokumen tidak valid.',
-            ]);
-        }
+        $extractedText = $this->extractTextFromDocx($absolutePath);
 
         return [
-            'structure_tree' => Arr::get($decoded, 'structure_tree', []),
-            'extracted_text' => Arr::get($decoded, 'extracted_text'),
-            'metadata' => Arr::get($decoded, 'metadata', []),
+            'structure_tree' => $this->buildTreeFromExtractedText($extractedText),
+            'extracted_text' => $extractedText,
+            'metadata' => $this->extractMetadataFromText($extractedText),
         ];
     }
 
     private function extractMetadataFromText(string $text): array
     {
-        $code = $this->extractDocumentField($text, 'Kode');
-        $documentDate = $this->extractDocumentField($text, 'Tanggal');
-        $revision = $this->extractDocumentField($text, 'Revisi');
-        $pageRange = $this->extractDocumentField($text, 'Halaman');
+        $code = $this->extractDocumentField($text, ['Kode', 'Kode Dokumen', 'No Dokumen', 'Nomor Dokumen']);
+        $documentDate = $this->extractDocumentField($text, ['Tanggal', 'Tanggal Dokumen', 'Tgl']);
+        $revision = $this->extractDocumentField($text, ['Revisi', 'Rev', 'Revisi Ke']);
+        $pageRange = $this->extractDocumentField($text, ['Halaman', 'Jumlah Halaman']);
 
         $indicatorEntries = $this->extractIndicatorEntries($text);
 
         return [
             'standard_code' => filled($code) ? trim($code) : null,
             'document_date' => filled($documentDate) ? trim($documentDate) : null,
-            'revision_number' => filled($revision) && preg_match('/^\d+$/', trim($revision)) ? (int) trim($revision) : null,
+            'revision_number' => $this->extractRevisionNumber($revision),
             'page_count' => $this->extractPageCount($pageRange),
             'iku_count' => $this->countIndicatorEntries($indicatorEntries, 'IKU'),
             'ikt_count' => $this->countIndicatorEntries($indicatorEntries, 'IKT'),
@@ -172,15 +162,46 @@ class StandardDocumentImportService
         ];
     }
 
-    private function extractDocumentField(string $text, string $label): ?string
+    /**
+     * @param array<int, string> $labels
+     */
+    private function extractDocumentField(string $text, array $labels): ?string
     {
-        if (! preg_match('/(?:^|\b)' . preg_quote($label, '/') . '\s*:?\s*([^\r\n]+)/imu', $text, $match)) {
+        $labelPattern = collect($labels)
+            ->sortByDesc(fn (string $label) => mb_strlen($label))
+            ->map(fn (string $label) => preg_quote($label, '/'))
+            ->implode('|');
+
+        if (! preg_match('/(?:^|\b)(?:' . $labelPattern . ')\s*:?\s*([^\r\n]+)/imu', $text, $match)) {
             return null;
         }
 
-        $value = preg_replace('/^(?:kode|tanggal|revisi|halaman)\s*:?\s*/iu', '', $match[1]) ?? $match[1];
+        $value = $match[1];
+        $value = preg_replace('/^[\s|:;=-]+/u', '', $value) ?? $value;
+        $value = preg_replace('/[\s|:;=-]+$/u', '', $value) ?? $value;
+        $value = trim($value);
 
-        return trim($value) !== '' ? trim($value) : null;
+        if (collect($labels)->contains(function (string $label): bool {
+            $normalizedLabel = mb_strtolower($label);
+
+            return str_contains($normalizedLabel, 'kode')
+                || str_starts_with($normalizedLabel, 'no dokumen')
+                || str_starts_with($normalizedLabel, 'nomor dokumen');
+        })) {
+            $value = preg_replace('/\s*\/\s*/u', '/', $value) ?? $value;
+            $value = preg_replace('/\s+/u', '', $value) ?? $value;
+        }
+
+        return $value !== '' ? $value : null;
+    }
+
+    private function extractRevisionNumber(?string $value): ?int
+    {
+        if (! filled($value)) {
+            return null;
+        }
+
+        return preg_match('/\d+/u', $value, $match) ? (int) $match[0] : null;
     }
 
     private function extractPageCount(?string $value): ?int
@@ -193,7 +214,15 @@ class StandardDocumentImportService
             return (int) $rangeMatch[2];
         }
 
-        return preg_match('/\d+/u', $value, $numberMatch) ? (int) $numberMatch[0] : null;
+        if (preg_match('/\d+\s*(?:dari|of)\s*(\d+)/iu', $value, $totalMatch)) {
+            return (int) $totalMatch[1];
+        }
+
+        if (preg_match_all('/\d+/u', $value, $numberMatches) && $numberMatches[0] !== []) {
+            return (int) end($numberMatches[0]);
+        }
+
+        return null;
     }
 
     private function extractIndicatorEntries(string $text): ?array
@@ -329,6 +358,11 @@ class StandardDocumentImportService
 
     private function extractTextFromDocx(string $absolutePath): string
     {
+        $xmlText = $this->extractTextFromDocxXml($absolutePath);
+        if ($xmlText !== '') {
+            return $xmlText;
+        }
+
         try {
             $phpWord = IOFactory::load($absolutePath, 'Word2007');
         } catch (\Throwable $exception) {
@@ -344,6 +378,87 @@ class StandardDocumentImportService
         }
 
         return trim(implode("\n", array_filter($lines, fn (string $line) => trim($line) !== '')));
+    }
+
+    private function extractTextFromDocxXml(string $absolutePath): string
+    {
+        $zip = new ZipArchive();
+        if ($zip->open($absolutePath) !== true) {
+            return '';
+        }
+
+        $documentXml = $zip->getFromName('word/document.xml');
+        $zip->close();
+
+        if (! is_string($documentXml) || $documentXml === '') {
+            return '';
+        }
+
+        $document = new DOMDocument();
+        if (! @$document->loadXML($documentXml)) {
+            return '';
+        }
+
+        $xpath = new DOMXPath($document);
+        $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+        $body = $xpath->query('//w:body')->item(0);
+
+        if (! $body) {
+            return '';
+        }
+
+        $lines = [];
+
+        foreach ($body->childNodes as $child) {
+            if (! $child instanceof DOMElement) {
+                continue;
+            }
+
+            if ($child->localName === 'p') {
+                $text = $this->wordXmlNodeText($xpath, $child);
+                if ($text !== '') {
+                    $lines[] = $text;
+                }
+                continue;
+            }
+
+            if ($child->localName !== 'tbl') {
+                continue;
+            }
+
+            foreach ($xpath->query('./w:tr', $child) as $row) {
+                $cells = [];
+
+                foreach ($xpath->query('./w:tc', $row) as $cell) {
+                    $cellText = $this->wordXmlNodeText($xpath, $cell);
+                    if ($cellText !== '') {
+                        $cells[] = $cellText;
+                    }
+                }
+
+                if ($cells !== []) {
+                    $lines[] = count($cells) === 2
+                        ? $cells[0] . ' : ' . $cells[1]
+                        : implode(' | ', $cells);
+                }
+            }
+        }
+
+        return trim(implode("\n", $lines));
+    }
+
+    private function wordXmlNodeText(DOMXPath $xpath, DOMElement $node): string
+    {
+        $parts = [];
+
+        foreach ($xpath->query('.//w:t', $node) as $textNode) {
+            $value = trim((string) $textNode->textContent);
+            if ($value !== '') {
+                $parts[] = $value;
+            }
+        }
+
+        return trim(preg_replace('/\s+/u', ' ', implode(' ', $parts)) ?? '');
     }
 
     private function collectWordElementText(array $elements, array &$lines): void
@@ -618,18 +733,25 @@ class StandardDocumentImportService
         $created = 0;
 
         foreach (array_values($nodes) as $index => $node) {
+            $type = Arr::get($node, 'type', 'Indicator');
+            $children = Arr::get($node, 'children', []);
+            $contentFormat = $children !== []
+                ? ($type === 'Header' ? 'SUB_POINT' : 'INDICATOR')
+                : ($type === 'Header' ? 'SUB_POINT' : 'LONG_TEXT');
+
             $metric = MstMetric::create([
                 'standard_id' => $standardId,
                 'parent_id' => $parentId,
                 'content' => trim((string) Arr::get($node, 'content')),
-                'type' => Arr::get($node, 'type', 'Indicator'),
+                'type' => $type,
+                'content_format' => $contentFormat,
                 'pj' => null,
                 'order' => $index + 1,
                 'review_status' => 'ACCEPTED',
             ]);
 
             $created++;
-            $created += $this->persistNodes($standardId, Arr::get($node, 'children', []), $metric->id);
+            $created += $this->persistNodes($standardId, $children, $metric->id);
         }
 
         return $created;

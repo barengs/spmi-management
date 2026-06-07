@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'espmi-v5';
+const CACHE_VERSION = 'espmi-v6';
 const APP_SHELL_CACHE = `app-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const APP_SHELL_FILES = ['/', '/offline.html', '/manifest.webmanifest', '/favicon.ico'];

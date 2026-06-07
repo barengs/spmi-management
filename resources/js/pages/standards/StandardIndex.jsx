@@ -6,7 +6,6 @@ import api from '../../services/api';
 import StandardCloneModal from './StandardCloneModal';
 import Icon, { Icons } from '../../components/ui/Icon';
 import { getStandardStatusLabel, normalizeStandardCategory } from '../../utils/standardStatus';
-import * as pdfjsLib from 'pdfjs-dist';
 import {
     createColumnHelper,
     flexRender,
@@ -17,11 +16,6 @@ import {
     getFilteredRowModel,
     getPaginationRowModel
 } from '@tanstack/react-table';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url,
-).toString();
 
 const buildNode = (type, content) => ({
     type,
@@ -407,8 +401,9 @@ export default function StandardIndex() {
         standard_code: 'SPMI/UIM/',
         category: 'Tambahan',
         periode_tahun: new Date().getFullYear(),
-        is_active: true,
-        referensi_regulasi: ''
+        is_active: false,
+        referensi_regulasi: '',
+        initial_status: 'DRAFT',
     });
     const [cloneSourceId, setCloneSourceId] = useState('');
 
@@ -436,7 +431,7 @@ export default function StandardIndex() {
             return 'Dilaksanakan';
         }
 
-        if (items.some((item) => item.status === 'WAITING_APPROVAL' || item.status === 'REVISI' || item.is_active)) {
+        if (items.some((item) => item.status === 'WAITING_APPROVAL' || item.status === 'REVISI')) {
             return 'Dalam Proses';
         }
 
@@ -559,7 +554,7 @@ export default function StandardIndex() {
                 standard_code: 'SPMI/UIM/',
                 category: 'Tambahan',
                 periode_tahun: selectedPeriod || new Date().getFullYear(),
-                is_active: true,
+                is_active: false,
                 referensi_regulasi: ''
             });
             setIsModalOpen(true);
@@ -583,7 +578,7 @@ export default function StandardIndex() {
                 standard_code: 'SPMI/UIM/',
                 category: 'Tambahan',
                 periode_tahun: new Date().getFullYear(),
-                is_active: true,
+                is_active: false,
                 referensi_regulasi: ''
             });
         }
@@ -604,8 +599,9 @@ export default function StandardIndex() {
             standard_code: '',
             category: 'Tambahan',
             periode_tahun: selectedPeriod || new Date().getFullYear(),
-            is_active: true,
+            is_active: false,
             referensi_regulasi: '',
+            initial_status: 'DRAFT',
         });
         setIsImportModalOpen(true);
     };
@@ -625,26 +621,6 @@ export default function StandardIndex() {
         setImportSummary(null);
     };
 
-    const extractTextFromPdf = async (file) => {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const pages = [];
-
-        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-            const page = await pdf.getPage(pageNumber);
-            const textContent = await page.getTextContent();
-            const pageText = reconstructPageLines(textContent.items).join('\n').trim();
-
-            if (pageText) {
-                pages.push(pageText);
-            }
-        }
-
-        return cropToStandardBody(
-            pages.join('\n').split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-        ).join('\n');
-    };
-
     const handleImportFileChange = async (event) => {
         const file = event.target.files?.[0];
         setImportFile(file || null);
@@ -656,39 +632,10 @@ export default function StandardIndex() {
             return;
         }
 
-        const extension = file.name.split('.').pop()?.toLowerCase();
-
-        if (extension === 'docx') {
-            setFormData((current) => ({
-                ...current,
-                name: file.name.replace(/\.[^.]+$/u, '').toUpperCase(),
-            }));
-            return;
-        }
-
-        setIsParsingImportFile(true);
-
-        try {
-            const extractedText = await extractTextFromPdf(file);
-            const tree = buildStructureTreeFromText(extractedText);
-            const summary = summarizeStructureTree(tree);
-
-            setImportExtractedText(extractedText);
-            setImportStructureTree(tree);
-            setImportSummary(summary);
-
-            setFormData((current) => ({
-                ...current,
-                name: file.name.replace(/\.[^.]+$/u, '').toUpperCase(),
-            }));
-        } catch (error) {
-            setImportExtractedText('');
-            setImportStructureTree([]);
-            setImportSummary(null);
-            toast.error('PDF gagal dibaca. Pastikan file memiliki text layer yang dapat diekstrak.');
-        } finally {
-            setIsParsingImportFile(false);
-        }
+        setFormData((current) => ({
+            ...current,
+            name: file.name.replace(/\.[^.]+$/u, '').toUpperCase(),
+        }));
     };
 
     const cloneCandidates = useMemo(() => (
@@ -748,6 +695,7 @@ export default function StandardIndex() {
             payload.append('is_active', formData.is_active ? '1' : '0');
             payload.append('referensi_regulasi', formData.referensi_regulasi || '');
             payload.append('file', importFile);
+            payload.append('initial_status', formData.initial_status || 'DRAFT');
             if (importExtractedText) {
                 payload.append('extracted_text', importExtractedText);
             }
@@ -763,7 +711,7 @@ export default function StandardIndex() {
             const createdStandard = response.data.data;
             upsertStandard(createdStandard);
             setSelectedPeriod(createdStandard.periode_tahun ? String(createdStandard.periode_tahun) : 'Tanpa Periode');
-            toast.success('Standar berhasil diimpor dari dokumen PDF.');
+            toast.success('Standar berhasil diimpor dari dokumen DOCX.');
             handleCloseImportModal();
             fetchStandards();
         } catch (err) {
@@ -827,11 +775,9 @@ export default function StandardIndex() {
             const contentType = response.headers['content-type'] || 'application/octet-stream';
             const contentDisposition = response.headers['content-disposition'] || '';
             const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
-            const fallbackExtension = contentType.includes('pdf')
-                ? 'pdf'
-                : contentType.includes('word') || contentType.includes('msword')
-                    ? 'doc'
-                    : 'bin';
+            const fallbackExtension = contentType.includes('wordprocessingml')
+                ? 'docx'
+                : 'bin';
             const fileName = fileNameMatch?.[1]
                 || `${(standard.name || 'standar').replace(/[\\/:*?"<>|]+/g, '-')}-${standard.periode_tahun || 'tanpa-periode'}.${fallbackExtension}`;
             const blob = new Blob([response.data], { type: contentType });
@@ -1388,7 +1334,7 @@ export default function StandardIndex() {
                                             className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600"
                                         />
                                         <label htmlFor="is_active" className="ml-3 block text-sm font-semibold text-gray-900 dark:text-gray-200">
-                                            Status Aktif (Berlaku Siklus Saat Ini)
+                                            Status Aktif
                                         </label>
                                     </div>
                                     <div className="mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1437,7 +1383,7 @@ export default function StandardIndex() {
                                     Tambah Standar Mutu Baru
                                 </h3>
                                 <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 mb-5">
-                                    Lengkapi data standar. Dokumen PDF dapat diunggah jika berkas standar sudah tersedia.
+                                    Lengkapi data standar. Dokumen DOCX dapat diunggah jika berkas standar sudah tersedia.
                                 </div>
                                 <form onSubmit={handleImportSubmit} className="mt-5 space-y-5">
                                     <div>
@@ -1473,18 +1419,35 @@ export default function StandardIndex() {
                                         </label>
                                         <input
                                             type="file"
-                                            accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.docx"
+                                            accept="application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
                                             onChange={handleImportFileChange}
                                             className="block w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         />
                                         <div className="mt-2 text-xs text-amber-800">
-                                            Unggah berkas standar yang sudah tersedia. Format yang didukung: PDF dengan text layer atau DOCX.
+                                            Unggah berkas standar yang sudah tersedia. Format yang didukung hanya DOCX.
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                            Status Awal
+                                        </label>
+                                        <select
+                                            value={formData.initial_status || 'DRAFT'}
+                                            onChange={(event) => setFormData({ ...formData, initial_status: event.target.value })}
+                                            className="block w-full rounded-md border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                                        >
+                                            <option value="DRAFT">Draft, ikuti proses approval</option>
+                                            {canSubmitStandards && importFile ? (
+                                                <option value="TERBIT">Terbit, lewati proses approval</option>
+                                            ) : null}
+                                        </select>
+                                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                            Status Terbit hanya tersedia jika DOCX sudah dipilih dan akun memiliki izin penerbitan standar.
                                         </div>
                                     </div>
                                     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                                         <div>Tahun implementasi: {selectedPeriod || new Date().getFullYear()}.</div>
                                         <div className="mt-1">
-                                            {isParsingImportFile && 'Sedang membaca dokumen PDF...'}
                                             {!isParsingImportFile && importSummary && `Tree terbaca: ${importSummary.headers} header, ${importSummary.statements} pasal, ${importSummary.indicators} indikator.`}
                                             {!isParsingImportFile && importFile?.name.toLowerCase().endsWith('.docx') && 'Dokumen DOCX akan dibaca oleh server saat standar disimpan.'}
                                             {!isParsingImportFile && !importSummary && !importFile && 'Tanpa berkas, standar akan dibuat kosong dan strukturnya dapat disusun melalui Edit Struktur.'}

@@ -52,18 +52,18 @@ function getCyclePeriodStatus(items) {
         return 'Dilaksanakan';
     }
 
-    if (items.some((item) => item.status === 'WAITING_APPROVAL' || item.status === 'REVISI' || item.is_active)) {
+    if (items.some((item) => item.status === 'WAITING_APPROVAL' || item.status === 'REVISI')) {
         return 'Dalam Proses';
     }
 
     return 'Non Aktif';
 }
 
-function getCycleWindow(period, durationMonths) {
-    const numericPeriod = Number(period);
+function getCycleWindow(startedAt, durationMonths) {
     const numericDuration = Number(durationMonths);
+    const start = startedAt ? new Date(startedAt) : null;
 
-    if (!Number.isFinite(numericPeriod) || !Number.isFinite(numericDuration) || numericDuration < 1) {
+    if (!start || Number.isNaN(start.getTime()) || !Number.isFinite(numericDuration) || numericDuration < 1) {
         return {
             start: null,
             end: null,
@@ -71,8 +71,8 @@ function getCycleWindow(period, durationMonths) {
         };
     }
 
-    const start = new Date(numericPeriod, 0, 1, 0, 0, 0, 0);
-    const end = new Date(numericPeriod, numericDuration, 0, 23, 59, 59, 999);
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + numericDuration);
     const now = new Date();
 
     return {
@@ -90,6 +90,7 @@ export default function Dashboard() {
     const [loadingCycle, setLoadingCycle] = useState(true);
     const [selectedPeriod, setSelectedPeriod] = useState('');
     const [cycleDurationMonths, setCycleDurationMonths] = useState(4);
+    const [isCycleApplied, setIsCycleApplied] = useState(false);
     const [improvementSummary, setImprovementSummary] = useState([]);
 
     useEffect(() => {
@@ -103,6 +104,7 @@ export default function Dashboard() {
 
                 setStandards(standardsResponse.data.data || []);
                 setCycleDurationMonths(cycleDurationResponse?.data?.data?.duration_months || 4);
+                setIsCycleApplied(Boolean(cycleDurationResponse?.data?.data?.is_applied));
                 setImprovementSummary(improvementResponse?.data?.data || []);
             } catch (error) {
                 setStandards([]);
@@ -122,7 +124,6 @@ export default function Dashboard() {
             .filter((item) => item.periode_tahun)
             .map((item) => ({
                 period: Number(item.periode_tahun),
-                isActive: Boolean(item.is_active),
                 isPublished: item.status === 'TERBIT',
             }))
             .filter((item) => Number.isFinite(item.period));
@@ -131,12 +132,10 @@ export default function Dashboard() {
             if (!carry[item.period]) {
                 carry[item.period] = {
                     period: item.period,
-                    hasActive: false,
                     hasPublished: false,
                 };
             }
 
-            carry[item.period].hasActive = carry[item.period].hasActive || item.isActive;
             carry[item.period].hasPublished = carry[item.period].hasPublished || item.isPublished;
 
             return carry;
@@ -144,7 +143,7 @@ export default function Dashboard() {
 
         const periods = Object.values(periodMap).sort((left, right) => right.period - left.period);
 
-        const appliedPeriods = periods.filter((item) => item.hasActive || item.hasPublished);
+        const appliedPeriods = isCycleApplied ? periods.filter((item) => item.hasPublished) : [];
         const currentApplied = appliedPeriods.find((item) => item.period === currentYear);
         const previousApplied = appliedPeriods.find((item) => item.period < currentYear);
         const fallbackApplied = appliedPeriods[0] || null;
@@ -163,19 +162,27 @@ export default function Dashboard() {
 
         const isCurrentYear = selected.period === currentYear;
         const selectedItems = standards.filter((item) => Number(item.periode_tahun) === selected.period);
-        const window = getCycleWindow(selected.period, cycleDurationMonths);
+        const publishedItems = selectedItems.filter((item) => item.status === 'TERBIT');
+        const cycleStartedAt = publishedItems
+            .map((item) => item.rector_approved_at || item.updated_at || item.created_at)
+            .filter(Boolean)
+            .sort((left, right) => new Date(left) - new Date(right))[0] || null;
+        const window = getCycleWindow(cycleStartedAt, cycleDurationMonths);
         const baseStatus = getCyclePeriodStatus(selectedItems);
+        const isApplied = isCycleApplied && publishedItems.length > 0;
 
         return {
             label: `SPMI ${selected.period}`,
             period: selected.period,
-            status: window.ended && baseStatus !== 'Dilaksanakan' ? 'Berakhir' : baseStatus,
-            description: isCurrentYear
-                ? `Siklus tahun ${currentYear} menggunakan durasi target ${cycleDurationMonths} bulan sejak awal periode.`
+            status: isApplied ? (window.ended ? 'Berakhir' : baseStatus) : 'Belum Diterapkan',
+            description: !isApplied
+                ? `Siklus tahun ${selected.period} belum diterapkan. Perhitungan durasi dimulai setelah standar pertama diterbitkan.`
+                : isCurrentYear
+                ? `Siklus tahun ${currentYear} menggunakan durasi target ${cycleDurationMonths} bulan sejak standar pertama diterbitkan.`
                 : `Siklus tahun ${currentYear} belum diterapkan, sehingga sistem menampilkan siklus aktif sebelumnya.`,
             window,
         };
-    }, [cycleDurationMonths, standards]);
+    }, [cycleDurationMonths, isCycleApplied, standards]);
 
     const availablePeriods = useMemo(() => {
         const periods = Array.from(
@@ -225,10 +232,19 @@ export default function Dashboard() {
         () => improvementSummary.find((item) => String(item.cycle_year) === String(selectedPeriod || cycleSummary.period)) || null,
         [cycleSummary.period, improvementSummary, selectedPeriod]
     );
-    const selectedCycleWindow = useMemo(
-        () => getCycleWindow(selectedPeriod || cycleSummary.period, cycleDurationMonths),
-        [cycleDurationMonths, cycleSummary.period, selectedPeriod]
-    );
+    const selectedCycleWindow = useMemo(() => {
+        if (!isCycleApplied) {
+            return { start: null, end: null, ended: false };
+        }
+
+        const selectedPublishedItems = currentCycleStandards.filter((item) => item.status === 'TERBIT');
+        const cycleStartedAt = selectedPublishedItems
+            .map((item) => item.rector_approved_at || item.updated_at || item.created_at)
+            .filter(Boolean)
+            .sort((left, right) => new Date(left) - new Date(right))[0] || null;
+
+        return getCycleWindow(cycleStartedAt, cycleDurationMonths);
+    }, [currentCycleStandards, cycleDurationMonths, isCycleApplied]);
 
     const auditProgress = useMemo(() => {
         if (currentCycleStandards.length === 0) {
@@ -355,33 +371,7 @@ export default function Dashboard() {
                 </p>
             </section>
 
-            <section className="grid gap-4 xl:grid-cols-3">
-                <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-600 via-sky-600 to-cyan-600 p-6 text-white shadow-sm">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-100">Siklus Aktif</p>
-                            <h2 className="mt-3 text-3xl font-semibold">
-                                {loadingCycle ? 'Memuat...' : cycleSummary.label}
-                            </h2>
-                            <p className="mt-3 max-w-xs text-sm leading-6 text-blue-50">
-                                {loadingCycle ? 'Sistem sedang membaca periode standar aktif.' : cycleSummary.description}
-                            </p>
-                            {!loadingCycle && cycleSummary.window?.end && (
-                                <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-blue-100">
-                                    Berakhir {formatDateTime(cycleSummary.window.end)}
-                                </p>
-                            )}
-                        </div>
-                        <div className="rounded-2xl bg-white/15 p-3">
-                            <Icon icon={Icons.refresh} width={26} />
-                        </div>
-                    </div>
-
-                    <div className="mt-6 inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white">
-                        {loadingCycle ? 'Sinkronisasi' : cycleSummary.status}
-                    </div>
-                </div>
-
+            <section className="grid gap-4 xl:grid-cols-2">
                 <div className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Unit Organisasi</p>
                     <div className="mt-4 flex items-center gap-3">
@@ -412,60 +402,27 @@ export default function Dashboard() {
 
             {!isPerumus && (
             <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
                     <div>
                         <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
                             <Icon icon={Icons.audit} width={14} />
                             Proses Audit
                         </div>
-                        <h2 className="mt-4 text-2xl font-semibold text-gray-900">{auditProgress.headline}</h2>
-                        <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">{auditProgress.helper}</p>
+                        <h2 className="mt-4 text-2xl font-semibold text-gray-900">Tahapan Proses Audit</h2>
+                        <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
+                            Tahapan berikut menunjukkan urutan proses audit tanpa status dan tanggal pelaksanaan.
+                        </p>
                     </div>
-                    <label className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Periode Dipantau</div>
-                        <select
-                            value={selectedPeriod}
-                            onChange={(event) => setSelectedPeriod(event.target.value)}
-                            className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                            disabled={availablePeriods.length === 0}
-                        >
-                            {availablePeriods.length === 0 ? (
-                                <option value="">Belum ada periode</option>
-                            ) : (
-                                availablePeriods.map((period) => (
-                                    <option key={period} value={period}>
-                                        SPMI {period}
-                                    </option>
-                                ))
-                            )}
-                        </select>
-                    </label>
                 </div>
 
                 <div className="mt-8 grid gap-4 lg:grid-cols-4">
                     {auditTimeline.map((step, index) => {
-                        const isCurrent = index === currentTimelineIndex;
-                        const isDone = index < currentTimelineIndex;
-                        const detail = auditTimelineDetails[step.key] || {};
-
                         return (
                             <div key={step.key} className="relative">
-                                <div className={`relative h-full rounded-3xl border p-5 transition ${
-                                    isCurrent
-                                        ? 'border-blue-300 bg-blue-50 shadow-sm'
-                                        : isDone
-                                            ? 'border-emerald-200 bg-emerald-50/70'
-                                            : 'border-gray-200 bg-white'
-                                }`}>
+                                <div className="relative h-full rounded-3xl border border-gray-200 bg-white p-5">
                                     <div className="flex items-center gap-3">
-                                        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-semibold ${
-                                            isCurrent
-                                                ? 'bg-blue-600 text-white'
-                                                : isDone
-                                                    ? 'bg-emerald-600 text-white'
-                                                    : 'bg-gray-100 text-gray-500'
-                                        }`}>
-                                            {isDone ? <Icon icon={Icons.check} width={18} /> : index + 1}
+                                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-sm font-semibold text-blue-700">
+                                            {index + 1}
                                         </div>
                                         <div>
                                             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Tahap {index + 1}</div>
@@ -474,31 +431,6 @@ export default function Dashboard() {
                                     </div>
 
                                     <p className="mt-4 text-sm leading-6 text-gray-600">{step.description}</p>
-
-                                    <div className="mt-4 space-y-2 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <span className="font-medium text-gray-500">Mulai</span>
-                                            <span className="text-right font-medium text-gray-900">{formatDateTime(detail.startedAt)}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between gap-3">
-                                            <span className="font-medium text-gray-500">Selesai</span>
-                                            <span className="text-right font-medium text-gray-900">
-                                                {isCurrent ? '-' : formatDateTime(detail.finishedAt)}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-4">
-                                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${
-                                            isCurrent
-                                                ? 'bg-blue-100 text-blue-700'
-                                                : isDone
-                                                    ? 'bg-emerald-100 text-emerald-700'
-                                                    : 'bg-gray-100 text-gray-500'
-                                        }`}>
-                                            {isCurrent ? 'Sedang Berjalan' : isDone ? 'Selesai' : 'Menunggu'}
-                                        </span>
-                                    </div>
                                 </div>
                             </div>
                         );

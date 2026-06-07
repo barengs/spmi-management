@@ -8,6 +8,7 @@ use App\Modules\Evidence\Models\TrxEvidence;
 use App\Modules\Standard\Models\MstMetric;
 use App\Modules\Standard\Models\MstStandard;
 use App\Modules\Standard\Models\MetricTarget;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -115,14 +116,25 @@ class MetricController extends Controller
             ], 422);
         }
 
-        if ($parent?->type === 'Indicator' && ($parent->content_format ?? $this->defaultContentFormatForType($parent->type)) !== 'INDICATOR') {
+        $isExistingChildWithUnchangedParent = $metric
+            && (int) $metric->parent_id === (int) $resolvedParentId;
+
+        if (
+            ! $isExistingChildWithUnchangedParent
+            && $parent?->type === 'Indicator'
+            && ($parent->content_format ?? $this->defaultContentFormatForType($parent->type)) !== 'INDICATOR'
+        ) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Isi bertipe teks panjang atau tabel tidak dapat memiliki poin turunan.',
             ], 422);
         }
 
-        if ($parent?->type === 'Statement' && ($parent->content_format ?? $this->defaultContentFormatForType($parent->type)) !== 'INDICATOR') {
+        if (
+            ! $isExistingChildWithUnchangedParent
+            && $parent?->type === 'Statement'
+            && ($parent->content_format ?? $this->defaultContentFormatForType($parent->type)) !== 'INDICATOR'
+        ) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Sub Poin bertipe teks panjang atau tabel tidak dapat memiliki child isi.',
@@ -329,7 +341,10 @@ class MetricController extends Controller
             'type'      => 'sometimes|required|in:Header,Statement,Indicator',
             'content_format' => 'nullable|in:SUB_POINT,INDICATOR,LONG_TEXT,TABLE',
             'order'     => 'nullable|integer',
+            'delete_children' => 'sometimes|boolean',
         ]);
+        $deleteChildren = (bool) ($validated['delete_children'] ?? false);
+        unset($validated['delete_children']);
 
         if (! array_key_exists('content_format', $validated) && array_key_exists('type', $validated)) {
             $validated['content_format'] = $this->defaultContentFormatForType($validated['type']);
@@ -351,14 +366,45 @@ class MetricController extends Controller
             }
         }
 
-        if ($error = $this->hierarchyValidationError($validated, $metric)) {
-            return $error;
+        $resolvedType = $validated['type'] ?? $metric->type;
+        $resolvedFormat = $validated['content_format']
+            ?? $metric->content_format
+            ?? $this->defaultContentFormatForType($resolvedType);
+        $requiresEmptyChildren = ($resolvedType === 'Statement' && in_array($resolvedFormat, ['LONG_TEXT', 'TABLE'], true))
+            || ($resolvedType === 'Indicator' && $resolvedFormat !== 'INDICATOR');
+
+        if ($deleteChildren && $requiresEmptyChildren && $metric->children()->exists()) {
+            foreach ($metric->children as $child) {
+                if ($this->hasAppliedIndicator($child)) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Child isi tidak dapat dihapus karena sudah digunakan pada target atau bukti audit.',
+                    ], 422);
+                }
+            }
         }
 
         $validated['pj'] = null;
 
-        $oldData = $metric->toArray();
-        $metric->update($validated);
+        $oldData = $metric->load('childrenRecursive')->toArray();
+
+        DB::transaction(function () use ($metric, $validated, $deleteChildren, $requiresEmptyChildren): void {
+            if ($deleteChildren && $requiresEmptyChildren) {
+                foreach ($metric->children as $child) {
+                    $this->deleteMetricAndChildren($child);
+                }
+                $metric->unsetRelation('children');
+            }
+
+            if ($error = $this->hierarchyValidationError($validated, $metric)) {
+                throw ValidationException::withMessages([
+                    'content_format' => $error->getData(true)['message'] ?? 'Struktur node tidak valid.',
+                ]);
+            }
+
+            $metric->update($validated);
+        });
+
         $this->logMetricActivity('PUT', $metric, $oldData, $metric->fresh()->toArray());
 
         return response()->json([

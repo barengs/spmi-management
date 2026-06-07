@@ -835,6 +835,24 @@ export default function StandardBuilder() {
             let savedNode;
 
             if (editingNode) {
+                const currentFormat = editingNode.content_format || getDefaultContentFormat(editingNode.type);
+                const hasChildren = Array.isArray(editingNode.children_recursive) && editingNode.children_recursive.length > 0;
+                const changesToLeafContent = hasChildren
+                    && currentFormat === 'INDICATOR'
+                    && ['LONG_TEXT', 'TABLE'].includes(payload.content_format);
+
+                if (changesToLeafContent) {
+                    const confirmed = window.confirm(
+                        'Node ini memiliki child isi. Mengubah bentuk konten akan menghapus seluruh child di bawahnya. Lanjutkan?'
+                    );
+
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    payload.delete_children = true;
+                }
+
                 const response = await api.put(`/metrics/${editingNode.id}`, payload);
                 const updatedNode = response.data.data;
                 savedNode = updatedNode;

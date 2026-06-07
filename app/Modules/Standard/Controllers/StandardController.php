@@ -10,12 +10,17 @@ use App\Modules\Standard\Models\MstStandard;
 use App\Modules\Standard\Models\StandardImprovement;
 use App\Modules\Standard\Services\StandardDocumentImportService;
 use App\Modules\Standard\Services\StandardExportService;
+use App\Modules\Core\Models\AppSetting;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StandardController extends Controller
@@ -370,7 +375,7 @@ class StandardController extends Controller
             return $denied;
         }
 
-        $query = MstStandard::query()->with(['previousStandard:id,name,version_number,periode_tahun', 'supersededByStandard:id,name,version_number,periode_tahun']);
+        $query = MstStandard::query()->with(['previousStandard:id,name,revision_number,periode_tahun', 'supersededByStandard:id,name,revision_number,periode_tahun']);
 
         // Read-only users keep seeing the implemented version while a revision
         // draft is being prepared in parallel.
@@ -421,6 +426,8 @@ class StandardController extends Controller
             'referensi_regulasi' => 'nullable|string',
         ]);
 
+        $validated['is_active'] = false;
+
         $standard = MstStandard::create($validated);
         $this->resetApprovalFlow($standard);
         $standard->save();
@@ -453,10 +460,19 @@ class StandardController extends Controller
             'periode_tahun' => 'nullable|integer',
             'is_active' => 'boolean',
             'referensi_regulasi' => 'nullable|string',
-            'file' => 'required|file|mimes:pdf,docx|max:20480',
+            'file' => 'required|file|mimes:docx|max:20480',
+            'initial_status' => 'nullable|in:DRAFT,TERBIT',
             'structure_tree' => 'nullable',
             'extracted_text' => 'nullable|string',
         ]);
+        $initialStatus = $validated['initial_status'] ?? 'DRAFT';
+
+        if ($initialStatus === 'TERBIT' && ! $request->user()?->can('standard.publish')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk menerbitkan standar secara langsung.',
+            ], 403);
+        }
 
         $uploadedFile = $request->file('file');
         $baseName = Str::slug(pathinfo($uploadedFile->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'standar';
@@ -484,7 +500,7 @@ class StandardController extends Controller
                 'name' => $validated['name'],
                 'category' => $validated['category'],
                 'periode_tahun' => $validated['periode_tahun'] ?? null,
-                'is_active' => $validated['is_active'] ?? true,
+                'is_active' => false,
                 'referensi_regulasi' => $validated['referensi_regulasi'] ?? null,
                 'status' => 'DRAFT',
             ]);
@@ -508,6 +524,23 @@ class StandardController extends Controller
                 $decodedStructureTree,
                 $validated['extracted_text'] ?? null,
             );
+
+            if ($initialStatus === 'TERBIT') {
+                $standard->forceFill([
+                    'status' => 'TERBIT',
+                    'approval_stage' => 'FINAL',
+                    'is_active' => true,
+                    'approved_by' => $request->user()->id,
+                    'rector_approved_by' => $request->user()->id,
+                    'rector_approved_at' => now(),
+                    'reject_reason' => null,
+                ])->save();
+
+                AppSetting::query()->updateOrCreate(
+                    ['key' => 'standard_cycle_applied'],
+                    ['value' => true]
+                );
+            }
 
             DB::commit();
 
@@ -544,13 +577,41 @@ class StandardController extends Controller
         }
 
         $standard = MstStandard::with([
-            'previousStandard:id,name,version_number,periode_tahun,status',
-            'supersededByStandard:id,name,version_number,periode_tahun,status',
-            'newerVersions:id,name,periode_tahun,version_number,status,previous_standard_id',
+            'previousStandard:id,name,revision_number,periode_tahun,status',
+            'supersededByStandard:id,name,revision_number,periode_tahun,status',
+            'newerVersions:id,name,periode_tahun,revision_number,status,previous_standard_id',
             'improvements.finding:id,standard_id,metric_id,status,finding_summary,created_at',
-            'improvements.newStandard:id,name,periode_tahun,version_number,status',
+            'improvements.newStandard:id,name,periode_tahun,revision_number,status',
             'indicators:id,standard_id,type,number,content,order',
         ])->findOrFail($id);
+
+        $metadataIsEmpty = collect([
+                $standard->standard_code,
+                $standard->document_date,
+                $standard->revision_number,
+                $standard->page_count,
+            ])->every(fn ($value) => $value === null);
+        $metadataLooksMalformed = str_starts_with(trim((string) $standard->standard_code), '|')
+            || str_starts_with(trim((string) $standard->document_date), '|')
+            || str_contains((string) $standard->standard_code, ' ')
+            || ($standard->revision_number === null && $standard->page_count !== null);
+
+        if ($standard->source_document_path && ($metadataIsEmpty || $metadataLooksMalformed)) {
+            try {
+                $this->documentImportService->refreshMetadataFromSource($standard);
+                $standard->refresh();
+                $standard->load([
+                    'previousStandard:id,name,revision_number,periode_tahun,status',
+                    'supersededByStandard:id,name,revision_number,periode_tahun,status',
+                    'newerVersions:id,name,periode_tahun,revision_number,status,previous_standard_id',
+                    'improvements.finding:id,standard_id,metric_id,status,finding_summary,created_at',
+                    'improvements.newStandard:id,name,periode_tahun,revision_number,status',
+                    'indicators:id,standard_id,type,number,content,order',
+                ]);
+            } catch (\Throwable) {
+                // Keep the detail page available when a legacy source file cannot be parsed.
+            }
+        }
 
         if (
             ! $this->canDraftStandards($request)
@@ -558,11 +619,11 @@ class StandardController extends Controller
             && $standard->previousStandard?->status === 'TERBIT'
         ) {
             $standard = MstStandard::with([
-                'previousStandard:id,name,version_number,periode_tahun,status',
-                'supersededByStandard:id,name,version_number,periode_tahun,status',
-                'newerVersions:id,name,periode_tahun,version_number,status,previous_standard_id',
+                'previousStandard:id,name,revision_number,periode_tahun,status',
+                'supersededByStandard:id,name,revision_number,periode_tahun,status',
+                'newerVersions:id,name,periode_tahun,revision_number,status,previous_standard_id',
                 'improvements.finding:id,standard_id,metric_id,status,finding_summary,created_at',
-                'improvements.newStandard:id,name,periode_tahun,version_number,status',
+                'improvements.newStandard:id,name,periode_tahun,revision_number,status',
                 'indicators:id,standard_id,type,number,content,order',
             ])->findOrFail($standard->previous_standard_id);
         }
@@ -596,7 +657,7 @@ class StandardController extends Controller
         ]);
     }
 
-    public function export(Request $request, $id): StreamedResponse|JsonResponse
+    public function export(Request $request, $id): BinaryFileResponse|JsonResponse
     {
         if ($denied = $this->denyUnless($request, 'report.export', 'Anda tidak memiliki hak akses untuk mengekspor standar.')) {
             return $denied;
@@ -604,27 +665,50 @@ class StandardController extends Controller
 
         $standard = MstStandard::findOrFail($id);
 
-        if ($standard->status !== 'TERBIT') {
+        if ($standard->status !== 'TERBIT' && ! $this->canDraftStandards($request)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Hanya standar berstatus TERBIT yang dapat diekspor.',
+                'message' => 'Standar draft hanya dapat diekspor oleh pengguna yang memiliki akses penyusunan.',
             ], 422);
         }
 
-        if ($standard->source_document_path && Storage::disk('local')->exists($standard->source_document_path)) {
-            return Storage::disk('local')->download(
-                $standard->source_document_path,
-                $standard->source_document_original_name ?? $standard->source_document_stored_name
-            );
+        $fileName = sprintf(
+            '%s-%s-%s.docx',
+            Str::slug($standard->name) ?: 'standar',
+            $standard->periode_tahun ?: 'tanpa-periode',
+            $standard->status === 'TERBIT' ? 'terbit' : 'draft-revisi'
+        );
+        $temporaryPath = $this->standardExportService->saveDocx($standard);
+
+        return response()
+            ->download(
+                $temporaryPath,
+                $fileName,
+                ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+            )
+            ->deleteFileAfterSend(true);
+    }
+
+    public function preview(Request $request, $id): Response|JsonResponse
+    {
+        if ($denied = $this->denyUnlessCanReadStandards($request, 'Anda tidak memiliki hak akses untuk melihat preview standar.')) {
+            return $denied;
         }
 
-        $html = $this->standardExportService->buildWordHtml($standard);
-        $fileName = sprintf('%s-%s.doc', Str::slug($standard->name) ?: 'standar', $standard->periode_tahun ?: 'tanpa-periode');
+        $standard = MstStandard::findOrFail($id);
+        $options = new Options();
+        $options->set('isRemoteEnabled', false);
+        $options->set('isHtml5ParserEnabled', true);
 
-        return response()->streamDownload(function () use ($html) {
-            echo $html;
-        }, $fileName, [
-            'Content-Type' => 'application/msword; charset=UTF-8',
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($this->standardExportService->buildWordHtml($standard), 'UTF-8');
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        return response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => sprintf('inline; filename="%s-preview.pdf"', Str::slug($standard->name) ?: 'standar'),
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
         ]);
     }
 
@@ -785,12 +869,23 @@ class StandardController extends Controller
         }
 
         if ($standard->approval_stage === 'RECTOR' && $standard->rector_approved_at) {
+            if ($standard->previous_standard_id) {
+                $previousRevision = MstStandard::query()
+                    ->whereKey($standard->previous_standard_id)
+                    ->value('revision_number');
+                $standard->revision_number = (int) ($previousRevision ?? 0) + 1;
+            }
+
             $standard->status = 'TERBIT';
             $standard->approval_stage = 'FINAL';
             $standard->approved_by = auth()->id();
             $standard->reject_reason = null;
             $this->activateRevisedStandard($standard);
             $standard->save();
+            AppSetting::query()->updateOrCreate(
+                ['key' => 'standard_cycle_applied'],
+                ['value' => 'true']
+            );
 
             return response()->json([
                 'status'  => 'success',

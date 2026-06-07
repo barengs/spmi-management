@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 class AppSettingController extends Controller
 {
     private const STANDARD_CYCLE_DURATION_KEY = 'standard_cycle_duration_months';
+    private const STANDARD_CYCLE_APPLIED_KEY = 'standard_cycle_applied';
     private const DEFAULT_STANDARD_CYCLE_DURATION_MONTHS = 4;
 
     private function denyUnlessManage(Request $request): ?JsonResponse
@@ -41,6 +42,10 @@ class AppSettingController extends Controller
                 'key' => self::STANDARD_CYCLE_DURATION_KEY,
                 'duration_months' => (int) $setting->value,
                 'default_months' => self::DEFAULT_STANDARD_CYCLE_DURATION_MONTHS,
+                'is_applied' => filter_var(
+                    AppSetting::valueOf(self::STANDARD_CYCLE_APPLIED_KEY, 'false'),
+                    FILTER_VALIDATE_BOOLEAN
+                ),
             ],
         ]);
     }
