@@ -375,13 +375,19 @@ export default function StandardDetailPage() {
         const loadPreview = async () => {
             try {
                 setDocumentPreviewLoading(true);
-                const response = await api.get(`/standards/${standard.id}/preview`, {
+                const isPdfSource = standard.source_document_mime_type?.toLowerCase().includes('pdf')
+                    || standard.source_document_original_name?.toLowerCase().endsWith('.pdf');
+                const previewEndpoint = isPdfSource
+                    ? `/standards/${standard.id}/source-document/download`
+                    : `/standards/${standard.id}/preview`;
+                const response = await api.get(previewEndpoint, {
                     responseType: 'blob',
                 });
 
                 if (!mounted) return;
 
-                createdUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+                const contentType = response.headers['content-type'] || 'application/pdf';
+                createdUrl = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
                 setDocumentPreviewUrl((current) => {
                     if (current) window.URL.revokeObjectURL(current);
                     return createdUrl;
@@ -401,7 +407,13 @@ export default function StandardDetailPage() {
             mounted = false;
             if (createdUrl) window.URL.revokeObjectURL(createdUrl);
         };
-    }, [activeTab, standard?.id, tree]);
+    }, [
+        activeTab,
+        standard?.id,
+        standard?.source_document_mime_type,
+        standard?.source_document_original_name,
+        tree,
+    ]);
 
     useEffect(() => {
         if (activeTab !== 'improvement') {
@@ -842,7 +854,9 @@ export default function StandardDetailPage() {
                                                     {standard.source_document_original_name || 'Dokumen sumber'}
                                                 </div>
                                                 <div className="mt-1 text-sm text-slate-400">
-                                                    Preview di bawah menampilkan isi standar terbaru yang tersimpan di sistem.
+                                                    {usesPdfDocumentFormat
+                                                        ? 'Preview di bawah menampilkan dokumen PDF sumber dengan format aslinya.'
+                                                        : 'Preview di bawah menampilkan isi standar terbaru yang tersimpan di sistem.'}
                                                 </div>
                                             </div>
                                             <button
@@ -858,7 +872,7 @@ export default function StandardDetailPage() {
 
                                     {documentPreviewLoading ? (
                                         <div className="rounded-3xl border border-slate-700 bg-slate-900 px-6 py-12 text-center text-sm text-slate-400">
-                                            Membuat preview PDF terbaru...
+                                            {usesPdfDocumentFormat ? 'Memuat dokumen PDF asli...' : 'Membuat preview dokumen terbaru...'}
                                         </div>
                                     ) : documentPreviewUrl ? (
                                         <div className="overflow-hidden rounded-3xl border border-slate-700 bg-slate-950">
@@ -1029,7 +1043,7 @@ export default function StandardDetailPage() {
                             <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
                                 <div className="text-sm font-semibold text-slate-100">Pengaturan Standar</div>
                                 <div className="mt-2 text-sm leading-6 text-slate-400">
-                                    Standar DRAFT atau TERBIT dapat dihapus selama belum memiliki data penerapan. Draft revisi yang belum diterapkan juga dapat dihapus.
+                                    Standar berstatus DRAFT atau TERBIT dapat dihapus. Penghapusan dilakukan secara soft delete agar riwayat data tetap tersimpan.
                                 </div>
                             </div>
 

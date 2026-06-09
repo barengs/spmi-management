@@ -842,13 +842,12 @@ class StandardController extends Controller
 
         $standard = MstStandard::findOrFail($id);
 
-        $isDeletableStatus = in_array($standard->status, ['DRAFT', 'TERBIT'], true)
-            && ! $this->hasImplementationEvidence($standard);
+        $isDeletableStatus = in_array($standard->status, ['DRAFT', 'TERBIT'], true);
 
         if (! $isDeletableStatus) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Hanya standar DRAFT atau TERBIT yang belum diterapkan yang dapat dihapus.'
+                'message' => 'Hanya standar DRAFT atau TERBIT yang dapat dihapus.'
             ], 403);
         }
 
