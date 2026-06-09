@@ -134,7 +134,7 @@ class BorangController extends Controller
             'metric.standard',
             'metric.parent',
             'evidences:id,metric_id,borang_item_id,uploaded_by,source_type,notes,link_url,original_name,stored_name,mime_type,size_bytes,review_status,review_comment,created_at',
-            'metric.ptks:id,metric_id,status',
+            'metric.ptks:id,metric_id,status,finding_summary,target_completion_date,response_note,verified_at,closed_at,created_at',
         ]);
 
         $prodi = $borangItem->prodi;
@@ -489,6 +489,20 @@ class BorangController extends Controller
             'ptk_summary' => [
                 'total' => $ptks->count(),
                 'open' => $ptks->whereIn('status', ['OPEN', 'REVISION_REQUIRED', 'RESPONDED', 'VERIFIED'])->count(),
+            ],
+            'metric' => [
+                'id' => $metric?->id,
+                'ptks' => $ptks->map(fn ($ptk) => [
+                    'id' => $ptk->id,
+                    'metric_id' => $ptk->metric_id,
+                    'status' => $ptk->status,
+                    'finding_summary' => $ptk->finding_summary,
+                    'target_completion_date' => $ptk->target_completion_date,
+                    'response_note' => $ptk->response_note,
+                    'verified_at' => $ptk->verified_at,
+                    'closed_at' => $ptk->closed_at,
+                    'created_at' => $ptk->created_at,
+                ])->all(),
             ],
         ];
     }

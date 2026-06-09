@@ -511,6 +511,67 @@ export default function BorangDetailPage() {
                 )}
             </section>
 
+            {!canReviewEvidence && borangItem?.metric?.ptks && borangItem.metric.ptks.length > 0 && (
+                <section className="rounded-3xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div>
+                            <h2 className="text-lg font-semibold text-rose-900">Daftar Temuan Auditor</h2>
+                            <p className="mt-1 text-sm text-rose-800">
+                                {borangItem.metric.ptks.length} temuan yang perlu ditindaklanjuti
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 space-y-4">
+                        {borangItem.metric.ptks.map((ptk, index) => (
+                            <div key={ptk.id} className="rounded-2xl border border-rose-300 bg-white p-5 shadow-sm">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1">
+                                        <div className="inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                                            Temuan #{index + 1}
+                                        </div>
+                                        <div className="mt-3 text-sm font-semibold text-gray-900">Komentar Auditor</div>
+                                        <div className="mt-2 text-sm leading-6 text-gray-700">
+                                            {ptk.finding_summary || '-'}
+                                        </div>
+                                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                                            <div className="rounded-lg bg-gray-50 p-3">
+                                                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">Status</div>
+                                                <div className="mt-1 text-sm font-semibold text-gray-900">
+                                                    {ptk.status === 'OPEN' ? '🔴 Terbuka' : ptk.status === 'RESPONDED' ? '🟡 Sudah Direspons' : ptk.status === 'VERIFIED' ? '🟢 Terverifikasi' : '✓ Selesai'}
+                                                </div>
+                                            </div>
+                                            <div className="rounded-lg bg-gray-50 p-3">
+                                                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">Target Selesai</div>
+                                                <div className="mt-1 text-sm font-semibold text-gray-900">
+                                                    {ptk.target_completion_date ? new Date(ptk.target_completion_date).toLocaleDateString('id-ID', { dateStyle: 'medium' }) : '-'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {ptk.response_note && (
+                                            <div className="mt-3 rounded-lg bg-blue-50 p-3">
+                                                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-600">Respons Auditee</div>
+                                                <div className="mt-1 text-sm text-blue-900">{ptk.response_note}</div>
+                                            </div>
+                                        )}
+                                        {ptk.verified_at && (
+                                            <div className="mt-3 text-xs text-gray-500">
+                                                ✓ Diverifikasi pada {new Date(ptk.verified_at).toLocaleDateString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                                            </div>
+                                        )}
+                                        {ptk.closed_at && (
+                                            <div className="mt-1 text-xs text-gray-500">
+                                                ✓ Ditutup pada {new Date(ptk.closed_at).toLocaleDateString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
         </div>
     );
 }

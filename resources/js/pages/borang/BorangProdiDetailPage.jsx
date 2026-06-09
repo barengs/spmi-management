@@ -83,72 +83,6 @@ function DetailInfoCard({ label, value, hint }) {
     );
 }
 
-function AuditeeDocumentPreview({ faculty, prodi, rows }) {
-    const groupedRows = rows.reduce((groups, row) => {
-        const key = row.standardName || 'Standar Mutu';
-        groups[key] = [...(groups[key] || []), row];
-        return groups;
-    }, {});
-
-    return (
-        <div className="bg-slate-100 px-4 py-8 sm:px-8">
-            <article className="mx-auto min-h-[70vh] max-w-5xl bg-white px-6 py-10 shadow-xl ring-1 ring-slate-200 sm:px-10">
-                <header className="border-b-2 border-slate-900 pb-6 text-center">
-                    <div className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500">Dokumen Borang Mutu</div>
-                    <h2 className="mt-3 text-2xl font-bold uppercase text-slate-950">{prodi?.name || 'Program Studi'}</h2>
-                    <p className="mt-2 text-sm font-medium text-slate-600">{faculty?.name || '-'}</p>
-                </header>
-
-                {rows.length === 0 ? (
-                    <div className="py-20 text-center text-sm text-slate-500">Belum ada isi borang pada bagian ini.</div>
-                ) : (
-                    <div className="mt-8 space-y-10">
-                        {Object.entries(groupedRows).map(([standardName, standardRows]) => (
-                            <section key={standardName}>
-                                <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.12em] text-slate-900">{standardName}</h3>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full border-collapse text-sm">
-                                        <thead>
-                                            <tr className="bg-slate-100">
-                                                <th className="border border-slate-400 px-3 py-2 text-center">No.</th>
-                                                <th className="border border-slate-400 px-3 py-2 text-left">Sumber</th>
-                                                <th className="border border-slate-400 px-3 py-2 text-left">Indikator</th>
-                                                <th className="border border-slate-400 px-3 py-2 text-left">Target Sasaran</th>
-                                                <th className="border border-slate-400 px-3 py-2 text-center">Aksi</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {standardRows.map((row, index) => (
-                                                <tr key={row.id} className="align-top">
-                                                    <td className="w-14 border border-slate-400 px-3 py-3 text-center">{index + 1}</td>
-                                                    <td className="w-32 border border-slate-400 px-3 py-3 font-semibold">
-                                                        {[row.iku, row.ikt].filter((value) => value && value !== '-').join(' / ') || '-'}
-                                                    </td>
-                                                    <td className="border border-slate-400 px-3 py-3 leading-6">{row.indikator || row.sasaranMutu || '-'}</td>
-                                                    <td className="border border-slate-400 px-3 py-3 leading-6">{row.targetSasaran || '-'}</td>
-                                                    <td className="w-24 border border-slate-400 px-3 py-3 text-center">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => window.location.assign(`/borang/${row.id}`)}
-                                                            className="font-semibold text-sky-700 underline underline-offset-2"
-                                                        >
-                                                            Detail
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </section>
-                        ))}
-                    </div>
-                )}
-            </article>
-        </div>
-    );
-}
-
 export default function BorangProdiDetailPage() {
     const { prodiId } = useParams();
     const PAGE_SIZE = 10;
@@ -588,13 +522,6 @@ export default function BorangProdiDetailPage() {
                             />
                         </div>
 
-                        {isReadOnlyBorang ? (
-                            <AuditeeDocumentPreview
-                                faculty={selectedFaculty}
-                                prodi={selectedProdi}
-                                rows={filteredRequirementRows}
-                            />
-                        ) : (
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
@@ -607,7 +534,10 @@ export default function BorangProdiDetailPage() {
                                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Indikator</th>
                                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Target Sasaran</th>
                                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">PJ</th>
-                                        {!canManageBorang && (
+                                        {isReadOnlyBorang && (
+                                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Hasil PTK</th>
+                                        )}
+                                        {!canManageBorang && !isReadOnlyBorang && (
                                             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">Checklist</th>
                                         )}
                                         <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
@@ -633,7 +563,38 @@ export default function BorangProdiDetailPage() {
                                                 <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.indikator}</td>
                                                 <td className="px-4 py-4 text-sm leading-6 text-gray-700">{row.targetSasaran}</td>
                                                 <td className="px-4 py-4 text-sm font-medium text-gray-700">{row.pj}</td>
-                                                {!canManageBorang && (
+                                                {isReadOnlyBorang && (
+                                                    <td className="px-4 py-4 text-sm">
+                                                        {(() => {
+                                                            if (!row.ptkSummary || (row.ptkSummary.total || 0) === 0) {
+                                                                return (
+                                                                    <span className="text-gray-500">-</span>
+                                                                );
+                                                            }
+                                                            const total = row.ptkSummary.total || 0;
+                                                            const open = row.ptkSummary.open || 0;
+                                                            const closed = total - open;
+                                                            return (
+                                                                <div className="space-y-2">
+                                                                    <div className="text-xs">
+                                                                        <div className="font-semibold text-rose-700">
+                                                                            PTK: {total} ({open} terbuka, {closed} selesai)
+                                                                        </div>
+                                                                    </div>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => window.location.assign(`/borang/${row.id}`)}
+                                                                        className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100"
+                                                                    >
+                                                                        <Icon icon={Icons.eye} width={12} />
+                                                                        Lihat Detail
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </td>
+                                                )}
+                                                {!canManageBorang && !isReadOnlyBorang && (
                                                     <td className="px-4 py-4 text-sm">
                                                         {(() => {
                                                             const statusMeta = getAuditStatusMeta(row.evidenceSummary?.status);
@@ -691,8 +652,6 @@ export default function BorangProdiDetailPage() {
                                 </tbody>
                             </table>
                         </div>
-                        )}
-                        {!isReadOnlyBorang && (
                         <TablePagination
                             page={requirementsPage}
                             totalPages={requirementTotalPages}
@@ -700,7 +659,6 @@ export default function BorangProdiDetailPage() {
                             pageSize={PAGE_SIZE}
                             onPageChange={setRequirementsPage}
                         />
-                        )}
                     </>
                 )}
             </section>

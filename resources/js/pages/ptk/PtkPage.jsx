@@ -43,6 +43,7 @@ export default function PtkPage() {
     const canRespond = permissions.includes('ptk.respond');
     const canVerify = permissions.includes('ptk.verify');
     const canClose = permissions.includes('ptk.close');
+    const canCreate = permissions.includes('ptk.create');
 
     const [ptks, setPtks] = useState([]);
     const [loading, setLoading] = useState(true);
