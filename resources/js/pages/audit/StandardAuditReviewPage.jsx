@@ -38,29 +38,6 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function renderHighlightedText(content, searchTerms) {
-    const text = String(content || '');
-
-    if (searchTerms.length === 0) {
-        return text;
-    }
-
-    const pattern = new RegExp(`(${searchTerms.map(escapeRegExp).join('|')})`, 'gi');
-    const parts = text.split(pattern);
-
-    return parts.map((part, index) => {
-        const isMatch = searchTerms.some((term) => part.toLowerCase() === term);
-
-        return isMatch ? (
-            <mark key={`${part}-${index}`} className="rounded bg-amber-200 px-1 text-gray-900">
-                {part}
-            </mark>
-        ) : (
-            <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
-        );
-    });
-}
-
 function flattenIndicatorOptions(nodes, options = []) {
     nodes.forEach((node) => {
         if (node.type === 'Indicator') {
@@ -94,26 +71,6 @@ function buildButirMutuRows(standards, treesByStandardId) {
     ));
 }
 
-function renderMetricTree(nodes, searchTerms, depth = 0) {
-    return nodes.map((node) => {
-        return (
-            <div key={node.id} className="space-y-2">
-                <div
-                    className="rounded-2xl border border-gray-200 bg-gray-50/70 px-4 py-3"
-                    style={{ marginLeft: `${depth * 16}px` }}
-                >
-                    <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
-                        <span>{node.type}</span>
-                    </div>
-                    <div className="text-sm leading-6 text-gray-800">{renderHighlightedText(node.content, searchTerms)}</div>
-                </div>
-
-                {node.children_recursive?.length > 0 && renderMetricTree(node.children_recursive, searchTerms, depth + 1)}
-            </div>
-        );
-    });
-}
-
 export default function StandardAuditReviewPage() {
     const { standardId } = useParams();
     const navigate = useNavigate();
@@ -126,7 +83,7 @@ export default function StandardAuditReviewPage() {
     const [standardTree, setStandardTree] = useState([]);
     const [loading, setLoading] = useState(true);
     const [previewLoading, setPreviewLoading] = useState(false);
-    const [standardTreeLoading, setStandardTreeLoading] = useState(false);
+    const [downloadLoading, setDownloadLoading] = useState(false);
     const [previewUrl, setPreviewUrl] = useState('');
     const [reviewComment, setReviewComment] = useState('');
     const [createPtkOnReject, setCreatePtkOnReject] = useState(false);
@@ -141,6 +98,13 @@ export default function StandardAuditReviewPage() {
     const [referencePeriodFilter, setReferencePeriodFilter] = useState('ALL');
 
     const fetchPageData = async () => {
+        if (!/^\d+$/.test(String(standardId || ''))) {
+            toast.error('Standar audit tidak valid.');
+            setLoading(false);
+            navigate('/audit', { replace: true });
+            return;
+        }
+
         try {
             setLoading(true);
             const [standardResponse, treeResponse, evidenceResponse] = await Promise.all([
@@ -163,7 +127,6 @@ export default function StandardAuditReviewPage() {
             toast.error(error.response?.data?.message || 'Halaman review standar gagal dimuat.');
         } finally {
             setLoading(false);
-            setStandardTreeLoading(false);
         }
     };
 
@@ -224,6 +187,38 @@ export default function StandardAuditReviewPage() {
             toast.error('Preview dokumen gagal dimuat. Gunakan unduh file jika format belum didukung.');
         } finally {
             setPreviewLoading(false);
+        }
+    };
+
+    const handleDownload = async (evidence) => {
+        if (!evidence || evidence.source_type !== 'file') {
+            return;
+        }
+
+        try {
+            setDownloadLoading(true);
+            const response = await api.get(`/evidences/${evidence.id}/download`, {
+                responseType: 'blob',
+            });
+            const contentType = response.headers['content-type'] || evidence.mime_type || 'application/octet-stream';
+            const contentDisposition = response.headers['content-disposition'] || '';
+            const encodedFileName = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+            const plainFileName = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1];
+            const fileName = encodedFileName
+                ? decodeURIComponent(encodedFileName)
+                : plainFileName || evidence.original_name || evidence.stored_name || 'dokumen-bukti';
+            const downloadUrl = window.URL.createObjectURL(new Blob([response.data], { type: contentType }));
+            const anchor = document.createElement('a');
+            anchor.href = downloadUrl;
+            anchor.download = fileName;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Dokumen bukti gagal diunduh.');
+        } finally {
+            setDownloadLoading(false);
         }
     };
 
@@ -395,7 +390,7 @@ export default function StandardAuditReviewPage() {
                         </div>
                         <h1 className="mt-4 text-2xl font-semibold text-gray-900">{standard?.name || 'Review Standar'}</h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                            Fokus review per standar dengan dua pane tetap: dokumen bukti di kiri dan struktur standar di kanan.
+                            Review dokumen bukti auditee, berikan keputusan, dan catat temuan audit.
                         </p>
                     </div>
                     <Link
@@ -408,7 +403,7 @@ export default function StandardAuditReviewPage() {
                 </div>
             </section>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+            <div className="grid gap-6">
                 <section className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="border-b border-gray-200 px-5 py-4">
                         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -426,13 +421,26 @@ export default function StandardAuditReviewPage() {
                         </div>
                         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                             <span className="text-xs text-gray-400">{evidences.length} item</span>
-                            <Link
-                                to="/audit"
-                                className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
-                            >
-                                <Icon icon={Icons.back} width={14} />
-                                Semua Dokumen
-                            </Link>
+                            <div className="flex flex-wrap gap-2">
+                                {selectedEvidence?.source_type === 'file' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDownload(selectedEvidence)}
+                                        disabled={downloadLoading}
+                                        className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Icon icon={Icons.document} width={14} />
+                                        {downloadLoading ? 'Mengunduh...' : 'Unduh Dokumen'}
+                                    </button>
+                                )}
+                                <Link
+                                    to="/audit"
+                                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+                                >
+                                    <Icon icon={Icons.back} width={14} />
+                                    Semua Dokumen
+                                </Link>
+                            </div>
                         </div>
                         {evidences.length > 1 && (
                             <div className="mt-4">
@@ -469,8 +477,19 @@ export default function StandardAuditReviewPage() {
                             ) : previewUrl ? (
                                 <iframe title="Audit Preview" src={previewUrl} className="h-full w-full" />
                             ) : (
-                                <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                                    Preview tidak tersedia untuk bukti ini.
+                                <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center text-sm text-gray-500">
+                                    <span>Preview tidak tersedia untuk bukti ini.</span>
+                                    {selectedEvidence.source_type === 'file' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDownload(selectedEvidence)}
+                                            disabled={downloadLoading}
+                                            className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            <Icon icon={Icons.document} width={16} />
+                                            {downloadLoading ? 'Mengunduh...' : 'Unduh Dokumen'}
+                                        </button>
+                                    )}
                                 </div>
                             )
                         ) : (
@@ -481,35 +500,8 @@ export default function StandardAuditReviewPage() {
                     </div>
                 </section>
 
-                <aside className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                    <div className="border-b border-gray-200 px-5 py-4">
-                        <div>
-                            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Struktur Standar</h3>
-                            <p className="mt-1 text-sm text-gray-600">
-                                {standard?.name || 'Standar tidak ditemukan'}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="h-[calc(100vh-17rem)] min-h-[70vh] overflow-y-auto bg-white px-5 py-5">
-                        {standardTreeLoading ? (
-                            <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                                Memuat struktur standar...
-                            </div>
-                        ) : standardTree.length > 0 ? (
-                            <div className="space-y-3">
-                                {renderMetricTree(standardTree, [])}
-                            </div>
-                        ) : (
-                            <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                                Struktur standar belum tersedia.
-                            </div>
-                        )}
-                    </div>
-                </aside>
-
                 {selectedEvidence && (
-                    <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm xl:col-span-2">
+                    <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
                         <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
                                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">

@@ -85,7 +85,7 @@ Route::prefix('v1')->group(function () {
         });
 
         // Dokumen Standar Mutu (MstStandard)
-        Route::prefix('standards')->group(function () {
+        Route::prefix('standards')->whereNumber('id')->whereNumber('standard_id')->group(function () {
             Route::get('/',                     [\App\Modules\Standard\Controllers\StandardController::class, 'index']);
             Route::post('/',                    [\App\Modules\Standard\Controllers\StandardController::class, 'store']);
             Route::post('/import',             [\App\Modules\Standard\Controllers\StandardController::class, 'import']);

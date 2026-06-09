@@ -156,8 +156,9 @@ export default function BorangProdiDetailPage() {
     const permissions = user?.permissions || [];
     const roles = user?.roles || [];
     const hasRole = (roleName) => roles.some((role) => (typeof role === 'string' ? role === roleName : role?.name === roleName));
+    const isAuditor = hasRole('Auditor') || hasRole('Lead Auditor');
     const canManageBorang = hasRole('SuperAdmin') || permissions.includes('standard.update');
-    const canAuditBorang = permissions.includes('audit.score.update');
+    const canAuditBorang = isAuditor || permissions.includes('audit.score.update');
     const canViewBorang = permissions.includes('audit.view');
     const isReadOnlyBorang = !canManageBorang && !canAuditBorang && canViewBorang;
     const canCreatePtk = permissions.includes('ptk.create');
@@ -191,6 +192,7 @@ export default function BorangProdiDetailPage() {
             metricId: row.metric_id,
             standardId: row.standard_id,
             standardName: row.standard_name,
+            standardDeleted: Boolean(row.standard_deleted),
             iku: row.iku,
             ikt: row.ikt,
             sasaranMutu: row.sasaran_mutu,
@@ -664,11 +666,12 @@ export default function BorangProdiDetailPage() {
                                                             <button
                                                                 type="button"
                                                                 onClick={() => window.location.assign(`/audit/${row.standardId}/review`)}
-                                                                disabled={auditLocked}
+                                                                disabled={auditLocked || !row.standardId || row.standardDeleted}
+                                                                title={row.standardDeleted ? 'Standar ini sudah dihapus dan hanya disimpan sebagai riwayat.' : undefined}
                                                                 className="inline-flex items-center gap-2 rounded-full border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
                                                             >
                                                                 <Icon icon={Icons.eye} width={14} />
-                                                                Review
+                                                                {row.standardDeleted ? 'Standar Dihapus' : 'Review'}
                                                             </button>
                                                         </div>
                                                     ) : (

@@ -39,7 +39,7 @@ class MstMetric extends Model
 
     public function standard(): BelongsTo
     {
-        return $this->belongsTo(MstStandard::class, 'standard_id');
+        return $this->belongsTo(MstStandard::class, 'standard_id')->withTrashed();
     }
 
     public function parent(): BelongsTo
