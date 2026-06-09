@@ -35,26 +35,29 @@ function cloneCachedResponse(response) {
     };
 }
 
+function buildQueuedError() {
+    const queuedError = new Error('Perubahan disimpan sementara dan akan dikirim otomatis saat koneksi kembali online.');
+    queuedError.code = 'OFFLINE_QUEUED';
+    queuedError.isOfflineQueued = true;
+    queuedError.response = {
+        status: 202,
+        data: {
+            status: 'queued',
+            message: 'Perubahan disimpan sementara dan akan dikirim otomatis saat koneksi kembali online.',
+        },
+    };
+
+    return queuedError;
+}
+
 // Request interceptor: attach token
 api.interceptors.request.use(
-    (config) => {
+    async (config) => {
         const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
         if (isOffline && canQueueRequest(config)) {
-            enqueueOfflineRequest(config);
-
-            const queuedError = new Error('Perubahan disimpan sementara dan akan dikirim otomatis saat koneksi kembali online.');
-            queuedError.code = 'OFFLINE_QUEUED';
-            queuedError.isOfflineQueued = true;
-            queuedError.response = {
-                status: 202,
-                data: {
-                    status: 'queued',
-                    message: 'Perubahan disimpan sementara dan akan dikirim otomatis saat koneksi kembali online.',
-                },
-            };
-
-            return Promise.reject(queuedError);
+            await enqueueOfflineRequest(config);
+            return Promise.reject(buildQueuedError());
         }
 
         const token = getAuthState().token;
@@ -89,13 +92,29 @@ api.interceptors.response.use(
 
         return response;
     },
-    (error) => {
+    async (error) => {
+        if (error?.isOfflineQueued) {
+            toast.info(error.response?.data?.message || 'Perubahan disimpan sementara untuk sinkronisasi otomatis.', {
+                toastId: 'offline-action-queued',
+            });
+            return Promise.reject(error);
+        }
+
         const isOfflineError = !navigator.onLine || (!error.response && (error.code === 'ERR_NETWORK' || error.message === 'Network Error'));
 
         if (isOfflineError) {
+            if (canQueueRequest(error.config || {})) {
+                await enqueueOfflineRequest(error.config);
+                const queuedError = buildQueuedError();
+                toast.info(queuedError.response.data.message, {
+                    toastId: 'offline-action-queued',
+                });
+                return Promise.reject(queuedError);
+            }
+
             if (!hasShownOfflineActionToast) {
                 hasShownOfflineActionToast = true;
-                toast.error('Anda masih offline. Permintaan data atau upload belum dapat diproses.', {
+                toast.error('Anda masih offline. Permintaan data belum dapat diproses.', {
                     toastId: 'offline-action-error',
                 });
             }

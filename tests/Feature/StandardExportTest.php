@@ -155,6 +155,35 @@ class StandardExportTest extends TestCase
         $response->assertJsonPath('status', 'error');
     }
 
+    public function test_pdf_imported_standard_exports_latest_content_as_pdf(): void
+    {
+        $user = $this->createExportUser();
+        $standard = MstStandard::create([
+            'name' => 'Standar Sumber PDF',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'is_active' => true,
+            'status' => 'TERBIT',
+            'source_document_original_name' => 'standar-sumber.pdf',
+            'source_document_mime_type' => 'application/pdf',
+        ]);
+
+        MstMetric::create([
+            'standard_id' => $standard->id,
+            'content' => 'Konten terbaru hasil perubahan sistem',
+            'type' => 'Header',
+            'order' => 1,
+        ]);
+
+        $response = $this->actingAs($user, 'api')
+            ->get("/api/v1/standards/{$standard->id}/export");
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/pdf');
+        $this->assertStringContainsString('.pdf', $response->headers->get('content-disposition'));
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
+    }
+
     public function test_draft_revision_export_contains_latest_edited_content_for_drafting_user(): void
     {
         $user = $this->createDraftExportUser();

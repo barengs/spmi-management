@@ -1,5 +1,8 @@
 const STORAGE_KEY = 'espmi_offline_queue';
 const EVENT_NAME = 'espmi-offline-queue-changed';
+const DB_NAME = 'espmi_offline_queue_db';
+const DB_VERSION = 1;
+const PAYLOAD_STORE = 'payloads';
 
 let isFlushing = false;
 
@@ -81,10 +84,8 @@ export function canQueueRequest(config = {}) {
     }
 
     const payload = config.data;
-
     if (
-        (typeof FormData !== 'undefined' && payload instanceof FormData)
-        || (typeof Blob !== 'undefined' && payload instanceof Blob)
+        (typeof Blob !== 'undefined' && payload instanceof Blob)
         || (typeof File !== 'undefined' && payload instanceof File)
         || (typeof ArrayBuffer !== 'undefined' && payload instanceof ArrayBuffer)
     ) {
@@ -94,13 +95,114 @@ export function canQueueRequest(config = {}) {
     return true;
 }
 
-export function enqueueOfflineRequest(config = {}) {
+function openQueueDatabase() {
+    if (!isBrowser() || !window.indexedDB) {
+        return Promise.resolve(null);
+    }
+
+    return new Promise((resolve, reject) => {
+        const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = () => {
+            const database = request.result;
+            if (!database.objectStoreNames.contains(PAYLOAD_STORE)) {
+                database.createObjectStore(PAYLOAD_STORE, { keyPath: 'id' });
+            }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function putStoredPayload(id, payload) {
+    if (!(typeof FormData !== 'undefined' && payload instanceof FormData)) {
+        return null;
+    }
+
+    const database = await openQueueDatabase();
+    if (!database) {
+        return null;
+    }
+
+    const entries = [];
+    payload.forEach((value, name) => {
+        entries.push({
+            name,
+            value,
+            isFile: typeof File !== 'undefined' && value instanceof File,
+        });
+    });
+
+    await new Promise((resolve, reject) => {
+        const transaction = database.transaction(PAYLOAD_STORE, 'readwrite');
+        transaction.objectStore(PAYLOAD_STORE).put({ id, entries });
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+    });
+
+    database.close();
+
+    return 'formData';
+}
+
+async function getStoredPayload(id, dataKind) {
+    if (dataKind !== 'formData') {
+        return undefined;
+    }
+
+    const database = await openQueueDatabase();
+    if (!database) {
+        return undefined;
+    }
+
+    const record = await new Promise((resolve, reject) => {
+        const transaction = database.transaction(PAYLOAD_STORE, 'readonly');
+        const request = transaction.objectStore(PAYLOAD_STORE).get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+
+    database.close();
+
+    if (!record || typeof FormData === 'undefined') {
+        return undefined;
+    }
+
+    const formData = new FormData();
+    for (const entry of record.entries || []) {
+        formData.append(entry.name, entry.value);
+    }
+
+    return formData;
+}
+
+async function deleteStoredPayload(id) {
+    const database = await openQueueDatabase();
+    if (!database) {
+        return;
+    }
+
+    await new Promise((resolve, reject) => {
+        const transaction = database.transaction(PAYLOAD_STORE, 'readwrite');
+        transaction.objectStore(PAYLOAD_STORE).delete(id);
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+    });
+
+    database.close();
+}
+
+export async function enqueueOfflineRequest(config = {}) {
     const queue = loadQueue();
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const dataKind = await putStoredPayload(id, config.data);
     const item = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        id,
         method: String(config.method || 'post').toLowerCase(),
         url: config.url,
-        data: config.data ?? null,
+        data: dataKind ? null : (config.data ?? null),
+        dataKind,
         params: config.params ?? null,
         created_at: new Date().toISOString(),
     };
@@ -140,12 +242,13 @@ export async function flushOfflineQueue(api, { onSuccess, onPermanentFailure } =
                 await api.request({
                     method: current.method,
                     url: current.url,
-                    data: current.data,
+                    data: (await getStoredPayload(current.id, current.dataKind)) ?? current.data,
                     params: current.params,
                     __skipOfflineQueue: true,
                 });
 
                 remaining.shift();
+                await deleteStoredPayload(current.id);
                 saveQueue(remaining);
                 flushed += 1;
             } catch (error) {
@@ -154,6 +257,7 @@ export async function flushOfflineQueue(api, { onSuccess, onPermanentFailure } =
                 }
 
                 remaining.shift();
+                await deleteStoredPayload(current.id);
                 saveQueue(remaining);
                 failed += 1;
 

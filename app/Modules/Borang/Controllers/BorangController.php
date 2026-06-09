@@ -47,6 +47,17 @@ class BorangController extends Controller
             return true;
         }
 
+        $isAuditeeForUnit = $user?->hasRole('Auditee')
+            && $user?->unit_id
+            && (
+                (int) $prodi->id === (int) $user->unit_id
+                || (int) $prodi->parent_id === (int) $user->unit_id
+            );
+
+        if ($isAuditeeForUnit) {
+            return true;
+        }
+
         $isAssigned = AuditSchedule::query()
             ->where('prodi_id', $prodi->id)
             ->where(function ($query) use ($user) {
@@ -66,57 +77,6 @@ class BorangController extends Controller
             ->where('is_active', true)
             ->orderBy('id')
             ->get(['id']);
-    }
-
-    private function syncSharedBorangTemplate(?int $createdBy = null): void
-    {
-        $allProdis = $this->activeProdis();
-
-        if ($allProdis->isEmpty()) {
-            return;
-        }
-
-        $templateItems = BorangItem::query()
-            ->select('id', 'metric_id', 'pj', 'target_sasaran', 'created_by')
-            ->orderByDesc('updated_at')
-            ->orderByDesc('id')
-            ->get()
-            ->unique('metric_id')
-            ->values();
-
-        if ($templateItems->isEmpty()) {
-            return;
-        }
-
-        DB::transaction(function () use ($allProdis, $templateItems, $createdBy): void {
-            foreach ($templateItems as $templateItem) {
-                $existingItems = BorangItem::query()
-                    ->where('metric_id', $templateItem->metric_id)
-                    ->get()
-                    ->keyBy(fn (BorangItem $item) => (string) $item->prodi_id);
-
-                foreach ($allProdis as $department) {
-                    $existingItem = $existingItems->get((string) $department->id);
-
-                    if ($existingItem) {
-                        $existingItem->update([
-                            'pj' => $templateItem->pj,
-                            'target_sasaran' => $templateItem->target_sasaran,
-                        ]);
-
-                        continue;
-                    }
-
-                    BorangItem::create([
-                        'prodi_id' => $department->id,
-                        'metric_id' => $templateItem->metric_id,
-                        'pj' => $templateItem->pj,
-                        'target_sasaran' => $templateItem->target_sasaran,
-                        'created_by' => $createdBy ?? $templateItem->created_by,
-                    ]);
-                }
-            }
-        });
     }
 
     private function denyUnless(Request $request, string $permission, string $message): ?JsonResponse
@@ -143,8 +103,6 @@ class BorangController extends Controller
         }
 
         abort_if($prodi->level !== 'department', 404);
-
-        $this->syncSharedBorangTemplate($user?->id);
 
         $items = BorangItem::with([
             'metric.standard',

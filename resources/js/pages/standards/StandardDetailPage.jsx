@@ -304,6 +304,10 @@ export default function StandardDetailPage() {
         || user?.permissions?.includes('standard.update');
     const canDeleteStandard = hasRole('SuperAdmin') || user?.permissions?.includes('standard.delete');
     const canExportStandard = hasRole('SuperAdmin') || user?.permissions?.includes('report.export');
+    const visibleTabs = useMemo(
+        () => tabs.filter((tab) => tab.id !== 'settings' || canDraftStandard || canDeleteStandard),
+        [canDeleteStandard, canDraftStandard]
+    );
     const [standard, setStandard] = useState(null);
     const [tree, setTree] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -327,6 +331,7 @@ export default function StandardDetailPage() {
         periode_tahun: '',
         referensi_regulasi: '',
         is_active: true,
+        status: 'DRAFT',
     });
 
     useEffect(() => {
@@ -347,6 +352,7 @@ export default function StandardDetailPage() {
                     periode_tahun: standardResponse.data.data?.periode_tahun || '',
                     referensi_regulasi: standardResponse.data.data?.referensi_regulasi || '',
                     is_active: Boolean(standardResponse.data.data?.is_active),
+                    status: standardResponse.data.data?.status || 'DRAFT',
                 });
             } catch (error) {
                 toast.error(error.response?.data?.message || 'Detail standar gagal dimuat.');
@@ -435,9 +441,13 @@ export default function StandardDetailPage() {
 
         return Array.isArray(standard?.indicator_entries) ? standard.indicator_entries : [];
     }, [standard]);
+    const usesPdfDocumentFormat = standard?.source_document_mime_type?.toLowerCase().includes('pdf')
+        || standard?.source_document_original_name?.toLowerCase().endsWith('.pdf');
     const isDraft = standard?.status === 'DRAFT';
-    const canDeleteCurrentStandard = isDraft
-        && !standard?.previous_standard_id;
+    const canReturnToDraft = standard?.status === 'TERBIT'
+        && !standard?.previous_standard_id
+        && !standard?.implementation_summary?.is_implemented;
+    const hasSelectedDraftStatus = settingsForm.status === 'DRAFT';
     const isImprovementLocked = standard?.status !== 'TERBIT';
     const improvementActionLabels = {
         REVISI: 'Perlu diperbaiki dan diterapkan lagi',
@@ -457,9 +467,9 @@ export default function StandardDetailPage() {
             const contentType = response.headers['content-type'] || 'application/octet-stream';
             const contentDisposition = response.headers['content-disposition'] || '';
             const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
-            const fallbackExtension = contentType.includes('wordprocessingml')
-                ? 'docx'
-                : 'bin';
+            const fallbackExtension = contentType.includes('pdf')
+                ? 'pdf'
+                : contentType.includes('wordprocessingml') ? 'docx' : 'bin';
             const fileName = fileNameMatch?.[1]
                 || `${(standard.name || 'standar').replace(/[\\/:*?"<>|]+/g, '-')}-${standard.periode_tahun || 'tanpa-periode'}.${fallbackExtension}`;
             const blob = new Blob([response.data], { type: contentType });
@@ -501,8 +511,8 @@ export default function StandardDetailPage() {
     const handleSettingsSubmit = async (event) => {
         event.preventDefault();
 
-        if (!isDraft) {
-            toast.warning('Pengaturan standar hanya dapat diubah saat status masih DRAFT.');
+        if (!isDraft && !canReturnToDraft) {
+            toast.warning('Standar hanya dapat dikembalikan ke DRAFT jika belum diterapkan dan bukan salinan revisi.');
             return;
         }
 
@@ -519,17 +529,19 @@ export default function StandardDetailPage() {
     };
 
     const handleDeleteStandard = async () => {
-        if (!canDeleteCurrentStandard) {
-            toast.warning('Hanya standar DRAFT yang belum diterapkan dan bukan salinan revisi yang dapat dihapus.');
-            return;
-        }
-
         if (!window.confirm(`Hapus standar "${standard?.name}"?`)) {
             return;
         }
 
         try {
             setSettingsSubmitting(true);
+
+            if (standard?.status === 'TERBIT' && hasSelectedDraftStatus) {
+                await api.put(`/standards/${standard.id}`, {
+                    status: 'DRAFT',
+                });
+            }
+
             const response = await api.delete(`/standards/${standard.id}`);
             toast.success(response.data.message || 'Standar berhasil dihapus.');
             navigate('/standards');
@@ -656,7 +668,7 @@ export default function StandardDetailPage() {
             <section className="overflow-hidden rounded-3xl border border-slate-700 bg-slate-950 shadow-sm">
                 <div className="border-b border-slate-800 px-4 sm:px-6">
                     <div className="flex flex-wrap gap-1">
-                        {tabs.map((tab) => (
+                        {visibleTabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 type="button"
@@ -839,7 +851,7 @@ export default function StandardDetailPage() {
                                                 className="inline-flex items-center gap-2 rounded-full border border-slate-600 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-100 transition hover:border-emerald-400 hover:text-emerald-300"
                                             >
                                                 <Icon icon={Icons.document} width={14} />
-                                                Unduh DOCX Terbaru
+                                                Unduh {usesPdfDocumentFormat ? 'PDF' : 'DOCX'} Terbaru
                                             </button>
                                         </div>
                                     </div>
@@ -1017,11 +1029,29 @@ export default function StandardDetailPage() {
                             <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5">
                                 <div className="text-sm font-semibold text-slate-100">Pengaturan Standar</div>
                                 <div className="mt-2 text-sm leading-6 text-slate-400">
-                                    Edit standar hanya tersedia saat status masih `DRAFT`. Hapus standar tersedia untuk draft yang belum diterapkan dan bukan salinan revisi.
+                                    Standar DRAFT atau TERBIT dapat dihapus selama belum memiliki data penerapan. Draft revisi yang belum diterapkan juga dapat dihapus.
                                 </div>
                             </div>
 
                             <form onSubmit={handleSettingsSubmit} className="grid gap-4 lg:grid-cols-2">
+                                <label className="space-y-2 lg:col-span-2">
+                                    <span className="text-sm font-medium text-slate-300">Status Standar</span>
+                                    <select
+                                        value={settingsForm.status}
+                                        onChange={(event) => handleSettingsChange('status', event.target.value)}
+                                        disabled={(!isDraft && !canReturnToDraft) || settingsSubmitting}
+                                        className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-950 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {standard?.status === 'TERBIT' ? <option value="TERBIT">Terbit</option> : null}
+                                        <option value="DRAFT">Draft</option>
+                                    </select>
+                                    {canReturnToDraft ? (
+                                        <span className="block text-xs text-amber-300">
+                                            Mengubah ke Draft akan menonaktifkan standar dan mereset proses approval.
+                                        </span>
+                                    ) : null}
+                                </label>
+
                                 <label className="space-y-2">
                                     <span className="text-sm font-medium text-slate-300">Nama Standar</span>
                                     <input
@@ -1098,7 +1128,7 @@ export default function StandardDetailPage() {
                                 <div className="flex flex-wrap gap-3 lg:col-span-2">
                                     <button
                                         type="submit"
-                                        disabled={!isDraft || settingsSubmitting}
+                                        disabled={(!isDraft && !canReturnToDraft) || settingsSubmitting}
                                         className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                         Simpan Perubahan
@@ -1107,7 +1137,7 @@ export default function StandardDetailPage() {
                                         <button
                                             type="button"
                                             onClick={handleDeleteStandard}
-                                            disabled={!canDeleteCurrentStandard || settingsSubmitting}
+                                            disabled={settingsSubmitting}
                                             className="rounded-full border border-rose-700 bg-rose-950/60 px-5 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-900 disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             Hapus Standar
@@ -1116,7 +1146,7 @@ export default function StandardDetailPage() {
                                 </div>
                             </form>
 
-                            {!isDraft && (
+                            {!isDraft && !canReturnToDraft && (
                                 <div className="rounded-3xl border border-amber-800 bg-amber-950/40 p-5 text-sm text-amber-100">
                                     Pengaturan dikunci karena standar ini sudah tidak berada pada status `DRAFT`.
                                 </div>

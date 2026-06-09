@@ -308,7 +308,13 @@ class AuditScheduleController extends Controller
                 fn ($query) => $query->where(function ($sub) use ($user) {
                     $sub->where('lead_auditor_id', $user->id)
                         ->orWhere('auditor_id', $user->id)
-                        ->orWhere('auditee_id', $user->id);
+                        ->orWhere('auditee_id', $user->id)
+                        ->when(
+                            $user->hasRole('Auditee') && $user->unit_id,
+                            fn ($auditeeQuery) => $auditeeQuery
+                                ->orWhere('prodi_id', $user->unit_id)
+                                ->orWhere('faculty_id', $user->unit_id)
+                        );
                 })
             )
             ->orderBy('scheduled_start')

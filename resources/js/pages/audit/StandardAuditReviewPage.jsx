@@ -38,22 +38,6 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function escapeRegExp(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function getSearchTerms(value) {
-    return Array.from(
-        new Set(
-            String(value || '')
-                .trim()
-                .toLowerCase()
-                .split(/\s+/)
-                .filter(Boolean)
-        )
-    );
-}
-
 function renderHighlightedText(content, searchTerms) {
     const text = String(content || '');
 
@@ -75,27 +59,6 @@ function renderHighlightedText(content, searchTerms) {
             <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
         );
     });
-}
-
-function filterMetricTree(nodes, searchTerms) {
-    if (searchTerms.length === 0) {
-        return nodes;
-    }
-
-    return nodes.reduce((result, node) => {
-        const filteredChildren = filterMetricTree(node.children_recursive || [], searchTerms);
-        const content = String(node.content || '').toLowerCase();
-        const matchesNode = searchTerms.every((term) => content.includes(term));
-
-        if (matchesNode || filteredChildren.length > 0) {
-            result.push({
-                ...node,
-                children_recursive: filteredChildren,
-            });
-        }
-
-        return result;
-    }, []);
 }
 
 function flattenIndicatorOptions(nodes, options = []) {
@@ -168,7 +131,6 @@ export default function StandardAuditReviewPage() {
     const [reviewComment, setReviewComment] = useState('');
     const [createPtkOnReject, setCreatePtkOnReject] = useState(false);
     const [submittingAction, setSubmittingAction] = useState('');
-    const [standardSearch, setStandardSearch] = useState('');
     const [findings, setFindings] = useState([{ referenceMetricId: '', statement: '' }]);
     const [targetCompletionDate, setTargetCompletionDate] = useState('');
     const [referenceDialogOpen, setReferenceDialogOpen] = useState(false);
@@ -249,21 +211,17 @@ export default function StandardAuditReviewPage() {
             return;
         }
 
-        if (!evidence.is_previewable) {
-            toast.info('File ini belum mendukung preview inline. Gunakan unduh file.');
-            return;
-        }
-
         setPreviewLoading(true);
 
         try {
-            const response = await api.get(`/evidences/${evidence.id}/download`, {
+            const response = await api.get(`/evidences/${evidence.id}/preview`, {
                 responseType: 'blob',
             });
-            const url = URL.createObjectURL(response.data);
+            const contentType = response.headers['content-type'] || 'application/pdf';
+            const url = URL.createObjectURL(new Blob([response.data], { type: contentType }));
             setPreviewUrl(url);
         } catch (error) {
-            toast.error('Preview bukti gagal dimuat.');
+            toast.error('Preview dokumen gagal dimuat. Gunakan unduh file jika format belum didukung.');
         } finally {
             setPreviewLoading(false);
         }
@@ -275,11 +233,6 @@ export default function StandardAuditReviewPage() {
         }
     }, [selectedEvidence]);
 
-    const standardSearchTerms = useMemo(() => getSearchTerms(standardSearch), [standardSearch]);
-    const filteredStandardTree = useMemo(
-        () => filterMetricTree(standardTree, standardSearchTerms),
-        [standardTree, standardSearchTerms]
-    );
     const indicatorOptions = useMemo(() => flattenIndicatorOptions(standardTree), [standardTree]);
     const referencePeriodOptions = useMemo(() => (
         Array.from(new Set(referenceRows.map((item) => String(item.period || '-')))).sort((left, right) => left.localeCompare(right, 'id-ID'))
@@ -531,20 +484,10 @@ export default function StandardAuditReviewPage() {
                 <aside className="rounded-3xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                     <div className="border-b border-gray-200 px-5 py-4">
                         <div>
-                            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Cari Standar</h3>
+                            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">Struktur Standar</h3>
                             <p className="mt-1 text-sm text-gray-600">
                                 {standard?.name || 'Standar tidak ditemukan'}
                             </p>
-                        </div>
-                        <div className="mt-4 relative">
-                            <Icon icon={Icons.search} width={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="text"
-                                value={standardSearch}
-                                onChange={(event) => setStandardSearch(event.target.value)}
-                                placeholder="Cari isi standar..."
-                                className="w-full rounded-2xl border border-gray-300 bg-white py-2 pl-11 pr-4 text-sm text-gray-900 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-200"
-                            />
                         </div>
                     </div>
 
@@ -553,13 +496,13 @@ export default function StandardAuditReviewPage() {
                             <div className="flex h-full items-center justify-center text-sm text-gray-500">
                                 Memuat struktur standar...
                             </div>
-                        ) : filteredStandardTree.length > 0 ? (
+                        ) : standardTree.length > 0 ? (
                             <div className="space-y-3">
-                                {renderMetricTree(filteredStandardTree, standardSearchTerms)}
+                                {renderMetricTree(standardTree, [])}
                             </div>
                         ) : (
                             <div className="flex h-full items-center justify-center text-sm text-gray-500">
-                                {standardSearch.trim() ? 'Tidak ada isi standar yang cocok dengan pencarian.' : 'Struktur standar belum tersedia.'}
+                                Struktur standar belum tersedia.
                             </div>
                         )}
                     </div>

@@ -63,22 +63,11 @@ export default function NotificationPage() {
         const fetchNotifications = async () => {
             try {
                 setLoading(true);
-                const requests = [api.get('/standards')];
-
-                if (shouldFetchSchedules) {
-                    requests.unshift(api.get('/audit-schedules'));
-                }
-
-                if (canAccessPtkPage) {
-                    requests.push(api.get('/ptk'));
-                }
-
-                const responses = await Promise.all(requests);
-                const standardResponse = canAccessPtkPage
-                    ? responses[responses.length - 2]
-                    : responses[responses.length - 1];
-                const ptkResponse = canAccessPtkPage ? responses[responses.length - 1] : null;
-                const scheduleResponse = responses.length > 2 ? responses[0] : null;
+                const [scheduleResponse, standardResponse, ptkResponse] = await Promise.all([
+                    shouldFetchSchedules ? api.get('/audit-schedules') : Promise.resolve(null),
+                    api.get('/standards'),
+                    canAccessPtkPage ? api.get('/ptk') : Promise.resolve(null),
+                ]);
 
                 setSchedules(scheduleResponse?.data?.data || []);
                 setStandards(standardResponse.data.data || []);

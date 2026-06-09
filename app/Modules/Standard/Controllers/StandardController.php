@@ -88,7 +88,7 @@ class StandardController extends Controller
             return false;
         }
 
-        if ($user->hasRole('SuperAdmin')) {
+        if ($user->hasAnyRole(['SuperAdmin', 'Auditor', 'Lead Auditor'])) {
             return true;
         }
 
@@ -184,6 +184,24 @@ class StandardController extends Controller
         $standard->wr3_approved_at = null;
         $standard->rector_approved_by = null;
         $standard->rector_approved_at = null;
+    }
+
+    private function hasImplementationEvidence(MstStandard $standard): bool
+    {
+        $metricIds = MstMetric::query()
+            ->where('standard_id', $standard->id)
+            ->pluck('id');
+
+        if ($metricIds->isEmpty()) {
+            return false;
+        }
+
+        $borangItemIds = BorangItem::query()
+            ->whereIn('metric_id', $metricIds)
+            ->pluck('id');
+
+        return $borangItemIds->isNotEmpty()
+            && TrxEvidence::query()->whereIn('borang_item_id', $borangItemIds)->exists();
     }
 
     private function currentApprovalLabel(MstStandard $standard): string
@@ -460,12 +478,12 @@ class StandardController extends Controller
             'periode_tahun' => 'nullable|integer',
             'is_active' => 'boolean',
             'referensi_regulasi' => 'nullable|string',
-            'file' => 'required|file|mimes:docx|max:20480',
+            'file' => 'required|file|mimes:docx,pdf|max:20480',
             'initial_status' => 'nullable|in:DRAFT,TERBIT',
             'structure_tree' => 'nullable',
             'extracted_text' => 'nullable|string',
         ]);
-        $initialStatus = $validated['initial_status'] ?? 'DRAFT';
+        $initialStatus = $validated['initial_status'] ?? 'TERBIT';
 
         if ($initialStatus === 'TERBIT' && ! $request->user()?->can('standard.publish')) {
             return response()->json([
@@ -500,9 +518,9 @@ class StandardController extends Controller
                 'name' => $validated['name'],
                 'category' => $validated['category'],
                 'periode_tahun' => $validated['periode_tahun'] ?? null,
-                'is_active' => false,
+                'is_active' => $initialStatus === 'TERBIT',
                 'referensi_regulasi' => $validated['referensi_regulasi'] ?? null,
-                'status' => 'DRAFT',
+                'status' => $initialStatus === 'TERBIT' ? 'TERBIT' : 'DRAFT',
             ]);
 
             $directory = sprintf('standards/standard-%s/source-documents', $standard->id);
@@ -657,7 +675,7 @@ class StandardController extends Controller
         ]);
     }
 
-    public function export(Request $request, $id): BinaryFileResponse|JsonResponse
+    public function export(Request $request, $id): BinaryFileResponse|Response|JsonResponse
     {
         if ($denied = $this->denyUnless($request, 'report.export', 'Anda tidak memiliki hak akses untuk mengekspor standar.')) {
             return $denied;
@@ -672,18 +690,29 @@ class StandardController extends Controller
             ], 422);
         }
 
-        $fileName = sprintf(
-            '%s-%s-%s.docx',
+        $fileNameBase = sprintf(
+            '%s-%s-%s',
             Str::slug($standard->name) ?: 'standar',
             $standard->periode_tahun ?: 'tanpa-periode',
             $standard->status === 'TERBIT' ? 'terbit' : 'draft-revisi'
         );
+
+        if ($this->usesPdfDocumentFormat($standard)) {
+            $dompdf = $this->buildStandardPdf($standard);
+
+            return response($dompdf->output(['compress' => 0]), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => sprintf('attachment; filename="%s.pdf"', $fileNameBase),
+                'Cache-Control' => 'no-store, no-cache, must-revalidate',
+            ]);
+        }
+
         $temporaryPath = $this->standardExportService->saveDocx($standard);
 
         return response()
             ->download(
                 $temporaryPath,
-                $fileName,
+                "{$fileNameBase}.docx",
                 ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
             )
             ->deleteFileAfterSend(true);
@@ -696,6 +725,23 @@ class StandardController extends Controller
         }
 
         $standard = MstStandard::findOrFail($id);
+        $dompdf = $this->buildStandardPdf($standard);
+
+        return response($dompdf->output(['compress' => 0]), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => sprintf('inline; filename="%s-preview.pdf"', Str::slug($standard->name) ?: 'standar'),
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
+    private function usesPdfDocumentFormat(MstStandard $standard): bool
+    {
+        return str_contains(strtolower((string) $standard->source_document_mime_type), 'pdf')
+            || str_ends_with(strtolower((string) $standard->source_document_original_name), '.pdf');
+    }
+
+    private function buildStandardPdf(MstStandard $standard): Dompdf
+    {
         $options = new Options();
         $options->set('isRemoteEnabled', false);
         $options->set('isHtml5ParserEnabled', true);
@@ -705,11 +751,7 @@ class StandardController extends Controller
         $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
 
-        return response($dompdf->output(), 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => sprintf('inline; filename="%s-preview.pdf"', Str::slug($standard->name) ?: 'standar'),
-            'Cache-Control' => 'no-store, no-cache, must-revalidate',
-        ]);
+        return $dompdf;
     }
 
     public function downloadSourceDocument(Request $request, $id): StreamedResponse|JsonResponse
@@ -740,11 +782,21 @@ class StandardController extends Controller
 
         $standard = MstStandard::findOrFail($id);
 
-        if (in_array($standard->status, ['WAITING_APPROVAL', 'TERBIT'])) {
+        $requestedStatus = $request->input('status');
+        $isPublishedToDraft = $standard->status === 'TERBIT' && $requestedStatus === 'DRAFT';
+
+        if ($standard->status === 'WAITING_APPROVAL' || ($standard->status === 'TERBIT' && ! $isPublishedToDraft)) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Tidak dapat mengubah standar yang sedang Diajukan atau sudah Diterbitkan.'
             ], 403);
+        }
+
+        if ($isPublishedToDraft && ($standard->previous_standard_id || $this->hasImplementationEvidence($standard))) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Standar TERBIT hanya dapat dikembalikan ke DRAFT jika belum diterapkan dan bukan salinan revisi.',
+            ], 422);
         }
 
         if ($request->has('name')) {
@@ -761,7 +813,14 @@ class StandardController extends Controller
             'periode_tahun'      => 'nullable|integer',
             'is_active'          => 'boolean',
             'referensi_regulasi' => 'nullable|string',
+            'status'             => 'sometimes|in:DRAFT',
         ]);
+
+        if ($isPublishedToDraft) {
+            $this->resetApprovalFlow($standard);
+            $validated['status'] = 'DRAFT';
+            $validated['is_active'] = false;
+        }
 
         $standard->update($validated);
 
@@ -783,13 +842,13 @@ class StandardController extends Controller
 
         $standard = MstStandard::findOrFail($id);
 
-        $isInitialDraft = $standard->status === 'DRAFT'
-            && ! $standard->previous_standard_id;
+        $isDeletableStatus = in_array($standard->status, ['DRAFT', 'TERBIT'], true)
+            && ! $this->hasImplementationEvidence($standard);
 
-        if (! $isInitialDraft) {
+        if (! $isDeletableStatus) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Hanya standar DRAFT yang belum diterapkan dan bukan salinan revisi yang dapat dihapus.'
+                'message' => 'Hanya standar DRAFT atau TERBIT yang belum diterapkan yang dapat dihapus.'
             ], 403);
         }
 

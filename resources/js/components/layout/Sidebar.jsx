@@ -22,8 +22,7 @@ export default function Sidebar({
     const menuItems = [
         { label: 'Dashboard', path: '/', icon: Icons.dashboard },
         { label: 'Borang', path: '/borang', icon: Icons.document, permissions: ['standard.update', 'audit.score.update', 'audit.view'] },
-        { label: 'Pelaksanaan', path: '/pelaksanaan', icon: Icons.execution, permissions: ['standard.update', 'audit.score.update', 'audit.view'] },
-        { label: 'Standar', path: '/standards', icon: Icons.standard, permissions: ['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export'], hideRoles: ['Auditor', 'Lead Auditor'] },
+        { label: 'Standar', path: '/standards', icon: Icons.standard, roles: ['Auditor', 'Lead Auditor'], permissions: ['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export'], roleOrPermission: true },
         { label: 'Jadwal Audit', path: '/audit/schedules', icon: Icons.schedule, permissions: ['audit.view'], hideRoles: ['Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor'] },
         { label: 'Audit (AMI)', path: '/audit', icon: Icons.audit, permissions: ['audit.score.update'] },
         { label: 'Tindak Koreksi', path: '/ptk', icon: Icons.ptk, roles: ['Auditor'], permissions: ['ptk.view'] },
@@ -51,7 +50,11 @@ export default function Sidebar({
             || !item.permissions
             || item.permissions.some(permission => permissions.includes(permission));
 
-        return !isHiddenForRole && hasRoleAccess && hasPermissionAccess;
+        const hasAccess = item.roleOrPermission
+            ? hasRoleAccess || hasPermissionAccess
+            : hasRoleAccess && hasPermissionAccess;
+
+        return !isHiddenForRole && hasAccess;
     });
 
     const authorizedMasterItems = useMemo(() => (

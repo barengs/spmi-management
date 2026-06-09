@@ -217,9 +217,9 @@ export default function BorangManagementPage() {
                         : 'border-rose-200 bg-rose-50/60 text-rose-900'
             }`}>
                 {canManageBorang
-                    ? 'LPMI Admin menambahkan item borang per prodi dengan memilih indikator dari standar yang sudah disusun. Klik Lihat Dokumen untuk membuka halaman detail prodi.'
+                    ? 'LPMI Admin cukup menambahkan item borang satu kali. Sistem menerapkan borang yang sama ke seluruh prodi aktif agar dapat digunakan oleh Kaprodi dan Dekan sesuai unitnya.'
                     : isReadOnlyBorang
-                        ? 'Mode baca menampilkan borang untuk prodi yang ditugaskan kepada auditee. Klik Lihat Dokumen untuk membuka daftar indikator dan status bukti pada halaman terpisah.'
+                        ? 'Kaprodi melihat borang prodinya, sedangkan Dekan melihat borang seluruh prodi di bawah fakultasnya. Klik Lihat Dokumen untuk membuka indikator dan status bukti.'
                         : 'Dalam audit mode, auditor hanya melihat borang untuk prodi yang ditugaskan. Klik Lihat Checklist untuk membuka halaman checklist audit pada route terpisah.'}
             </section>
         </div>

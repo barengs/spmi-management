@@ -12,6 +12,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use PhpOffice\PhpWord\IOFactory;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EvidenceController extends Controller
@@ -301,6 +303,99 @@ class EvidenceController extends Controller
         );
     }
 
+    public function preview(Request $request, $id): Response|JsonResponse
+    {
+        if (! $request->user()?->can('audit.score.update')) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Anda tidak memiliki hak akses untuk melihat preview bukti audit.',
+            ], 403);
+        }
+
+        $evidence = TrxEvidence::findOrFail($id);
+
+        abort_if($evidence->source_type !== 'file' || ! $evidence->file_path, 404);
+        abort_unless(Storage::disk('local')->exists($evidence->file_path), 404);
+
+        $sourcePath = Storage::disk('local')->path($evidence->file_path);
+        $mimeType = $evidence->mime_type ?: mime_content_type($sourcePath);
+        $fileName = Str::slug(pathinfo($evidence->original_name ?? 'bukti-audit', PATHINFO_FILENAME)) ?: 'bukti-audit';
+
+        if ($mimeType === 'application/pdf') {
+            return response(file_get_contents($sourcePath), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => sprintf('inline; filename="%s.pdf"', $fileName),
+                'Cache-Control' => 'no-store, no-cache, must-revalidate',
+            ]);
+        }
+
+        $extension = strtolower(pathinfo($evidence->original_name ?? $sourcePath, PATHINFO_EXTENSION));
+        if (! in_array($extension, ['doc', 'docx'], true)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Preview dokumen ini belum didukung. Gunakan unduh file.',
+            ], 422);
+        }
+
+        try {
+            $phpWord = IOFactory::load($sourcePath);
+            $temporaryHtml = tempnam(sys_get_temp_dir(), 'evidence_preview_');
+
+            if ($temporaryHtml === false) {
+                throw new \RuntimeException('Gagal membuat file preview sementara.');
+            }
+
+            IOFactory::createWriter($phpWord, 'HTML')->save($temporaryHtml);
+            $html = (string) file_get_contents($temporaryHtml);
+            @unlink($temporaryHtml);
+
+            // PhpWord HTML contains embedded media and Word-specific styling
+            // that can make Dompdf stall. Keep the document semantics while
+            // rebuilding a lightweight printable representation.
+            $html = preg_replace('/<head\b[^>]*>.*?<\/head>/is', '', $html) ?? $html;
+            $html = preg_replace('/<style\b[^>]*>.*?<\/style>/is', '', $html) ?? $html;
+            $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html) ?? $html;
+            $html = preg_replace('/<img\b[^>]*>/is', '', $html) ?? $html;
+            $html = strip_tags(
+                $html,
+                '<h1><h2><h3><h4><h5><h6><p><br><strong><b><em><i><u><ul><ol><li><table><thead><tbody><tfoot><tr><th><td>'
+            );
+            $html = preg_replace('/<(\/?)([a-z0-9]+)\b[^>]*>/i', '<$1$2>', $html) ?? $html;
+            $html = <<<HTML
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { margin: 24mm 18mm; }
+        body { font-family: DejaVu Sans, sans-serif; font-size: 10pt; line-height: 1.5; color: #111827; }
+        h1, h2, h3, h4, h5, h6 { margin: 12px 0 8px; line-height: 1.25; }
+        p { margin: 0 0 8px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #4b5563; padding: 6px; vertical-align: top; }
+        th { background: #e5e7eb; font-weight: bold; }
+        ul, ol { margin: 6px 0 10px 24px; }
+    </style>
+</head>
+<body>{$html}</body>
+</html>
+HTML;
+
+            return response($html, 200, [
+                'Content-Type' => 'text/html; charset=UTF-8',
+                'Content-Disposition' => sprintf('inline; filename="%s-preview.html"', $fileName),
+                'Cache-Control' => 'no-store, no-cache, must-revalidate',
+            ]);
+        } catch (\Throwable $error) {
+            report($error);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Dokumen gagal dikonversi menjadi preview PDF.',
+            ], 422);
+        }
+    }
+
     private function transformEvidence(TrxEvidence $evidence): array
     {
         return [
@@ -318,7 +413,10 @@ class EvidenceController extends Controller
             'review_status' => $evidence->review_status,
             'review_comment' => $evidence->review_comment,
             'reviewed_at' => $evidence->reviewed_at?->toISOString(),
-            'is_previewable' => $evidence->source_type === 'link' || str_starts_with($evidence->mime_type ?? '', 'application/pdf'),
+            'is_previewable' => $evidence->source_type === 'link'
+                || str_starts_with($evidence->mime_type ?? '', 'application/pdf')
+                || in_array(strtolower(pathinfo($evidence->original_name ?? '', PATHINFO_EXTENSION)), ['doc', 'docx'], true),
+            'preview_url' => $evidence->source_type === 'file' ? "/api/v1/evidences/{$evidence->id}/preview" : $evidence->link_url,
             'download_url' => $evidence->source_type === 'file' ? "/api/v1/evidences/{$evidence->id}/download" : null,
             'uploader' => $evidence->uploader ? [
                 'id' => $evidence->uploader->id,

@@ -83,6 +83,72 @@ function DetailInfoCard({ label, value, hint }) {
     );
 }
 
+function AuditeeDocumentPreview({ faculty, prodi, rows }) {
+    const groupedRows = rows.reduce((groups, row) => {
+        const key = row.standardName || 'Standar Mutu';
+        groups[key] = [...(groups[key] || []), row];
+        return groups;
+    }, {});
+
+    return (
+        <div className="bg-slate-100 px-4 py-8 sm:px-8">
+            <article className="mx-auto min-h-[70vh] max-w-5xl bg-white px-6 py-10 shadow-xl ring-1 ring-slate-200 sm:px-10">
+                <header className="border-b-2 border-slate-900 pb-6 text-center">
+                    <div className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500">Dokumen Borang Mutu</div>
+                    <h2 className="mt-3 text-2xl font-bold uppercase text-slate-950">{prodi?.name || 'Program Studi'}</h2>
+                    <p className="mt-2 text-sm font-medium text-slate-600">{faculty?.name || '-'}</p>
+                </header>
+
+                {rows.length === 0 ? (
+                    <div className="py-20 text-center text-sm text-slate-500">Belum ada isi borang pada bagian ini.</div>
+                ) : (
+                    <div className="mt-8 space-y-10">
+                        {Object.entries(groupedRows).map(([standardName, standardRows]) => (
+                            <section key={standardName}>
+                                <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.12em] text-slate-900">{standardName}</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse text-sm">
+                                        <thead>
+                                            <tr className="bg-slate-100">
+                                                <th className="border border-slate-400 px-3 py-2 text-center">No.</th>
+                                                <th className="border border-slate-400 px-3 py-2 text-left">Sumber</th>
+                                                <th className="border border-slate-400 px-3 py-2 text-left">Indikator</th>
+                                                <th className="border border-slate-400 px-3 py-2 text-left">Target Sasaran</th>
+                                                <th className="border border-slate-400 px-3 py-2 text-center">Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {standardRows.map((row, index) => (
+                                                <tr key={row.id} className="align-top">
+                                                    <td className="w-14 border border-slate-400 px-3 py-3 text-center">{index + 1}</td>
+                                                    <td className="w-32 border border-slate-400 px-3 py-3 font-semibold">
+                                                        {[row.iku, row.ikt].filter((value) => value && value !== '-').join(' / ') || '-'}
+                                                    </td>
+                                                    <td className="border border-slate-400 px-3 py-3 leading-6">{row.indikator || row.sasaranMutu || '-'}</td>
+                                                    <td className="border border-slate-400 px-3 py-3 leading-6">{row.targetSasaran || '-'}</td>
+                                                    <td className="w-24 border border-slate-400 px-3 py-3 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => window.location.assign(`/borang/${row.id}`)}
+                                                            className="font-semibold text-sky-700 underline underline-offset-2"
+                                                        >
+                                                            Detail
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+                        ))}
+                    </div>
+                )}
+            </article>
+        </div>
+    );
+}
+
 export default function BorangProdiDetailPage() {
     const { prodiId } = useParams();
     const PAGE_SIZE = 10;
@@ -520,6 +586,13 @@ export default function BorangProdiDetailPage() {
                             />
                         </div>
 
+                        {isReadOnlyBorang ? (
+                            <AuditeeDocumentPreview
+                                faculty={selectedFaculty}
+                                prodi={selectedProdi}
+                                rows={filteredRequirementRows}
+                            />
+                        ) : (
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
@@ -615,6 +688,8 @@ export default function BorangProdiDetailPage() {
                                 </tbody>
                             </table>
                         </div>
+                        )}
+                        {!isReadOnlyBorang && (
                         <TablePagination
                             page={requirementsPage}
                             totalPages={requirementTotalPages}
@@ -622,18 +697,19 @@ export default function BorangProdiDetailPage() {
                             pageSize={PAGE_SIZE}
                             onPageChange={setRequirementsPage}
                         />
+                        )}
                     </>
                 )}
             </section>
 
             {isAddModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/50 p-4">
-                    <div className="w-full max-w-3xl rounded-3xl bg-white shadow-2xl">
-                        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-gray-950/50 p-3 sm:p-4">
+                    <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
+                        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-4 sm:px-6 sm:py-5">
                             <div>
                                 <h2 className="text-xl font-semibold text-gray-900">Tambah Borang</h2>
                                 <p className="mt-1 text-sm text-gray-500">
-                                    Pilih indikator dari standar yang sudah disusun lalu isi target sasaran khusus untuk prodi ini.
+                                    Pilih indikator dan target sasaran yang akan diterapkan ke seluruh prodi aktif.
                                 </p>
                             </div>
                             <button
@@ -645,7 +721,7 @@ export default function BorangProdiDetailPage() {
                             </button>
                         </div>
 
-                        <div className="space-y-4 px-6 py-6">
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
                             <input
                                 type="text"
                                 value={indicatorSearch}
@@ -654,7 +730,7 @@ export default function BorangProdiDetailPage() {
                                 className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
                             />
 
-                            <div className="max-h-[380px] overflow-y-auto rounded-2xl border border-gray-200">
+                            <div className="max-h-[min(380px,40dvh)] overflow-y-auto rounded-2xl border border-gray-200">
                                 {loadingIndicators ? (
                                     <div className="px-4 py-10 text-center text-sm text-gray-500">Memuat daftar indikator...</div>
                                 ) : filteredIndicators.length === 0 ? (
@@ -714,7 +790,7 @@ export default function BorangProdiDetailPage() {
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-5">
+                        <div className="flex shrink-0 justify-end gap-3 border-t border-gray-200 px-5 py-4 sm:px-6 sm:py-5">
                             <button
                                 type="button"
                                 onClick={() => setIsAddModalOpen(false)}

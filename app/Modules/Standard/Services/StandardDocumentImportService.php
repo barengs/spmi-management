@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpWord\IOFactory;
+use Symfony\Component\Process\Process;
 use ZipArchive;
 
 class StandardDocumentImportService
@@ -127,9 +128,13 @@ class StandardDocumentImportService
         $absolutePath = Storage::disk('local')->path($standard->source_document_path);
         $extension = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
 
+        if ($extension === 'pdf') {
+            return $this->extractFromPdf($absolutePath);
+        }
+
         if ($extension !== 'docx') {
             throw ValidationException::withMessages([
-                'document' => 'Format dokumen tidak didukung. Gunakan berkas DOCX.',
+                'document' => 'Format dokumen tidak didukung. Gunakan berkas DOCX atau PDF.',
             ]);
         }
 
@@ -139,6 +144,36 @@ class StandardDocumentImportService
             'structure_tree' => $this->buildTreeFromExtractedText($extractedText),
             'extracted_text' => $extractedText,
             'metadata' => $this->extractMetadataFromText($extractedText),
+        ];
+    }
+
+    private function extractFromPdf(string $absolutePath): array
+    {
+        $process = new Process([
+            'node',
+            base_path('scripts/extract-standard-pdf.mjs'),
+            $absolutePath,
+        ], base_path());
+        $process->setTimeout(120);
+        $process->run();
+
+        if (! $process->isSuccessful()) {
+            throw ValidationException::withMessages([
+                'document' => 'Dokumen PDF gagal dibaca. Berkas tetap dapat disimpan tanpa struktur.',
+            ]);
+        }
+
+        $data = json_decode($process->getOutput(), true);
+        if (! is_array($data)) {
+            throw ValidationException::withMessages([
+                'document' => 'Hasil ekstraksi dokumen PDF tidak valid.',
+            ]);
+        }
+
+        return [
+            'structure_tree' => Arr::get($data, 'structure_tree', []),
+            'extracted_text' => Arr::get($data, 'extracted_text'),
+            'metadata' => Arr::get($data, 'metadata', []),
         ];
     }
 

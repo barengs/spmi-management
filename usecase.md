@@ -1,331 +1,452 @@
-# DFD Actor Access Map
+# E-SPMI Use Case Role Map
 
-Dokumen ini hanya memetakan aktor pengguna dan akses utamanya di sistem E-SPMI. Format ini sengaja disederhanakan agar mudah dipakai sebagai input AI untuk membuat DFD.
+Dokumen ini memetakan fitur per role pengguna di sistem E-SPMI. Format dibuat prompt-ready agar bisa langsung dipakai untuk membuat use case diagram, use case narrative, atau matriks hak akses.
 
-## Scope
+## Scope Sistem
 
-- Fokus: aktor, area akses, dan interaksi utama
-- Tidak memetakan detail tabel database
-- Tidak memetakan alur teknis internal seperti queue, cache, atau service worker
+- Sistem: E-SPMI Universitas Islam Madura
+- Fokus: aktor, fitur yang dapat diakses, dan aksi utama per role
+- Pelaksanaan: sudah dihapus dari menu, route frontend, dan route API
+- Bahasa use case: Indonesia
+- Tidak memetakan detail database internal
 
-## External Actors
+## Modul Aktif
+
+- Autentikasi
+- Dashboard
+- Akun Saya
+- Notifikasi
+- Manajemen Pengguna
+- Manajemen Role
+- Manajemen Permission
+- Master Fakultas
+- Master Prodi
+- Pengaturan Siklus
+- Standar
+- Import Dokumen Standar DOCX
+- Edit Struktur Standar
+- Indikator IKU/IKT
+- Approval Standar
+- Borang
+- Jadwal Audit
+- Audit AMI
+- Evidence / Bukti Dukung
+- PTK / Tindak Koreksi
+- Laporan Audit
+- Export Standar DOCX
+- Export Laporan Audit DOCX/PDF
+
+## Role And Feature Lineup
 
 ### 1. SuperAdmin
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Kelola pengguna
-- Kelola role
-- Kelola permission
-- Kelola unit/fakultas/prodi
-- Kelola master data lain
-- Lihat seluruh standar
-- Buat standar manual
-- Import/scan dokumen standar
-- Edit builder struktur standar
-- Submit standar ke alur approval
-- Approve standar di semua tahap
-- Reject standar
-- Lihat dokumen sumber standar
-- Export standar terbit
-- Kelola borang
-- Lihat seluruh pelaksanaan
-- Lihat seluruh jadwal audit
-- Lihat seluruh audit AMI
-- Lihat seluruh PTK/tindak koreksi
-- Lihat seluruh laporan audit
-- Export laporan audit
-- Lihat notifikasi sistem
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi sistem
+- Mengelola pengguna
+- Membuat pengguna
+- Mengubah pengguna
+- Menghapus pengguna
+- Mengelola role
+- Mengelola permission
+- Mengelola master fakultas
+- Mengelola master prodi
+- Mengelola pengaturan siklus
+- Melihat semua standar
+- Membuat standar manual
+- Import dokumen standar DOCX
+- Mengubah informasi standar
+- Menghapus standar draft yang belum diterapkan
+- Mengedit struktur standar
+- Mengelola bentuk konten standar: poin-poin, teks panjang, tabel
+- Mengelola indikator IKU/IKT
+- Mengajukan standar ke approval
+- Menyetujui standar di semua tahap jika diperlukan
+- Menolak standar ke revisi
+- Membuat revisi standar terbit
+- Melihat dokumen sumber standar
+- Export standar DOCX
+- Mengelola borang
+- Melihat jadwal audit
+- Mengelola jadwal audit
+- Melihat audit AMI
+- Melakukan review evidence audit jika memiliki konteks audit
+- Melihat PTK
+- Membuat PTK
+- Memverifikasi PTK
+- Menutup PTK
+- Melihat laporan audit
+- Export laporan audit DOCX/PDF
 
-Interaksi utama:
-- Mengakses semua modul inti sebagai administrator penuh
+Use case utama:
+- Administrasi penuh sistem E-SPMI
+- Mengatur data master dan hak akses
+- Mengelola siklus standar, audit, borang, PTK, dan laporan
 
 ### 2. LPM-Admin
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar
-- Bantu pengelolaan data mutu sesuai permission yang diberikan
-- Lihat borang/pelaksanaan jika diizinkan
-- Lihat laporan jika diizinkan
-- Lihat notifikasi
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi
+- Melihat pengguna
+- Melihat master unit sesuai permission
+- Melihat standar
+- Membuat standar manual
+- Import dokumen standar DOCX
+- Mengubah informasi standar
+- Menghapus standar sesuai permission
+- Mengedit struktur standar
+- Mengajukan standar ke approval
+- Membuat revisi standar
+- Export standar DOCX
+- Mengelola borang
+- Melihat jadwal audit
+- Membuat jadwal audit
+- Mengatur plot audit jika diizinkan
+- Melihat audit AMI
+- Membuat temuan audit jika diizinkan
+- Melihat PTK
+- Membuat PTK
+- Menutup PTK
+- Melihat laporan audit
+- Export laporan audit DOCX/PDF
+- Melihat audit log sistem jika diberi akses
 
-Interaksi utama:
-- Mendukung administrasi mutu operasional
+Use case utama:
+- Administrasi mutu operasional
+- Menyiapkan standar, borang, audit, dan laporan
 
 ### 3. Perumus
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat daftar standar
-- Buat standar manual
-- Import/scan dokumen standar
-- Edit informasi standar saat masih draft/revisi
-- Edit builder struktur standar
-- Lihat dokumen sumber hasil import
-- Submit standar ke tahap review/approval
-- Lihat riwayat standar
-- Kelola akun sendiri
+- Melihat dashboard perumus
+- Mengelola akun sendiri
+- Melihat daftar standar yang dapat disusun
+- Membuat standar manual
+- Import dokumen standar DOCX
+- Mengisi informasi standar
+- Mengubah informasi standar saat draft atau revisi
+- Mengedit struktur standar
+- Menambah poin utama
+- Menambah isi/sub poin
+- Memilih bentuk konten: poin-poin, teks panjang, tabel
+- Mengisi tabel dengan teks pengantar dan catatan tabel opsional
+- Mengelola indikator IKU/IKT
+- Mengajukan standar ke proses approval
+- Melihat riwayat standar
+- Melihat dokumen sumber standar
+- Export standar draft/revisi DOCX jika diizinkan
 
-Interaksi utama:
-- Menyusun isi standar dan struktur poin standar
+Use case utama:
+- Menyusun standar mutu
+- Mengubah struktur dan isi standar sebelum diajukan
 
 ### 4. Pemeriksa
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar
-- Lihat detail standar
-- Lihat riwayat dan dokumen sumber
-- Lihat notifikasi terkait standar
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi terkait standar
+- Melihat daftar standar
+- Melihat detail standar
+- Melihat tab informasi standar
+- Melihat tab indikator
+- Melihat struktur standar
+- Melihat riwayat standar
+- Melihat dokumen sumber standar
 
-Interaksi utama:
-- Pemeriksaan/read-only pada dokumen standar sesuai peran governance
+Use case utama:
+- Melakukan pemeriksaan baca-saja terhadap dokumen standar
 
-### 5. Penyetuju
+### 5. Persetujuan
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar
-- Lihat detail standar
-- Lihat dokumen sumber
-- Lihat notifikasi terkait approval
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi terkait approval
+- Melihat daftar standar
+- Melihat detail standar
+- Melihat informasi dan struktur standar
+- Melihat dokumen sumber standar
 
-Interaksi utama:
-- Peran governance approval-facing, tetapi approval final sistem saat ini masih mengikuti role struktural khusus
+Use case utama:
+- Role governance approval-facing secara baca-saja
+- Approval eksekusi tetap dilakukan oleh role struktural: Kepala LPMI, Wakil Rektor, dan Rektor
 
-### 6. Penimbang
+### 6. Pertimbangan
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar
-- Lihat detail standar
-- Lihat riwayat
-- Lihat notifikasi
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi
+- Melihat daftar standar
+- Melihat detail standar
+- Melihat riwayat standar
+- Melihat dokumen sumber standar
 
-Interaksi utama:
-- Memberi pertimbangan/read-only terhadap standar
+Use case utama:
+- Memberikan pertimbangan berbasis akses baca terhadap standar
 
-### 7. Pengendali
+### 7. Pengendalian
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar
-- Lihat detail standar
-- Lihat pelaksanaan/monitoring jika diizinkan
-- Lihat notifikasi
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi
+- Melihat daftar standar
+- Melihat detail standar
+- Melihat struktur standar
+- Melihat riwayat standar
+- Melihat laporan jika diberi permission
 
-Interaksi utama:
+Use case utama:
 - Monitoring dan pengendalian mutu secara baca-saja
 
 ### 8. Kepala LPMI
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar yang diajukan
-- Lihat detail, struktur, riwayat, dan dokumen sumber
-- Approve standar pada tahap Kepala LPMI
-- Reject standar ke revisi
-- Lihat notifikasi approval
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi approval standar
+- Melihat daftar standar
+- Melihat standar yang menunggu approval Kepala LPMI
+- Melihat detail standar
+- Melihat informasi, indikator, struktur, riwayat, dan dokumen standar
+- Menyetujui standar pada tahap Kepala LPMI
+- Menolak standar ke revisi
+- Melihat jadwal audit
+- Melihat laporan audit
+- Export laporan audit jika diberi permission
 
-Interaksi utama:
-- Aktor approval tahap 1
+Use case utama:
+- Approval standar tahap awal
 
 ### 9. Wakil Rektor 1
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar yang diajukan
-- Lihat detail, struktur, riwayat, dan dokumen sumber
-- Approve standar kategori yang dipetakan ke WR1
-- Reject standar ke revisi
-- Lihat notifikasi approval
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi approval standar
+- Melihat daftar standar
+- Melihat standar kategori yang dipetakan ke WR1
+- Melihat detail standar
+- Melihat informasi, indikator, struktur, riwayat, dan dokumen standar
+- Menyetujui standar pada tahap Wakil Rektor 1
+- Menolak standar ke revisi
+- Melihat laporan audit jika diberi permission
 
-Interaksi utama:
-- Aktor approval tahap WR untuk kategori tertentu
+Use case utama:
+- Approval standar tahap Wakil Rektor untuk kategori WR1
 
 ### 10. Wakil Rektor 2
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar yang diajukan
-- Lihat detail, struktur, riwayat, dan dokumen sumber
-- Approve standar kategori yang dipetakan ke WR2
-- Reject standar ke revisi
-- Lihat notifikasi approval
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi approval standar
+- Melihat daftar standar
+- Melihat standar kategori yang dipetakan ke WR2
+- Melihat detail standar
+- Melihat informasi, indikator, struktur, riwayat, dan dokumen standar
+- Menyetujui standar pada tahap Wakil Rektor 2
+- Menolak standar ke revisi
+- Melihat laporan audit jika diberi permission
 
-Interaksi utama:
-- Aktor approval tahap WR untuk kategori tertentu
+Use case utama:
+- Approval standar tahap Wakil Rektor untuk kategori WR2
 
 ### 11. Wakil Rektor 3
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar yang diajukan
-- Lihat detail, struktur, riwayat, dan dokumen sumber
-- Approve standar kategori yang dipetakan ke WR3
-- Reject standar ke revisi
-- Lihat notifikasi approval
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi approval standar
+- Melihat daftar standar
+- Melihat standar kategori yang dipetakan ke WR3
+- Melihat detail standar
+- Melihat informasi, indikator, struktur, riwayat, dan dokumen standar
+- Menyetujui standar pada tahap Wakil Rektor 3
+- Menolak standar ke revisi
+- Melihat laporan audit jika diberi permission
 
-Interaksi utama:
-- Aktor approval tahap WR untuk kategori tertentu
+Use case utama:
+- Approval standar tahap Wakil Rektor untuk kategori WR3
 
 ### 12. Rektor
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar yang diajukan
-- Lihat detail, struktur, riwayat, dan dokumen sumber
-- Approve final standar
-- Reject standar ke revisi
-- Lihat notifikasi approval
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi approval standar
+- Melihat daftar standar
+- Melihat standar yang menunggu approval final
+- Melihat detail standar
+- Melihat informasi, indikator, struktur, riwayat, dan dokumen standar
+- Menyetujui final standar
+- Menolak standar ke revisi
+- Memicu standar menjadi TERBIT setelah approval final
+- Melihat laporan audit jika diberi permission
 
-Interaksi utama:
-- Aktor approval final standar
+Use case utama:
+- Approval final standar
 
-### 13. Auditor
+### 13. Pimpinan
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat standar
-- Lihat borang/audit requirement
-- Lihat jadwal audit
+- Melihat dashboard ringkasan
+- Mengelola akun sendiri
+- Melihat notifikasi
+- Melihat daftar standar
+- Melihat detail standar
+- Melihat audit dan skor secara baca-saja
+- Melihat laporan audit
+- Export laporan audit DOCX/PDF
+
+Use case utama:
+- Konsumsi informasi untuk pengambilan keputusan pimpinan
+
+### 14. Auditor
+
+Fitur:
+- Login ke sistem
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi audit dan PTK
+- Melihat standar secara baca-saja
+- Melihat borang dan audit requirement
+- Melihat jadwal audit yang terkait
 - Melakukan audit AMI
-- Mengisi skor audit
-- Membuat temuan
+- Melihat evidence auditee
+- Memberi skor audit
+- Membuat temuan audit
+- Mengubah temuan audit jika diizinkan
 - Membuat PTK dari hasil audit
-- Akses menu Tindak Koreksi
-- Melihat seluruh PTK yang terkait dengan akunnya
-- Lihat laporan audit
-- Export laporan audit
-- Lihat notifikasi audit dan PTK
-- Kelola akun sendiri
+- Melihat daftar PTK yang terkait dengan akunnya
+- Memverifikasi PTK
+- Menutup PTK jika sudah selesai
+- Melihat laporan audit
 
-Interaksi utama:
-- Mengaudit standar/borang dan menghasilkan temuan serta PTK
+Use case utama:
+- Melaksanakan audit AMI
+- Menghasilkan temuan dan PTK
 
-### 14. Auditee
+### 15. Lead Auditor
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat jadwal audit yang terkait
-- Lihat borang untuk unit/prodi terkait
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi audit dan PTK
+- Melihat standar secara baca-saja
+- Melihat borang dan audit requirement
+- Melihat jadwal audit yang terkait
+- Melakukan audit AMI
+- Melihat evidence auditee
+- Memberi skor audit
+- Membuat temuan audit
+- Mengubah temuan audit jika diizinkan
+- Membuat PTK dari hasil audit
+- Melihat daftar PTK yang terkait dengan akunnya
+- Memverifikasi PTK
+- Menutup PTK jika sudah selesai
+- Melihat laporan audit
+
+Use case utama:
+- Memimpin atau menjalankan proses audit AMI dengan kapabilitas seperti Auditor
+
+### 16. Auditee
+
+Fitur:
+- Login ke sistem
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat notifikasi audit dan PTK
+- Melihat standar secara baca-saja
+- Melihat jadwal audit yang terkait
+- Melihat borang untuk unit/prodi terkait
 - Upload evidence/bukti dukung
+- Menghapus evidence miliknya jika masih diizinkan
+- Melihat review evidence
+- Melihat PTK yang ditujukan kepadanya
 - Memberi respons PTK
-- Menyetujui/menolak target tanggal koreksi PTK
-- Lihat laporan audit yang terkait jika diizinkan
-- Lihat notifikasi audit/PTK
-- Kelola akun sendiri
+- Menyetujui target tanggal koreksi PTK
+- Menolak target tanggal koreksi PTK
+- Melihat laporan audit yang terkait jika diberi permission
 
-Interaksi utama:
-- Menindaklanjuti audit dengan bukti dan respons koreksi
+Use case utama:
+- Menyiapkan bukti audit dan menindaklanjuti PTK
 
-### 15. Pimpinan
+### 17. Observer
 
-Hak akses utama:
+Fitur:
 - Login ke sistem
-- Lihat dashboard ringkasan
-- Lihat standar
-- Lihat laporan audit
-- Lihat hasil monitoring dan riwayat
-- Lihat notifikasi
-- Kelola akun sendiri
+- Melihat dashboard
+- Mengelola akun sendiri
+- Melihat daftar standar secara baca-saja
+- Melihat audit secara baca-saja
+- Melihat laporan audit secara baca-saja
 
-Interaksi utama:
-- Konsumsi informasi dan pengambilan keputusan tingkat pimpinan
+Use case utama:
+- Observasi sistem dengan akses minimal
 
-### 16. Observer
+## Use Case Prompt-Ready Summary
 
-Hak akses utama:
-- Login ke sistem
-- Lihat area yang diizinkan secara read-only
-- Lihat standar jika diberikan akses
-- Lihat laporan jika diberikan akses
-- Kelola akun sendiri
-
-Interaksi utama:
-- Pengguna baca-saja dengan akses minimal
-
-## System Areas Referenced By Actors
-
-Untuk membantu AI membuat DFD, berikut daftar area sistem yang sering menjadi proses/data store utama:
-
-- Autentikasi
-- Manajemen Pengguna
-- Manajemen Role
-- Manajemen Permission
-- Master Unit/Fakultas/Prodi
-- Standar Mutu
-- Import/Scan Dokumen Standar
-- Builder Struktur Standar
-- Approval Standar
-- Dokumen Sumber Standar
-- Borang
-- Pelaksanaan
-- Jadwal Audit
-- Audit AMI
-- PTK / Tindak Koreksi
-- Evidence / Bukti Dukung
-- Laporan Audit
-- Notifikasi
-- Akun Saya
-
-## Compact Matrix
-
-| Actor | Read | Create/Submit | Approve/Review | Operational Action |
-|---|---|---|---|---|
-| SuperAdmin | Semua modul | Semua modul utama | Semua tahap | Administrasi penuh |
-| LPM-Admin | Modul sesuai permission | Terbatas sesuai permission | Tidak utama | Administrasi operasional |
-| Perumus | Standar, dokumen, riwayat | Buat/import/edit/submit standar | Tidak | Menyusun standar |
-| Pemeriksa | Standar | Tidak | Read-only review-facing | Pemeriksaan baca-saja |
-| Persetujuan | Standar | Tidak | Read-only governance | Persetujuan non-eksekusi |
-| Pertimbangan | Standar | Tidak | Read-only governance | Pertimbangan baca-saja |
-| Pengendalian | Standar, monitoring | Tidak | Read-only governance | Monitoring |
-| Kepala LPMI | Standar diajukan | Tidak | Approve tahap 1 | Persetujuan tahap awal |
-| Wakil Rektor 1 | Standar diajukan | Tidak | Approve tahap WR1 | Persetujuan tahap WR |
-| Wakil Rektor 2 | Standar diajukan | Tidak | Approve tahap WR2 | Persetujuan tahap WR |
-| Wakil Rektor 3 | Standar diajukan | Tidak | Approve tahap WR3 | Persetujuan tahap WR |
-| Rektor | Standar diajukan | Tidak | Approve final | Persetujuan final |
-| Auditor | Standar, borang, audit, PTK, laporan | Buat temuan/PTK | Review audit | Audit dan tindak koreksi |
-| Auditee | Jadwal, borang, PTK | Upload evidence / respons PTK | Tidak | Tindak lanjut audit |
-| Pimpinan | Dashboard, standar, laporan | Tidak | Tidak utama | Konsumsi informasi |
-| Observer | Modul read-only terbatas | Tidak | Tidak | Observasi |
-
-## Prompt-Ready Version
-
-Jika ingin langsung dipakai ke AI diagram generator, gunakan ringkasan ini:
+Gunakan teks berikut jika ingin langsung membuat use case diagram dengan AI:
 
 ```text
-Create a DFD for an Internal Quality Assurance System (E-SPMI) with these external actors only:
+Create a use case diagram for E-SPMI, an Internal Quality Assurance System.
 
-1. SuperAdmin: full access to authentication, user management, role/permission management, unit master, standards, standard import/scan, standard builder, standard approval, borang, audit schedule, audit process, PTK, reports, notifications, and own account.
-2. LPM-Admin: administrative access to quality modules depending on assigned permissions.
-3. Perumus: create/import/edit/submit standards, edit structure builder, view source documents and history.
-4. Pemeriksa: read-only access to standards, details, history, source documents, and notifications.
-5. Persetujuan: read-only access to standards and approval-related information.
-6. Pertimbangan: read-only access to standards and history.
-7. Pengendalian: read-only access to standards and monitoring information.
-8. Kepala LPMI: approve/reject standards at stage 1, view submitted standards and source documents.
-9. Wakil Rektor 1: approve/reject standards at WR1 stage.
-10. Wakil Rektor 2: approve/reject standards at WR2 stage.
-11. Wakil Rektor 3: approve/reject standards at WR3 stage.
-12. Rektor: final approve/reject standards.
-13. Auditor: view standards, borang, audit schedules, perform audit, score audit, create findings, create PTK, access tindak koreksi, view/export reports, receive notifications.
-14. Auditee: view related schedules and borang, upload evidence, respond to PTK, accept/reject correction target dates, manage own account.
-15. Pimpinan: read dashboard summaries, standards, reports, and monitoring results.
-16. Observer: limited read-only access.
+Actors and feature access:
 
-Main system areas/processes:
-Authentication, User Management, Role Management, Permission Management, Unit Master, Standards, Standard Import/Scan, Standard Builder, Standard Approval, Source Documents, Borang, Pelaksanaan, Audit Schedule, Audit AMI, PTK/Tindak Koreksi, Evidence, Reports, Notifications, Own Account.
+SuperAdmin: login, dashboard, manage own account, notifications, manage users, manage roles, manage permissions, manage faculties, manage prodis, manage cycle settings, view/create/import/update/delete standards, edit standard structure, manage standard content formats, manage IKU/IKT indicators, submit standards, approve standards, reject standards, revise published standards, view source documents, export standard DOCX, manage borang, manage audit schedules, view audit AMI, review evidence if assigned, manage PTK, view reports, export audit reports.
+
+LPM-Admin: login, dashboard, own account, notifications, view users and units, view/create/import/update/delete standards according to permission, edit structure, submit standards, revise standards, export standard DOCX, manage borang, manage audit schedules, plot audit, create audit findings, manage PTK, view/export reports, view audit logs if allowed.
+
+Perumus: login, dashboard, own account, view standards, create manual standards, import DOCX standards, edit draft/revision standard information, edit standard structure, create main points, create content/sub points, choose content format as bullet points, long text, or table, manage optional table intro and table notes, manage IKU/IKT indicators, submit standard to approval, view history, view source document, export draft/revision DOCX if allowed.
+
+Pemeriksa: login, dashboard, own account, notifications, view standards, view standard detail, view information, indicators, structure, history, and source document.
+
+Persetujuan: login, dashboard, own account, approval notifications, view standards and approval-related standard details; execution approval is handled by structural roles.
+
+Pertimbangan: login, dashboard, own account, notifications, view standards, view details, view history, view source document.
+
+Pengendalian: login, dashboard, own account, notifications, view standards, view detail, view structure, view history, view reports if allowed.
+
+Kepala LPMI: login, dashboard, own account, approval notifications, view submitted standards, view standard detail, approve at Kepala LPMI stage, reject to revision, view audit schedules, view/export reports if allowed.
+
+Wakil Rektor 1: login, dashboard, own account, approval notifications, view mapped standards, approve at WR1 stage, reject to revision, view reports if allowed.
+
+Wakil Rektor 2: login, dashboard, own account, approval notifications, view mapped standards, approve at WR2 stage, reject to revision, view reports if allowed.
+
+Wakil Rektor 3: login, dashboard, own account, approval notifications, view mapped standards, approve at WR3 stage, reject to revision, view reports if allowed.
+
+Rektor: login, dashboard, own account, approval notifications, view final approval standards, approve final standard, reject to revision, publish standard, view reports if allowed.
+
+Pimpinan: login, dashboard summary, own account, notifications, view standards, view audit score/read-only audit, view reports, export audit reports.
+
+Auditor: login, dashboard, own account, audit/PTK notifications, view standards, view borang, view assigned audit schedules, perform audit AMI, view evidence, score audit, create/update findings, create PTK, view own related PTK, verify PTK, close PTK, view reports.
+
+Lead Auditor: same as Auditor, with lead audit assignment context.
+
+Auditee: login, dashboard, own account, audit/PTK notifications, view standards, view assigned audit schedules, view related borang, upload evidence, delete own evidence if allowed, view evidence review, respond to PTK, accept/reject PTK target date, view related reports if allowed.
+
+Observer: login, dashboard, own account, view standards read-only, view audit read-only, view reports read-only.
+
+Removed feature: Pelaksanaan is not part of the active system and should not appear in the use case diagram.
 ```
+

@@ -8,7 +8,6 @@ use App\Modules\Core\Controllers\UserController;
 use App\Modules\Audit\Controllers\AuditScheduleController;
 use App\Modules\Audit\Controllers\AuditReportController;
 use App\Modules\Borang\Controllers\BorangController;
-use App\Modules\Borang\Controllers\PelaksanaanController;
 use App\Modules\Evidence\Controllers\EvidenceController;
 use App\Modules\Ptk\Controllers\PtkController;
 use App\Modules\Standard\Controllers\StandardImprovementController;
@@ -134,6 +133,7 @@ Route::prefix('v1')->group(function () {
 
         Route::prefix('evidences')->group(function () {
             Route::get('/audit',               [EvidenceController::class, 'auditIndex']);
+            Route::get('/{id}/preview',        [EvidenceController::class, 'preview']);
             Route::get('/{id}/download',       [EvidenceController::class, 'download']);
             Route::delete('/{id}',             [EvidenceController::class, 'destroy']);
             Route::patch('/{id}/review',       [EvidenceController::class, 'review']);
@@ -160,13 +160,6 @@ Route::prefix('v1')->group(function () {
             Route::post('/items/{borangItem}/evidences', [BorangController::class, 'storeEvidence']);
             Route::post('/',                   [BorangController::class, 'store']);
             Route::delete('/{borangItem}',     [BorangController::class, 'destroy']);
-        });
-
-        Route::prefix('pelaksanaan')->group(function () {
-            Route::get('/prodis', [PelaksanaanController::class, 'prodis']);
-            Route::get('/prodis/{prodi}', [PelaksanaanController::class, 'index']);
-            Route::get('/items/{borangItem}', [PelaksanaanController::class, 'show']);
-            Route::put('/items/{borangItem}', [PelaksanaanController::class, 'update']);
         });
 
         Route::prefix('ptk')->group(function () {

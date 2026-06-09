@@ -23,10 +23,6 @@ export default function AppLayout() {
     }, [sidebarCollapsed]);
 
     useEffect(() => {
-        const unsubscribe = subscribeOfflineQueue((count) => {
-            setPendingQueueCount(count);
-        });
-
         const updateConnectionStatus = (status) => {
             connectionStatusRef.current = status;
             setConnectionStatus(status);
@@ -46,6 +42,14 @@ export default function AppLayout() {
                 },
             });
         };
+
+        const unsubscribe = subscribeOfflineQueue((count) => {
+            setPendingQueueCount(count);
+
+            if (count > 0 && window.navigator.onLine && connectionStatusRef.current === 'connected') {
+                window.setTimeout(syncOfflineQueue, 500);
+            }
+        });
 
         const checkServerConnection = async ({ notifyRecovery = false } = {}) => {
             if (!window.navigator.onLine) {
@@ -101,6 +105,11 @@ export default function AppLayout() {
 
         checkServerConnection();
         const healthCheckInterval = window.setInterval(checkServerConnection, 30000);
+        const queueFlushInterval = window.setInterval(() => {
+            if (window.navigator.onLine && connectionStatusRef.current === 'connected' && getOfflineQueueCount() > 0) {
+                syncOfflineQueue();
+            }
+        }, 10000);
 
         window.addEventListener('offline', handleOffline);
         window.addEventListener('online', handleOnline);
@@ -108,6 +117,7 @@ export default function AppLayout() {
         return () => {
             unsubscribe();
             window.clearInterval(healthCheckInterval);
+            window.clearInterval(queueFlushInterval);
             window.removeEventListener('offline', handleOffline);
             window.removeEventListener('online', handleOnline);
         };

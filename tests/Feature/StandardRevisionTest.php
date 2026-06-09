@@ -233,6 +233,74 @@ class StandardRevisionTest extends TestCase
         $this->assertSoftDeleted('mst_standards', ['id' => $draft->id]);
     }
 
+    public function test_unimplemented_published_standard_can_return_to_draft_and_be_deleted(): void
+    {
+        $permissions = collect(['standard.update', 'standard.delete'])
+            ->map(fn (string $name) => Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']));
+        $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
+        $role->syncPermissions($permissions);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $published = MstStandard::create([
+            'name' => 'TERBIT BELUM IMPLEMENTASI',
+            'standard_code' => 'SPMI/UIM/SMP/II/Z',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'revision_number' => 0,
+            'version_number' => 1,
+            'is_active' => true,
+            'status' => 'TERBIT',
+            'approval_stage' => 'FINAL',
+            'head_lpmi_approved_at' => now()->subDays(3),
+            'wr1_approved_at' => now()->subDays(2),
+            'rector_approved_at' => now()->subDay(),
+        ]);
+
+        $updateResponse = $this->actingAs($user, 'api')->putJson("/api/v1/standards/{$published->id}", [
+            'status' => 'DRAFT',
+        ]);
+
+        $updateResponse->assertOk();
+        $updateResponse->assertJsonPath('data.status', 'DRAFT');
+        $updateResponse->assertJsonPath('data.approval_stage', 'DRAFT');
+        $updateResponse->assertJsonPath('data.is_active', false);
+        $this->assertNull($published->fresh()->rector_approved_at);
+
+        $deleteResponse = $this->deleteJson("/api/v1/standards/{$published->id}");
+
+        $deleteResponse->assertOk();
+        $this->assertSoftDeleted('mst_standards', ['id' => $published->id]);
+    }
+
+    public function test_unimplemented_published_standard_can_be_deleted_directly(): void
+    {
+        $permission = Permission::firstOrCreate(['name' => 'standard.delete', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
+        $role->givePermissionTo($permission);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+
+        $published = MstStandard::create([
+            'name' => 'STANDAR TERBIT BELUM DITERAPKAN',
+            'standard_code' => 'SPMI/UIM/SMP/II/F',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'revision_number' => 0,
+            'version_number' => 1,
+            'is_active' => true,
+            'status' => 'TERBIT',
+            'approval_stage' => 'FINAL',
+        ]);
+
+        $response = $this->actingAs($user, 'api')->deleteJson("/api/v1/standards/{$published->id}");
+
+        $response->assertOk();
+        $this->assertSoftDeleted('mst_standards', ['id' => $published->id]);
+    }
+
     public function test_initial_unimplemented_draft_with_document_revision_can_be_deleted(): void
     {
         $permission = Permission::firstOrCreate(['name' => 'standard.delete', 'guard_name' => 'web']);
@@ -294,7 +362,7 @@ class StandardRevisionTest extends TestCase
         ]);
     }
 
-    public function test_revision_draft_from_implemented_standard_cannot_be_deleted_directly(): void
+    public function test_unimplemented_revision_draft_can_be_deleted_without_removing_published_standard(): void
     {
         $permission = Permission::firstOrCreate(['name' => 'standard.delete', 'guard_name' => 'web']);
         $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
@@ -329,9 +397,11 @@ class StandardRevisionTest extends TestCase
 
         $response = $this->actingAs($user, 'api')->deleteJson("/api/v1/standards/{$revisionDraft->id}");
 
-        $response->assertForbidden();
+        $response->assertOk();
+        $this->assertSoftDeleted('mst_standards', ['id' => $revisionDraft->id]);
         $this->assertDatabaseHas('mst_standards', [
-            'id' => $revisionDraft->id,
+            'id' => $published->id,
+            'status' => 'TERBIT',
             'deleted_at' => null,
         ]);
     }

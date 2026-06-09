@@ -10,8 +10,6 @@ import StandardAuditReviewPage from '../pages/audit/StandardAuditReviewPage';
 import BorangManagementPage from '../pages/borang/BorangManagementPage';
 import BorangDetailPage from '../pages/borang/BorangDetailPage';
 import BorangProdiDetailPage from '../pages/borang/BorangProdiDetailPage';
-import PelaksanaanPage from '../pages/pelaksanaan/PelaksanaanPage';
-import ExecutionRepositoryPage from '../pages/execution/ExecutionRepositoryPage';
 import StandardIndex from '../pages/standards/StandardIndex';
 import StandardBuilder from '../pages/standards/StandardBuilder';
 import StandardDetailPage from '../pages/standards/StandardDetailPage';
@@ -122,7 +120,7 @@ export default function MainApp() {
                         <Route
                             path="standards"
                             element={
-                                <PermissionRoute permissions={['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export']}>
+                                <PermissionRoute roles={['Auditor', 'Lead Auditor']} permissions={['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export']}>
                                     <StandardIndex />
                                 </PermissionRoute>
                             }
@@ -130,7 +128,7 @@ export default function MainApp() {
                         <Route
                             path="standards/:id"
                             element={
-                                <PermissionRoute permissions={['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export']}>
+                                <PermissionRoute roles={['Auditor', 'Lead Auditor']} permissions={['standard.view', 'standard.create', 'standard.update', 'standard.publish', 'report.export']}>
                                     <StandardDetailPage />
                                 </PermissionRoute>
                             }
@@ -148,40 +146,6 @@ export default function MainApp() {
                             element={
                                 <PermissionRoute permissions={['standard.publish']} roles={['Pimpinan', 'Kepala LPMI', 'Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor']}>
                                     <StandardReviewPage />
-                                </PermissionRoute>
-                            }
-                        />
-                        <Route
-                            path="pelaksanaan"
-                            element={
-                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
-                                    <PelaksanaanPage />
-                                </PermissionRoute>
-                            }
-                        />
-                        <Route
-                            path="pelaksanaan/prodis/:prodiId/standards"
-                            element={
-                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
-                                    <PelaksanaanPage />
-                                </PermissionRoute>
-                            }
-                        />
-                        <Route
-                            path="pelaksanaan/items/:itemId"
-                            element={
-                                <PermissionRoute permissions={['standard.update', 'audit.score.update', 'audit.view']}>
-                                    <PelaksanaanPage />
-                                </PermissionRoute>
-                            }
-                        />
-                        <Route
-                            path="standards/:id/execution"
-                            element={
-                                <PermissionRoute
-                                    roles={['LPM-Admin', 'Kepala LPMI', 'Wakil Rektor 1', 'Wakil Rektor 2', 'Wakil Rektor 3', 'Rektor', 'Auditee']}
-                                >
-                                    <ExecutionRepositoryPage />
                                 </PermissionRoute>
                             }
                         />

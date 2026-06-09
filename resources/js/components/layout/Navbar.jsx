@@ -63,18 +63,6 @@ export default function Navbar({ toggleSidebar }) {
             return ['Borang', 'Detail'];
         }
 
-        if (path === '/pelaksanaan') {
-            return ['Pelaksanaan'];
-        }
-
-        if (/^\/pelaksanaan\/prodis\/[^/]+\/standards$/.test(path)) {
-            return ['Pelaksanaan', 'Daftar Standar'];
-        }
-
-        if (/^\/pelaksanaan\/items\/[^/]+$/.test(path)) {
-            return ['Pelaksanaan', 'Detail Dokumen'];
-        }
-
         if (path === '/improvement') {
             return ['Peningkatan'];
         }
@@ -93,10 +81,6 @@ export default function Navbar({ toggleSidebar }) {
 
         if (/^\/standards\/[^/]+\/review$/.test(path)) {
             return ['Standar', 'Review Standar'];
-        }
-
-        if (/^\/standards\/[^/]+\/execution$/.test(path)) {
-            return ['Standar', 'Dokumen Auditee'];
         }
 
         if (path === '/audit') {
@@ -174,22 +158,11 @@ export default function Navbar({ toggleSidebar }) {
 
         const fetchNotifications = async () => {
             try {
-                const requests = [api.get('/standards')];
-
-                if (shouldFetchSchedules) {
-                    requests.unshift(api.get('/audit-schedules'));
-                }
-
-                if (canAccessPtkPage) {
-                    requests.push(api.get('/ptk'));
-                }
-
-                const responses = await Promise.all(requests);
-                const standardResponse = canAccessPtkPage
-                    ? responses[responses.length - 2]
-                    : responses[responses.length - 1];
-                const ptkResponse = canAccessPtkPage ? responses[responses.length - 1] : null;
-                const scheduleResponse = responses.length > 2 ? responses[0] : null;
+                const [scheduleResponse, standardResponse, ptkResponse] = await Promise.all([
+                    shouldFetchSchedules ? api.get('/audit-schedules') : Promise.resolve(null),
+                    api.get('/standards'),
+                    canAccessPtkPage ? api.get('/ptk') : Promise.resolve(null),
+                ]);
 
                 setNotificationSchedules(scheduleResponse?.data?.data || []);
                 setNotificationStandards(standardResponse.data.data || []);

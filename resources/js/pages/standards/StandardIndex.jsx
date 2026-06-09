@@ -629,12 +629,17 @@ export default function StandardIndex() {
         setImportSummary(null);
 
         if (!file) {
+            setFormData((current) => ({
+                ...current,
+                initial_status: 'DRAFT',
+            }));
             return;
         }
 
         setFormData((current) => ({
             ...current,
             name: file.name.replace(/\.[^.]+$/u, '').toUpperCase(),
+            initial_status: canSubmitStandards ? 'TERBIT' : 'DRAFT',
         }));
     };
 
@@ -695,7 +700,7 @@ export default function StandardIndex() {
             payload.append('is_active', formData.is_active ? '1' : '0');
             payload.append('referensi_regulasi', formData.referensi_regulasi || '');
             payload.append('file', importFile);
-            payload.append('initial_status', formData.initial_status || 'DRAFT');
+            payload.append('initial_status', formData.initial_status || (canSubmitStandards ? 'TERBIT' : 'DRAFT'));
             if (importExtractedText) {
                 payload.append('extracted_text', importExtractedText);
             }
@@ -711,7 +716,7 @@ export default function StandardIndex() {
             const createdStandard = response.data.data;
             upsertStandard(createdStandard);
             setSelectedPeriod(createdStandard.periode_tahun ? String(createdStandard.periode_tahun) : 'Tanpa Periode');
-            toast.success('Standar berhasil diimpor dari dokumen DOCX.');
+            toast.success('Standar berhasil diimpor dari dokumen.');
             handleCloseImportModal();
             fetchStandards();
         } catch (err) {
@@ -775,9 +780,9 @@ export default function StandardIndex() {
             const contentType = response.headers['content-type'] || 'application/octet-stream';
             const contentDisposition = response.headers['content-disposition'] || '';
             const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
-            const fallbackExtension = contentType.includes('wordprocessingml')
-                ? 'docx'
-                : 'bin';
+            const fallbackExtension = contentType.includes('pdf')
+                ? 'pdf'
+                : contentType.includes('wordprocessingml') ? 'docx' : 'bin';
             const fileName = fileNameMatch?.[1]
                 || `${(standard.name || 'standar').replace(/[\\/:*?"<>|]+/g, '-')}-${standard.periode_tahun || 'tanpa-periode'}.${fallbackExtension}`;
             const blob = new Blob([response.data], { type: contentType });
@@ -1383,7 +1388,7 @@ export default function StandardIndex() {
                                     Tambah Standar Mutu Baru
                                 </h3>
                                 <div className="mt-2 text-sm text-gray-500 dark:text-gray-400 mb-5">
-                                    Lengkapi data standar. Dokumen DOCX dapat diunggah jika berkas standar sudah tersedia.
+                                    Lengkapi data standar. Dokumen DOCX atau PDF dapat diunggah jika berkas standar sudah tersedia.
                                 </div>
                                 <form onSubmit={handleImportSubmit} className="mt-5 space-y-5">
                                     <div>
@@ -1419,12 +1424,12 @@ export default function StandardIndex() {
                                         </label>
                                         <input
                                             type="file"
-                                            accept="application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
+                                            accept="application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,.docx,.pdf"
                                             onChange={handleImportFileChange}
                                             className="block w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         />
                                         <div className="mt-2 text-xs text-amber-800">
-                                            Unggah berkas standar yang sudah tersedia. Format yang didukung hanya DOCX.
+                                            Unggah berkas standar yang sudah tersedia. Format yang didukung: DOCX atau PDF.
                                         </div>
                                     </div>
                                     <div>
@@ -1432,7 +1437,7 @@ export default function StandardIndex() {
                                             Status Awal
                                         </label>
                                         <select
-                                            value={formData.initial_status || 'DRAFT'}
+                                            value={formData.initial_status || (importFile && canSubmitStandards ? 'TERBIT' : 'DRAFT')}
                                             onChange={(event) => setFormData({ ...formData, initial_status: event.target.value })}
                                             className="block w-full rounded-md border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                                         >
@@ -1442,7 +1447,7 @@ export default function StandardIndex() {
                                             ) : null}
                                         </select>
                                         <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                            Status Terbit hanya tersedia jika DOCX sudah dipilih dan akun memiliki izin penerbitan standar.
+                                            Jika dokumen diunggah, status awal otomatis menjadi Terbit agar standar yang sudah terdokumentasi langsung dianggap berlaku.
                                         </div>
                                     </div>
                                     <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -1450,6 +1455,7 @@ export default function StandardIndex() {
                                         <div className="mt-1">
                                             {!isParsingImportFile && importSummary && `Tree terbaca: ${importSummary.headers} header, ${importSummary.statements} pasal, ${importSummary.indicators} indikator.`}
                                             {!isParsingImportFile && importFile?.name.toLowerCase().endsWith('.docx') && 'Dokumen DOCX akan dibaca oleh server saat standar disimpan.'}
+                                            {!isParsingImportFile && importFile?.name.toLowerCase().endsWith('.pdf') && 'Dokumen PDF akan dibaca oleh server saat standar disimpan. Jika teks tidak terbaca, berkas tetap disimpan tanpa struktur.'}
                                             {!isParsingImportFile && !importSummary && !importFile && 'Tanpa berkas, standar akan dibuat kosong dan strukturnya dapat disusun melalui Edit Struktur.'}
                                         </div>
                                     </div>

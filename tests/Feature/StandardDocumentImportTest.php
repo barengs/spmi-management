@@ -30,9 +30,10 @@ class StandardDocumentImportTest extends TestCase
 
     private function actingAsLpmAdmin(): User
     {
-        $permission = Permission::firstOrCreate(['name' => 'standard.create', 'guard_name' => 'web']);
+        $permissions = collect(['standard.create', 'standard.publish'])
+            ->map(fn (string $name) => Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']));
         $role = Role::firstOrCreate(['name' => 'LPM-Admin', 'guard_name' => 'web']);
-        $role->givePermissionTo([$permission]);
+        $role->syncPermissions($permissions);
 
         $user = User::factory()->create();
         $user->assignRole($role);
@@ -48,6 +49,19 @@ class StandardDocumentImportTest extends TestCase
             ->map(fn (string $name) => Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']));
         $role = Role::firstOrCreate(['name' => 'Publishing Admin', 'guard_name' => 'web']);
         $role->syncPermissions($permissions);
+
+        $user = User::factory()->create();
+        $user->assignRole($role);
+        $this->actingAs($user, 'api');
+
+        return $user;
+    }
+
+    private function actingAsCreateOnlyUser(): User
+    {
+        $permission = Permission::firstOrCreate(['name' => 'standard.create', 'guard_name' => 'web']);
+        $role = Role::firstOrCreate(['name' => 'Create Only Standard User', 'guard_name' => 'web']);
+        $role->syncPermissions([$permission]);
 
         $user = User::factory()->create();
         $user->assignRole($role);
@@ -107,6 +121,9 @@ class StandardDocumentImportTest extends TestCase
         $standard = MstStandard::firstOrFail();
         $this->assertNotNull($standard->source_document_path);
         $this->assertNotNull($standard->imported_from_document_at);
+        $this->assertSame('TERBIT', $standard->status);
+        $this->assertSame('FINAL', $standard->approval_stage);
+        $this->assertTrue((bool) $standard->is_active);
         Storage::disk('local')->assertExists($standard->source_document_path);
 
         $this->assertGreaterThanOrEqual(5, MstMetric::count());
@@ -210,21 +227,25 @@ class StandardDocumentImportTest extends TestCase
         $this->assertSame(0, MstStandardIndicator::where('standard_id', $standard->id)->count());
     }
 
-    public function test_standard_document_import_rejects_pdf(): void
+    public function test_standard_document_import_accepts_pdf_and_stores_document_when_unreadable(): void
     {
         Storage::fake('local');
         $this->actingAsLpmAdmin();
 
         $response = $this->postJson('/api/v1/standards/import', [
-            'name' => 'Standar PDF Ditolak',
+            'name' => 'Standar PDF Disimpan',
             'category' => 'Tambahan',
             'periode_tahun' => 2026,
             'file' => UploadedFile::fake()->create('standar.pdf', 120, 'application/pdf'),
         ]);
 
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors('file');
-        $this->assertDatabaseMissing('mst_standards', ['name' => 'STANDAR PDF DITOLAK']);
+        $response->assertCreated();
+        $response->assertJsonPath('data.import_summary.document_only', true);
+
+        $standard = MstStandard::where('name', 'STANDAR PDF DISIMPAN')->firstOrFail();
+        $this->assertNotNull($standard->source_document_path);
+        Storage::disk('local')->assertExists($standard->source_document_path);
+        $this->assertSame(0, MstMetric::where('standard_id', $standard->id)->count());
     }
 
     public function test_standard_document_import_can_build_tree_automatically_from_uploaded_docx(): void
@@ -378,10 +399,32 @@ class StandardDocumentImportTest extends TestCase
         $this->assertNotNull($standard->rector_approved_at);
     }
 
+    public function test_document_import_defaults_to_published_when_status_is_not_provided(): void
+    {
+        Storage::fake('local');
+        $this->actingAsPublishingAdmin();
+
+        $response = $this->post('/api/v1/standards/import', [
+            'name' => 'Standar Default Terbit',
+            'category' => 'Tambahan',
+            'periode_tahun' => 2026,
+            'file' => $this->createDocxUpload('default-terbit.docx', [
+                '1. Visi dan Misi',
+                'A. Visi',
+                'Menjadi perguruan tinggi unggul.',
+            ]),
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.status', 'TERBIT');
+        $response->assertJsonPath('data.approval_stage', 'FINAL');
+        $response->assertJsonPath('data.is_active', true);
+    }
+
     public function test_document_import_cannot_be_published_directly_without_publish_permission(): void
     {
         Storage::fake('local');
-        $this->actingAsLpmAdmin();
+        $this->actingAsCreateOnlyUser();
 
         $response = $this->post('/api/v1/standards/import', [
             'name' => 'Standar Terbit Ditolak',
